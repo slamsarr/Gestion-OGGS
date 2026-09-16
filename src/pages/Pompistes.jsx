@@ -22,20 +22,23 @@ export default function Pompistes() {
 
   useEffect(() => {
     (async () => {
-      const r = await loadReferentiel();
-      setRef(r);
-      const raps = await listRapports();
-      setRapports(raps);
-      const allP = [];
-      for (const st of r.stations) {
-        const p = await listPompistes(st.id);
-        allP.push(...p);
+      try {
+        const r = await loadReferentiel();
+        setRef(r);
+        const raps = await listRapports();
+        setRapports(raps);
+        const allP = [];
+        for (const st of r.stations) {
+          const p = await listPompistes(st.id);
+          allP.push(...p);
+        }
+        setPompistes(allP);
+        if (r.stations.length > 0) setStId(r.stations[0].id);
+        const existing = await listQuarts(dateQuart);
+        setQuarts(existing);
+      } finally {
+        setLoading(false);
       }
-      setPompistes(allP);
-      if (r.stations.length > 0) setStId(r.stations[0].id);
-      const existing = await listQuarts(dateQuart);
-      setQuarts(existing);
-      setLoading(false);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

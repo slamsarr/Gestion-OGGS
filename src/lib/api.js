@@ -545,7 +545,12 @@ export async function listJauges(stationId) {
 // ── Pompistes ──
 export async function listPompistes(stationId) {
   const sb = getSupabase();
-  if (sb) { try { const { data } = await sb.from("pompistes").select("*").eq("station_id", stationId); if (data) return data; } catch {} }
+  if (sb) {
+    try {
+      const { data } = await sb.from("pompistes").select("*").eq("station_id", stationId);
+      if (data) return data;
+    } catch {}
+  }
   return db.pompistes.where("station_id").equals(stationId).toArray();
 }
 export async function savePompiste(p) {
