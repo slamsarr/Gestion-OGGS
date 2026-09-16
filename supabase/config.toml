@@ -1,0 +1,7 @@
+project_id = "ogss-reseau"
+
+[functions.alerte-rapport-manquant]
+verify_jwt = false
+# HTTP manuel : supabase functions deploy alerte-rapport-manquant
+# Cron : pg_cron 0 10 * * * via verifier_rapports_manquants() (schema.sql).
+# Ne pas planifier AUSSI la fonction Edge si le cron SQL est actif (doublons).
