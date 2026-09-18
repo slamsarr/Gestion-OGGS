@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { loadReferentiel, getRapport, saveRapport, indexVeille } from "../lib/api";
+import { loadReferentiel, getRapport, saveRapport, indexVeille, listDescentes, listPrestationsLavage, listVentesBoutique } from "../lib/api";
 import { calculer, controler, ecrireSyscohada, rapportVide, COUPURES, SEUIL_ECART, F, n, fmtDate, todayISO, T } from "../lib/calcul";
 import { exporterExcel, exporterCsv } from "../lib/exportExcel";
 import { Num, Row, Section, Alerte } from "../components/ui";
@@ -39,7 +39,9 @@ export default function Rapport() {
 
   // Load referentiel on mount
   useEffect(() => {
-    loadReferentiel().then(setRef);
+    loadReferentiel()
+      .then((res) => setRef(res || referentielFromSeed()))
+      .catch(() => setRef(referentielFromSeed()));
   }, []);
 
   // Sync station/date to URL params
@@ -55,17 +57,52 @@ export default function Rapport() {
     if (!ref) return;
     let alive = true;
     (async () => {
-      const existing = await getRapport(selectedStation, date);
-      if (!alive) return;
-      if (existing) {
-        setR(existing);
-      } else {
-        const fresh = rapportVide(ref, selectedStation, date, profil?.nom_complet);
-        for (const p of ref.pistolets.filter((x) => x.station_code === selectedStation || !x.station_code)) {
-          const prev = await indexVeille(selectedStation, date, p.code);
-          if (prev != null) fresh.pistolets[p.code].depart = prev;
+      try {
+        const existing = await getRapport(selectedStation, date);
+        if (!alive) return;
+        if (existing) {
+          setR(existing);
+        } else {
+          const fresh = rapportVide(ref, selectedStation, date, profil?.nom_complet);
+          // 1. Index début veille & Index fin du jour depuis descentes pompistes
+          let jourDescentes = [];
+          try {
+            jourDescentes = await listDescentes(selectedStation, date);
+          } catch {}
+
+          for (const p of (ref.pistolets || []).filter((x) => x.station_code === selectedStation || !x.station_code)) {
+            try {
+              const prev = await indexVeille(selectedStation, date, p.code);
+              if (prev != null) fresh.pistolets[p.code].depart = prev;
+            } catch {}
+
+            // Trouver la dernière descente enregistrée pour ce pistolet ce jour-là
+            const pDescentes = jourDescentes.filter((d) => d.pistolet_code === p.code);
+            if (pDescentes.length > 0) {
+              const maxFin = Math.max(...pDescentes.map((d) => n(d.index_fin)));
+              if (maxFin > 0) fresh.pistolets[p.code].fin = maxFin;
+            }
+          }
+
+          // 2. Auto-remplissage des recettes Lavage du jour
+          try {
+            const lavages = await listPrestationsLavage(selectedStation, date);
+            const totalLavage = (lavages || []).reduce((s, item) => s + (n(item.montant_total) || n(item.prix) || 0), 0);
+            if (totalLavage > 0) fresh.lavage = totalLavage;
+          } catch {}
+
+          // 3. Auto-remplissage des recettes Boutique du jour
+          try {
+            const ventes = await listVentesBoutique(selectedStation, date);
+            const totalBoutique = (ventes || []).reduce((s, item) => s + (n(item.total_montant) || 0), 0);
+            if (totalBoutique > 0) fresh.boutique = totalBoutique;
+          } catch {}
+
+          if (alive) setR(fresh);
         }
-        if (alive) setR(fresh);
+      } catch (err) {
+        console.error("Rapport load error:", err);
+        if (alive) setR(rapportVide(ref, selectedStation, date, profil?.nom_complet));
       }
     })();
     return () => { alive = false; };
@@ -75,9 +112,6 @@ export default function Rapport() {
   const erreurs = useMemo(() => (r && c ? controler(r, c) : []), [r, c]);
   const verrou = !r || r.statut === "VALIDE" || (r.statut === "SOUMIS" && role === "gerant");
 
-  if (!ref || !r || !c) return <p className="p-8 text-center text-sm" style={{ color: T.muted }}>Chargement du rapport…</p>;
-
-  const [stLbl, stCol] = STATUTS[r.statut] || STATUTS.BROUILLON;
   const [dirty, setDirty] = useState(false);
   useEffect(() => {
     if (!dirty) return;
@@ -88,6 +122,10 @@ export default function Rapport() {
     window.addEventListener("beforeunload", f);
     return () => window.removeEventListener("beforeunload", f);
   }, [dirty]);
+
+  if (!ref || !r || !c) return <p className="p-8 text-center text-sm" style={{ color: T.muted }}>Chargement du rapport…</p>;
+
+  const [stLbl, stCol] = STATUTS[r.statut] || STATUTS.BROUILLON;
   const up = (patch) => {
     setDirty(true);
     setR((x) => ({ ...x, ...patch }));
@@ -277,6 +315,7 @@ export default function Rapport() {
         <>
           <Section titre="Autres recettes et règlements">
             <Row><span>Lavage</span><Num big value={r.lavage} disabled={verrou} onChange={(v) => up({ lavage: v })} /></Row>
+            <Row><span>Boutique / Shop</span><Num big value={r.boutique} disabled={verrou} onChange={(v) => up({ boutique: v })} /></Row>
             <Row><span>Tickets / bons carburant</span><Num big value={r.tickets} disabled={verrou} onChange={(v) => up({ tickets: v })} /></Row>
             <Row><span>Dépôts clients</span><Num value={r.depots} disabled={verrou} onChange={(v) => up({ depots: v })} /></Row>
             <Row className="border-0"><span>Remboursements</span><Num value={r.remboursement} disabled={verrou} onChange={(v) => up({ remboursement: v })} /></Row>
@@ -360,6 +399,93 @@ export default function Rapport() {
             ))}
           </Section>
 
+          <Section titre="Délestages Coffre & Scellés Bancaires (Sécurité)" aside={`${F(c.totalDelestages || 0)} F coffre`}>
+            <p className="text-xs pb-2 text-gray-500">
+              Mise en sécurité du cash en cours de journée (dépôt dans le coffre-fort de la station sous enveloppe ou scellé numéroté).
+            </p>
+            {(r.delestages || []).length === 0 && (
+              <p className="text-xs py-2 text-gray-400 italic">Aucun délestage coffre enregistré pour cette journée.</p>
+            )}
+            {(r.delestages || []).map((del, i) => (
+              <div key={i} className="py-2 border-b space-y-1.5" style={{ borderColor: T.line }}>
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="time"
+                    value={del.heure || ""}
+                    disabled={verrou}
+                    onChange={(e) => up({ delestages: r.delestages.map((x, j) => j === i ? { ...x, heure: e.target.value } : x) })}
+                    className="rounded border px-2 py-1 bg-white text-xs w-24"
+                    style={{ borderColor: T.line }}
+                  />
+                  <Num
+                    value={del.montant}
+                    disabled={verrou}
+                    placeholder="Montant (F)"
+                    onChange={(v) => up({ delestages: r.delestages.map((x, j) => j === i ? { ...x, montant: v } : x) })}
+                    w="w-32"
+                  />
+                  <input
+                    type="text"
+                    value={del.numero_scelle || ""}
+                    disabled={verrou}
+                    placeholder="N° Scellé / Enveloppe"
+                    onChange={(e) => up({ delestages: r.delestages.map((x, j) => j === i ? { ...x, numero_scelle: e.target.value } : x) })}
+                    className="flex-1 rounded border px-2 py-1 bg-white text-xs font-mono"
+                    style={{ borderColor: T.line }}
+                  />
+                  {!verrou && (
+                    <button
+                      type="button"
+                      onClick={() => up({ delestages: r.delestages.filter((_, j) => j !== i) })}
+                      className="px-2 rounded text-xs font-bold"
+                      style={{ color: T.alert }}
+                      title="Supprimer ce délestage"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={del.deposant || ""}
+                    disabled={verrou}
+                    placeholder="Déposant / Témoin (ex: Chef de piste)"
+                    onChange={(e) => up({ delestages: r.delestages.map((x, j) => j === i ? { ...x, deposant: e.target.value } : x) })}
+                    className="flex-1 rounded border px-2 py-1 text-xs bg-white disabled:bg-transparent"
+                    style={{ borderColor: T.line }}
+                  />
+                </div>
+              </div>
+            ))}
+            {!verrou && (
+              <button
+                type="button"
+                onClick={() =>
+                  up({
+                    delestages: [
+                      ...(r.delestages || []),
+                      {
+                        heure: new Date().toLocaleTimeString().slice(0, 5),
+                        montant: "",
+                        numero_scelle: "",
+                        deposant: profil?.nom_complet || "Chef de piste",
+                      },
+                    ],
+                  })
+                }
+                className="w-full py-2 my-2 rounded text-xs font-medium"
+                style={{ border: `1px dashed ${T.petrol}`, color: T.petrol }}
+              >
+                + Enregistrer un délestage coffre (scellé sécurisé)
+              </button>
+            )}
+            <Row className="border-0 font-semibold text-xs pt-1">
+              <span>Total mis en coffre-fort sécurisé :</span>
+              <span className="tabular text-emerald-800">{F(c.totalDelestages || 0)} FCFA</span>
+            </Row>
+          </Section>
+
           <Section titre="Règlements non-espèces" aside={`${F((r.reglements || []).reduce((s, x) => s + n(x.montant), 0))} F`}>
             {(r.reglements || []).length === 0 && <p className="text-sm py-2" style={{ color: T.muted }}>Aucun règlement par carte, mobile money ou crédit.</p>}
             {(r.reglements || []).map((rg, i) => (
@@ -438,12 +564,19 @@ export default function Rapport() {
               <Row><span>Lubrifiants</span><span>{F(c.caLub)}</span></Row>
               <Row><span>Gaz</span><span>{F(c.caGaz)}</span></Row>
               <Row><span>Lavage</span><span>{F(c.lavage)}</span></Row>
+              <Row><span>Boutique / Shop</span><span>{F(c.boutique)}</span></Row>
               {(c.depots > 0 || c.remboursement > 0) && <Row><span>Dépôts + remboursements</span><span>{F(c.depots + c.remboursement)}</span></Row>}
               <Row className="font-bold text-base"><span>C.A. TOTAL</span><span>{F(c.caTotal)}</span></Row>
               <Row><span>− Tickets</span><span>{F(c.tickets)}</span></Row>
               <Row><span>− Dépenses</span><span>{F(c.depenses)}</span></Row>
               <Row className="font-bold text-lg"><span>À VERSER</span><span style={{ color: T.petrol }}>{F(c.aVerser)}</span></Row>
               <Row><span>Versements (BIS)</span><span>{F(c.bis)}</span></Row>
+              {c.totalDelestages > 0 && (
+                <Row className="text-emerald-800">
+                  <span>🔒 Coffre (Délestages scellés)</span>
+                  <span>{F(c.totalDelestages)}</span>
+                </Row>
+              )}
               <Row className="font-semibold border-0">
                 <span>Écart de caisse</span>
                 <span className="px-2 rounded" style={{ background: Math.abs(c.ecart) > SEUIL_ECART ? "#FBEAE5" : "#E3F4EA", color: Math.abs(c.ecart) > SEUIL_ECART ? T.alert : T.ok }}>
@@ -454,7 +587,7 @@ export default function Rapport() {
             <div className="px-4 py-2 text-sm border-t" style={{ borderColor: T.line, background: T.paper }}>
               <div className="flex justify-between flex-wrap gap-1">
                 <span>Ventilation</span>
-                <span className="text-xs" style={{ color: T.muted }}>Carburant {F(c.ventilation.carburant)} · Lub {F(c.caLub)} · Lavage {F(c.lavage)} · Gaz {F(c.caGaz)}</span>
+                <span className="text-xs" style={{ color: T.muted }}>Carburant {F(c.ventilation.carburant)} · Lub {F(c.caLub)} · Lavage {F(c.lavage)} · Boutique {F(c.boutique)} · Gaz {F(c.caGaz)}</span>
               </div>
               <div className="flex justify-between mt-1"><span>Coupures</span><span>{F(c.totalCoupures)} — NET BIS {F(c.netBis)}</span></div>
             </div>

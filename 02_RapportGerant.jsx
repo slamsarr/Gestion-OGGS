@@ -68,13 +68,16 @@ function calculer(r) {
   const pist = PISTOLETS.map((p) => {
     const { depart, fin } = r.pistolets[p.code];
     const prix = p.produit === "GASOIL" ? pGO : pSU;
-    const volume = fin === "" ? 0 : n(fin) - n(depart);
-    const anomalie = fin !== "" && (volume < 0 ? "Index fin < index départ" : volume > SAUT_INDEX_MAX ? "Saut d'index suspect" : "");
-    return { ...p, depart: n(depart), fin: n(fin), prix, volume, valeur: volume * prix, anomalie };
+    const rawVolume = fin === "" ? 0 : n(fin) - n(depart);
+    const anomalie = fin !== "" && (rawVolume < 0 ? "Index fin < index départ" : rawVolume > SAUT_INDEX_MAX ? "Saut d'index suspect" : "");
+    const volume = anomalie ? 0 : rawVolume;
+    const valeur = anomalie ? 0 : volume * prix;
+    return { ...p, depart: n(depart), fin: n(fin), prix, volume, valeur, anomalie };
   });
-  const volGO = pist.filter((p) => p.produit === "GASOIL").reduce((s, p) => s + p.volume, 0);
-  const volSU = pist.filter((p) => p.produit === "SUPER").reduce((s, p) => s + p.volume, 0);
-  const caCarburant = volGO * pGO + volSU * pSU;
+  const errorPist = pist.some((p) => p.anomalie);
+  const volGO = errorPist ? 0 : pist.filter((p) => p.produit === "GASOIL").reduce((s, p) => s + p.volume, 0);
+  const volSU = errorPist ? 0 : pist.filter((p) => p.produit === "SUPER").reduce((s, p) => s + p.volume, 0);
+  const caCarburant = errorPist ? null : volGO * pGO + volSU * pSU;
 
   const lub = LUBRIFIANTS.map((l) => {
     const x = r.lubrifiants[l.nom];
@@ -93,11 +96,15 @@ function calculer(r) {
 
   const lavage = n(r.lavage), tickets = n(r.tickets), remboursement = n(r.remboursement), depots = n(r.depots);
   const depenses = r.depenses.reduce((s, d) => s + n(d.montant), 0);
-  const caTotal = caCarburant + caLub + caGaz + lavage + depots + remboursement;   // D27
-  const aVerser = caTotal - tickets - depenses;                                    // J29
-  const bis = r.versements.reduce((s, v) => s + n(v), 0);                          // B34
-  const totalCoupures = COUPURES.reduce((s, c) => s + c * n(r.coupures[c]), 0);    // C42
-  const ecart = bis + depenses + tickets - caTotal;                                // L28
+  const caTotal = errorPist ? null : (caCarburant ?? 0) + caLub + caGaz + lavage + depots + remboursement;
+  const aVerser = caTotal === null ? null : caTotal - tickets - depenses;
+  const bis = r.versements.reduce((s, v) => s + n(v), 0);
+  const totalCoupures = COUPURES.reduce((s, c) => s + c * n(r.coupures[c]), 0);
+  const ecart = caTotal === null ? null : bis + depenses + tickets - caTotal;
+  const netBis = bis - totalCoupures;
+  const ventilation = { carburant: bis - caLub - lavage - caGaz, lubrifiant: caLub, lavage, gaz: caGaz };
+  return { pGO, pSU, pist, volGO, volSU, caCarburant, lub, caLub, valeurStockLub, gaz, caGaz, margeGaz, lavage, tickets, remboursement, depots, depenses, caTotal, aVerser, bis, totalCoupures, ecart, netBis, ventilation };
+}
   const netBis = bis - totalCoupures;                                              // B35
   const ventilation = { carburant: bis - caLub - lavage - caGaz, lubrifiant: caLub, lavage, gaz: caGaz }; // N33..N36
   return { pGO, pSU, pist, volGO, volSU, caCarburant, lub, caLub, valeurStockLub, gaz, caGaz, margeGaz, lavage, tickets, remboursement, depots, depenses, caTotal, aVerser, bis, totalCoupures, ecart, netBis, ventilation };

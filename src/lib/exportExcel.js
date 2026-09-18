@@ -1,7 +1,7 @@
 import * as XLSX from "xlsx";
 import { COUPURES, F, fmtDate, n } from "./calcul";
 
-export function exporterExcel(r, c, stations) {
+export function genererWorkbookExcel(r, c, stations) {
   const S = stations.find((s) => s.code === r.station) || { nom: r.station };
   const g = Array.from({ length: 42 }, () => Array(17).fill(null));
   const put = (cell, v) => {
@@ -114,14 +114,26 @@ export function exporterExcel(r, c, stations) {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "JOURNAL");
   XLSX.utils.book_append_sheet(wb, wsDep, "DEPENSES");
-  XLSX.writeFile(wb, `JOURNAL_${r.station}_${fmtDate(r.date).replaceAll("/", "_")}.xlsx`);
+  return wb;
 }
 
-export function exporterCsv(filename, rows) {
+export function exporterExcel(r, c, stations) {
+  const wb = genererWorkbookExcel(r, c, stations);
+  XLSX.writeFile(wb, `JOURNAL_${r.station}_${fmtDate(r.date).replaceAll("/", "_")}.xlsx`);
+  return wb;
+}
+
+export function genererWorkbookCsv(rows) {
   const ws = XLSX.utils.aoa_to_sheet(rows);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "EXPORT");
+  return wb;
+}
+
+export function exporterCsv(filename, rows) {
+  const wb = genererWorkbookCsv(rows);
   XLSX.writeFile(wb, filename);
+  return wb;
 }
 
 export { F };

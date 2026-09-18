@@ -56,6 +56,69 @@ export const SEED_CATEGORIES = [
   ["AUTRE", "Autre", "VARIABLE", "6588"],
 ];
 
+export const SEED_CLIENTS_PRO = [
+  ["CP-ITS", "ITS (transport)"],
+  ["CP-JOUKADAR", "Joukadar / DMJ"],
+  ["CP-RETBA", "Retba / Team Dir CTT / Provale"],
+  ["CP-ICONS", "Icons SA / FADSR"],
+  ["CP-TAXI-SN", "Taxi / Artisans (parking)"],
+];
+
+export const SEED_VEHICULES = {
+  "CP-ITS": [
+    ["SD-4501-AA", "MERCEDES", "ACTROS", "CAMION", "GASOIL"],
+    ["SD-4502-AB", "MERCEDES", "ACTROS", "CAMION", "GASOIL"],
+  ],
+  "CP-JOUKADAR": [["SD-1203-AC", "IVECO", "682", "CAMION", "GASOIL"]],
+  "CP-RETBA": [["SD-8804-AD", "SCANIA", "P360", "CAMION", "GASOIL"]],
+  "CP-ICONS": [["SD-2301-AE", "TOYOTA", "LAND CRUISER", "PICKUP", "SUPER"]],
+  "CP-TAXI-SN": [
+    ["SD-7712-AF", "TOYOTA", "COROLLA", "TAXI", "SUPER"],
+    ["SD-7719-AG", "HYUNDAI", "I10", "TAXI", "SUPER"],
+  ],
+};
+
+export const SEED_FOURNISSEURS = [
+  { code: "FR-TOTAL", nom: "TOTAL Energies Marketing", tel: "33 823 66 66", email: "contact@total.sn" },
+  { code: "FR-VIVO", nom: "VIVO Energy Sénégal", tel: "33 849 00 00", email: "vivo@vivoenergy.sn" },
+  { code: "FR-PETROSEN", nom: "Société Africaine de Raffinage (SAR)", tel: "33 859 55 55", email: "contact@sar.sn" },
+  { code: "FR-RADIOB", nom: "Radiob (4X4)", tel: "33 821 00 79", email: "dakar@radiob.com" },
+];
+
+export const SEED_CATEGORIES_DEPENSES = [
+  ["ENTRETIEN", "Entretien", "VARIABLE", "6242"],
+  ["TRANSPORT", "Transport", "VARIABLE", "6241"],
+  ["FOURNITURES", "Fournitures", "VARIABLE", "6047"],
+  ["REPAS", "Repas", "VARIABLE", "6281"],
+  ["RECHARGE_GAZ", "Recharge gaz", "VARIABLE", "6011"],
+  ["SALAIRE_AVANCE", "Avance salaire", "FIXE", "4211"],
+  ["LOCATION", "Location", "FIXE", "6135"],
+  ["UTILITE_ELECTRICITE", "Électricité", "FIXE", "6063"],
+  ["AUTRE", "Autre", "VARIABLE", "6588"],
+];
+
+export const SEED_EQUIPEMENTS = [
+  ["DISTRIBUTEUR", "Distributeur carburant"],
+  ["CUVE", "Citerne de stockage"],
+  ["GROUPE_ELECTROGENE", "Groupe électrogène"],
+  ["COMPRESSEUR", "Compresseur à air"],
+  ["CLIMATISATION", "Climatisation bureau"],
+  ["POMPE", "Pompe / kit manomètre"],
+];
+
+export const SEED_MAINTENANCE_TYPES = [
+  ["PREVENTIVE", "Maintenance préventive"],
+  ["CURATIVE", "Maintenance curative"],
+  ["CONSTAT", "Constat technique"],
+];
+
+export const SEED_INCIDENT_MOTIFS = [
+  ["FUITES", "Fuite détectée", "CRITIQUE"],
+  ["POMPE_HS", "Pompe hors service", "HAUTE"],
+  ["MARCHE_DEGRADE", "Marche dégradée", "MOYENNE"],
+  ["ACCIDENT", "Accident", "CRITIQUE"],
+];
+
 export const SEED_CLIENTS = [
   ["ITS", "ITS (transport)"],
   ["JOUKADAR", "Joukadar / DMJ"],
@@ -72,13 +135,36 @@ export const SEED_CUVES = [
 
 export const SEED_REGLEMENTS = ["TICKET", "CARTE_STAR", "PLATEFORME_PETROSEN", "ORANGE_MONEY", "WAVE", "TPE", "CREDIT_CLIENT"];
 
+export const SEED_TARIFS_LAVAGE = [
+  { code: "MOTO", libelle: "Moto / Deux-roues", tarif: 1000 },
+  { code: "BERLINE", libelle: "Voiture / Berline / Citadine", tarif: 2000 },
+  { code: "4X4_SUV", libelle: "4x4 / SUV / Pick-up", tarif: 3000 },
+  { code: "CAMION", libelle: "Camion / Minibus / Utilitaire", tarif: 5000 },
+];
+
+export const SEED_PRODUITS_BOUTIQUE = [
+  { code: "EAU-KIRÈNE-1.5L", designation: "Eau Kirène 1.5L", categorie: "Boissons", prix_vente: 500, prix_achat: 350, stock: 48, seuil_alerte: 12 },
+  { code: "COCA-33CL", designation: "Coca-Cola Canette 33cl", categorie: "Boissons", prix_vente: 600, prix_achat: 400, stock: 60, seuil_alerte: 15 },
+  { code: "RED-BULL-250ML", designation: "Red Bull Canette 250ml", categorie: "Boissons", prix_vente: 1500, prix_achat: 1100, stock: 24, seuil_alerte: 6 },
+  { code: "CAFE-TOUBA", designation: "Café Touba Sachet", categorie: "Alimentation", prix_vente: 250, prix_achat: 150, stock: 100, seuil_alerte: 20 },
+  { code: "DESODORISANT-AUTO", designation: "Désodorisant Voiture Arbre Magique", categorie: "Accessoires", prix_vente: 1500, prix_achat: 800, stock: 30, seuil_alerte: 5 },
+  { code: "CHIFFON-MICROFIBRE", designation: "Chiffon Microfibre Finition", categorie: "Accessoires", prix_vente: 1000, prix_achat: 500, stock: 25, seuil_alerte: 5 },
+  { code: "HUILE-FREIN-DOT4", designation: "Liquide de frein DOT 4 (500ml)", categorie: "Entretien", prix_vente: 2500, prix_achat: 1600, stock: 18, seuil_alerte: 4 },
+  { code: "LIQUIDE-REFROIDISSEMENT", designation: "Liquide de refroidissement 4L", categorie: "Entretien", prix_vente: 4500, prix_achat: 3000, stock: 12, seuil_alerte: 3 },
+];
+
 export const DEMO_USERS = [
   { id: "u-admin", email: "admin@ogss.demo", password: "Admin2026!", nom_complet: "Administrateur OGSS", role: "admin", station_id: null },
   { id: "u-gerant-hann", email: "gerant.hann@ogss.demo", password: "Hann2026!", nom_complet: "Gérant Hann", role: "gerant", station_id: "st-hann" },
   { id: "u-gerant-ndia", email: "gerant.ndia@ogss.demo", password: "Ndia2026!", nom_complet: "Gérant Ndiakhirate", role: "gerant", station_id: "st-ndia" },
-  { id: "u-super", email: "superviseur@ogss.demo", password: "Super2026!", nom_complet: "Superviseur réseau", role: "superviseur", station_id: null },
-  { id: "u-dir", email: "directeur@ogss.demo", password: "Dir2026!", nom_complet: "Directeur OGSS", role: "directeur", station_id: null },
+  { id: "u-dir", email: "directeur@ogss.demo", password: "Dir2026!", nom_complet: "Directeur Général OGSS", role: "directeur", station_id: null },
   { id: "u-compta", email: "comptable@ogss.demo", password: "Compta2026!", nom_complet: "Comptable OGSS", role: "comptable", station_id: null },
+  { id: "u-pompiste-hann", email: "pompiste@ogss.demo", password: "Pompe2026!", nom_complet: "Modou Fall (Pompiste)", role: "pompiste", station_id: "st-hann" },
+  { id: "u-lavage-hann", email: "lavage@ogss.demo", password: "Lavage2026!", nom_complet: "Aliou Diop (Lavage)", role: "lavage", station_id: "st-hann" },
+  { id: "u-boutique-hann", email: "boutique@ogss.demo", password: "Boutique2026!", nom_complet: "Fatou Ndiaye (Boutique)", role: "boutique", station_id: "st-hann" },
+  { id: "u-stock-hann", email: "stock@ogss.demo", password: "Stock2026!", nom_complet: "Ibrahima Sarr (Resp. Stock)", role: "stock", station_id: "st-hann" },
+  { id: "u-maint-hann", email: "maintenance@ogss.demo", password: "Maint2026!", nom_complet: "Cheikh Bâ (Technicien Maint.)", role: "maintenance", station_id: "st-hann" },
+  { id: "u-super", email: "superviseur@ogss.demo", password: "Super2026!", nom_complet: "Superviseur Réseau", role: "superviseur", station_id: null },
 ];
 
 export function referentielFromSeed() {
@@ -103,5 +189,27 @@ export function referentielFromSeed() {
     cuves: SEED_STATIONS.flatMap((st) =>
       SEED_CUVES.map(([produit, capacite_l]) => ({ id: `${st.id}-cuve-${produit.toLowerCase()}`, station_id: st.id, produit, capacite_l }))
     ),
+    // ── §33 / §38 : nouveaux référentiels ──────────────────────────────────
+    clients_pro: SEED_STATIONS.flatMap((st) =>
+      SEED_CLIENTS_PRO.map(([code, societe, contact, tel, email_]) => ({
+        code, nom_entreprise: societe, contact, telephone: tel, email: email_, station_id: st.id, plafond_credit: 0, actif: true,
+      }))
+    ),
+    vehicules: SEED_CLIENTS_PRO.flatMap(([code, societe]) =>
+      SEED_VEHICULES[code]?.map(([immat, marque, modele, type_, carburant]) => ({
+        immatriculation: immat, client_code: code, marque, modele, type: type_, carburant, actif: true,
+      })) || []
+    ),
+    fournisseurs: [...new Map(SEED_FOURNISSEURS.map((f) => [f.code, f])).values()].map(({ code, nom, tel, email_ }) => ({
+      id: `fr-${code}`, code, nom_fournisseur: nom, telephone: tel, email: email_, actif: true,
+    })),
+    categories_depenses: SEED_CATEGORIES_DEPENSES.map(([code, libelle, nature, compte]) => ({ code, libelle, nature, compte_syscohada: compte })),
+    equipements: SEED_STATIONS.flatMap((st) =>
+      SEED_EQUIPEMENTS.map(([type_, libelle]) => ({ id: `${st.id}-${type_}`, station_id: st.id, type: type_, libelle, actif: true }))
+    ),
+    types_maintenance: SEED_MAINTENANCE_TYPES.map(([code, libelle]) => ({ code, libelle })),
+    motifs_incidents: SEED_INCIDENT_MOTIFS.map(([code, libelle, priorite]) => ({ code, libelle, priorite })),
+    tarifs_lavage: SEED_TARIFS_LAVAGE,
+    produits_boutique: SEED_PRODUITS_BOUTIQUE,
   };
 }

@@ -209,6 +209,18 @@ describe("calculer", () => {
     expect(c.depenses).toBe(15000);
   });
 
+  it("arrête les calculs si un index fin est inférieur à l'index départ", () => {
+    const r = rapportVide(ref, "HANN", "2026-09-14", "Test");
+    r.pistolets["gasoil1"] = { depart: 10000, fin: 9000 }; // Erreur
+    const c = calculer(r, ref);
+    expect(c.pist.find((p) => p.code === "gasoil1").anomalie).toBe("Index fin < index départ");
+    expect(c.pist.find((p) => p.code === "gasoil1").volume).toBe(0);
+    expect(c.pist.find((p) => p.code === "gasoil1").valeur).toBe(0);
+    expect(c.caCarburant).toBe(null);
+    expect(c.caTotal).toBe(null);
+    expect(c.ecart).toBe(null);
+  });
+
   it("calcule le NET BIS (versements - coupures)", () => {
     const r = rapportVide(ref, "HANN", "2026-09-14", "Test");
     r.versements = [100000, 0, 0, 0, 0];
@@ -289,3 +301,52 @@ describe("ecrireSyscohada", () => {
     expect(rows[0]).toContain("Compte");
   });
 });
+
+import { genererWorkbookExcel, genererWorkbookCsv } from "../src/lib/exportExcel.js";
+
+describe("Extractions et Exports Excel / CSV", () => {
+  const ref = referentielFromSeed();
+
+  it("génère le classeur Excel du journal de caisse avec toutes les feuilles et données", () => {
+    const r = rapportVide(ref, "HANN", "2026-09-14", "Test Gérant");
+    Object.keys(r.pistolets).forEach((code) => {
+      r.pistolets[code] = { depart: 1000, fin: 1200 };
+    });
+    r.versements = [200000, 0, 0, 0, 0];
+    r.depenses = [{ categorie: "Fournitures", libelle: "Papier", montant: 5000 }];
+    const c = calculer(r, ref);
+
+    const wb = genererWorkbookExcel(r, c, ref.stations);
+    expect(wb).toBeDefined();
+    expect(wb.SheetNames).toContain("JOURNAL");
+    expect(wb.SheetNames).toContain("DEPENSES");
+
+    const sheetJournal = wb.Sheets["JOURNAL"];
+    expect(sheetJournal).toBeDefined();
+    // A1 doit contenir le nom de la station
+    expect(sheetJournal["A1"]?.v).toContain("HANN");
+
+    const sheetDep = wb.Sheets["DEPENSES"];
+    expect(sheetDep).toBeDefined();
+    expect(sheetDep["A1"]?.v).toBe("DATE");
+    expect(sheetDep["C2"]?.v).toBe("Papier");
+    expect(sheetDep["D2"]?.v).toBe(5000);
+  });
+
+  it("génère le classeur des écritures SYSCOHADA pour l'extraction comptable", () => {
+    const rows = [
+      ["Date", "Journal", "Compte", "Libellé", "Débit", "Crédit", "Pièce", "Station"],
+      ["14/09/2026", "VT", "571", "Ventes carburant", 150000, "", "rap-1", "HANN"],
+      ["14/09/2026", "VT", "7011", "Ventes carburant", "", 150000, "rap-1", "HANN"],
+    ];
+    const wb = genererWorkbookCsv(rows);
+    expect(wb).toBeDefined();
+    expect(wb.SheetNames).toContain("EXPORT");
+    const sheet = wb.Sheets["EXPORT"];
+    expect(sheet["A1"]?.v).toBe("Date");
+    expect(sheet["C1"]?.v).toBe("Compte");
+    expect(sheet["C2"]?.v).toBe("571");
+    expect(sheet["E2"]?.v).toBe(150000);
+  });
+});
+

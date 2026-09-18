@@ -10,13 +10,22 @@ export default function Stocks() {
   const [filtre, setFiltre] = useState("TOUS");
 
   useEffect(() => {
+    let alive = true;
     (async () => {
-      const r = await loadReferentiel();
-      setRef(r);
-      const s = await stocksTheoriques(r);
-      setRows(s);
-      setLoading(false);
+      try {
+        const r = await loadReferentiel();
+        if (!alive) return;
+        setRef(r);
+        const st = await stocksTheoriques(r).catch(() => []);
+        if (!alive) return;
+        setRows(st || []);
+      } catch (err) {
+        console.error("Stocks load error:", err);
+      } finally {
+        if (alive) setLoading(false);
+      }
     })();
+    return () => { alive = false; };
   }, []);
 
   if (loading) return <Loading />;

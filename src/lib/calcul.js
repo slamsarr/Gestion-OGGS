@@ -69,6 +69,7 @@ export function rapportVide(ref, stationCode, date, gerantNom) {
     remboursement: "",
     depots: "",
     depenses: [],
+    delestages: [],
     reglements: [],
     versements: ["", "", "", "", ""],
     coupures: Object.fromEntries(COUPURES.map((c) => [c, ""])),
@@ -92,13 +93,17 @@ export function calculer(r, ref) {
   const pist = defs.map((p) => {
     const row = r.pistolets[p.code] || { depart: 0, fin: "" };
     const prix = p.produit === "GASOIL" ? pGO : pSU;
-    const volume = row.fin === "" ? 0 : n(row.fin) - n(row.depart);
-    const anomalie = row.fin !== "" && (volume < 0 ? "Index fin < index départ" : volume > SAUT_INDEX_MAX ? "Saut d'index suspect" : "");
-    return { ...p, depart: n(row.depart), fin: n(row.fin), prix, volume, valeur: volume * prix, anomalie };
+    const rawVolume = row.fin === "" ? 0 : n(row.fin) - n(row.depart);
+    const anomalie = row.fin !== "" && (rawVolume < 0 ? "Index fin < index départ" : rawVolume > SAUT_INDEX_MAX ? "Saut d'index suspect" : "");
+    const volume = anomalie ? 0 : rawVolume;
+    const valeur = anomalie ? 0 : volume * prix;
+    return { ...p, depart: n(row.depart), fin: n(row.fin), prix, volume, valeur, anomalie };
   });
-  const volGO = pist.filter((p) => p.produit === "GASOIL").reduce((s, p) => s + p.volume, 0);
-  const volSU = pist.filter((p) => p.produit === "SUPER").reduce((s, p) => s + p.volume, 0);
-  const caCarburant = volGO * pGO + volSU * pSU;
+
+  const errorPist = pist.some((p) => p.anomalie);
+  const volGO = errorPist ? 0 : pist.filter((p) => p.produit === "GASOIL").reduce((s, p) => s + p.volume, 0);
+  const volSU = errorPist ? 0 : pist.filter((p) => p.produit === "SUPER").reduce((s, p) => s + p.volume, 0);
+  const caCarburant = errorPist ? null : volGO * pGO + volSU * pSU;
 
   const lub = (ref.lubrifiants || []).map((l) => {
     const x = r.lubrifiants[l.designation] || { debut: 0, reception: "", vendu: "" };
@@ -125,16 +130,17 @@ export function calculer(r, ref) {
   const caGaz = gaz.reduce((s, g) => s + g.valeurVente, 0);
   const margeGaz = gaz.reduce((s, g) => s + g.marge, 0);
 
-  const lavage = n(r.lavage), tickets = n(r.tickets), remboursement = n(r.remboursement), depots = n(r.depots);
+  const lavage = n(r.lavage), boutique = n(r.boutique), tickets = n(r.tickets), remboursement = n(r.remboursement), depots = n(r.depots);
   const depenses = (r.depenses || []).reduce((s, d) => s + n(d.montant), 0);
-  const caTotal = caCarburant + caLub + caGaz + lavage + depots + remboursement;
-  const aVerser = caTotal - tickets - depenses;
+  const totalDelestages = (r.delestages || []).reduce((s, d) => s + n(d.montant), 0);
+  const caTotal = errorPist ? null : (caCarburant ?? 0) + caLub + caGaz + lavage + boutique + depots + remboursement;
+  const aVerser = caTotal === null ? null : caTotal - tickets - depenses;
   const bis = (r.versements || []).reduce((s, v) => s + n(v), 0);
   const totalCoupures = COUPURES.reduce((s, c) => s + c * n(r.coupures?.[c]), 0);
-  const ecart = bis + depenses + tickets - caTotal;
+  const ecart = caTotal === null ? null : bis + depenses + tickets - caTotal;
   const netBis = bis - totalCoupures;
-  const ventilation = { carburant: bis - caLub - lavage - caGaz, lubrifiant: caLub, lavage, gaz: caGaz };
-  return { pGO, pSU, pist, volGO, volSU, caCarburant, lub, caLub, valeurStockLub, gaz, caGaz, margeGaz, lavage, tickets, remboursement, depots, depenses, caTotal, aVerser, bis, totalCoupures, ecart, netBis, ventilation };
+  const ventilation = { carburant: bis - caLub - lavage - boutique - caGaz, lubrifiant: caLub, lavage, boutique, gaz: caGaz };
+  return { pGO, pSU, pist, volGO, volSU, caCarburant, lub, caLub, valeurStockLub, gaz, caGaz, margeGaz, lavage, boutique, tickets, remboursement, depots, depenses, totalDelestages, caTotal, aVerser, bis, totalCoupures, ecart, netBis, ventilation };
 }
 
 export function controler(r, c) {
@@ -163,6 +169,10 @@ export function ecrireSyscohada(r, c, stationNom) {
     [date, "VT", "7011", "Ventes gaz", "", c.caGaz, r.id, stationNom],
     [date, "VT", "571", "Lavage", c.lavage, "", r.id, stationNom],
     [date, "VT", "7061", "Lavage", "", c.lavage, r.id, stationNom],
+    ...(c.boutique > 0 ? [
+      [date, "VT", "571", "Ventes boutique", c.boutique, "", r.id, stationNom],
+      [date, "VT", "7012", "Ventes boutique", "", c.boutique, r.id, stationNom],
+    ] : []),
     [date, "OD", "4111", "Tickets / bons", c.tickets, "", r.id, stationNom],
     [date, "OD", "571", "Tickets / bons", "", c.tickets, r.id, stationNom],
   ];

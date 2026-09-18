@@ -1,9 +1,9 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { ensureLocalSeed, isCloudConfigured } from "../lib/db";
+import { ensureLocalSeed, isCloudConfigured, isDemoModeEnabled } from "../lib/db";
 import { getSupabase } from "../lib/supabase";
 import { DEMO_USERS, SEED_STATIONS } from "../lib/seed";
 
-const AuthCtx = createContext(null);
+export const AuthCtx = createContext(null);
 
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(undefined);
@@ -24,36 +24,59 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     let alive = true;
     (async () => {
-      await ensureLocalSeed();
+      try {
+        await ensureLocalSeed();
+      } catch (e) {
+        console.warn("ensureLocalSeed error:", e);
+      }
+      const raw = localStorage.getItem("ogss_demo_session");
+      if (raw && isDemoModeEnabled()) {
+        try {
+          const u = JSON.parse(raw);
+          if (alive) {
+            setSession({ type: "demo", user: u });
+            setProfil({ id: u.id, nom_complet: u.nom_complet, role: u.role, station_id: u.station_id, stations: u.stations, email: u.email });
+          }
+          return;
+        } catch {}
+      } else if (raw && !isDemoModeEnabled()) {
+        localStorage.removeItem("ogss_demo_session");
+      }
       const sb = getSupabase();
       if (sb) {
-        const { data } = await sb.auth.getSession();
-        if (!alive) return;
-        if (data.session) {
-          setSession({ type: "cloud", user: data.session.user });
-          const { data: p } = await sb.from("profils").select("*, stations(code, nom)").eq("id", data.session.user.id).maybeSingle();
-          if (alive) setProfil(p);
-        } else {
-          setSession(null);
+        try {
+          const sessPromise = sb.auth.getSession();
+          const timerPromise = new Promise((resolve) => setTimeout(() => resolve({ data: { session: null } }), 1500));
+          const { data } = await Promise.race([sessPromise, timerPromise]);
+          if (!alive) return;
+          if (data?.session) {
+            setSession({ type: "cloud", user: data.session.user });
+            const { data: p } = await sb.from("profils").select("*, stations(code, nom)").eq("id", data.session.user.id).maybeSingle();
+            if (alive) setProfil(p);
+            return;
+          }
+        } catch (e) {
+          console.warn("Supabase session check:", e);
         }
+        if (alive) setSession(null);
         sb.auth.onAuthStateChange(async (_e, sess) => {
           if (!sess) {
-            setSession(null);
-            setProfil(null);
+            const currentDemo = localStorage.getItem("ogss_demo_session");
+            if (!currentDemo) {
+              setSession(null);
+              setProfil(null);
+            }
             return;
           }
           setSession({ type: "cloud", user: sess.user });
-          const { data: p } = await sb.from("profils").select("*, stations(code, nom)").eq("id", sess.user.id).maybeSingle();
-          setProfil(p);
+          try {
+            const { data: p } = await sb.from("profils").select("*, stations(code, nom)").eq("id", sess.user.id).maybeSingle();
+            setProfil(p);
+          } catch {}
         });
         return;
       }
-      const raw = localStorage.getItem("ogss_demo_session");
-      if (raw) {
-        const u = JSON.parse(raw);
-        setSession({ type: "demo", user: u });
-        setProfil({ id: u.id, nom_complet: u.nom_complet, role: u.role, station_id: u.station_id, stations: u.stations, email: u.email });
-      } else setSession(null);
+      if (alive) setSession(null);
     })();
     return () => {
       alive = false;
@@ -65,20 +88,52 @@ export function AuthProvider({ children }) {
     profil,
     online,
     cloud: isCloudConfigured(),
+    demoMode: isDemoModeEnabled(),
     loading: session === undefined,
     async login(email, password) {
-      const sb = getSupabase();
-      if (sb) {
-        const { data, error } = await sb.auth.signInWithPassword({ email, password });
-        if (error) throw new Error(error.message);
-        const { data: p } = await sb.from("profils").select("*, stations(code, nom)").eq("id", data.user.id).maybeSingle();
-        setSession({ type: "cloud", user: data.user });
-        setProfil(p);
+      const cleanEmail = email.trim().toLowerCase();
+      const demoUser = isDemoModeEnabled() ? DEMO_USERS.find((x) => x.email === cleanEmail) : null;
+      if (demoUser) {
+        if (demoUser.password !== password) throw new Error("Mot de passe démo incorrect");
+        await ensureLocalSeed();
+        const { password: _p, ...safe } = demoUser;
+        const st = SEED_STATIONS.find((s) => s.id === demoUser.station_id);
+        const stations = { code: st?.code || null, nom: st?.nom || demoUser.nom_complet };
+        const packed = { ...safe, stations };
+        localStorage.setItem("ogss_demo_session", JSON.stringify(packed));
+        setSession({ type: "demo", user: packed });
+        setProfil({ id: packed.id, nom_complet: packed.nom_complet, role: packed.role, station_id: packed.station_id, stations: packed.stations, email: packed.email });
         return;
       }
+
+      const sb = getSupabase();
+      if (sb) {
+        try {
+          const { data, error } = await sb.auth.signInWithPassword({ email: cleanEmail, password });
+          if (error) throw new Error(error.message);
+          let p = null;
+          try {
+            const res = await sb.from("profils").select("*, stations(code, nom)").eq("id", data.user.id).maybeSingle();
+            p = res.data;
+          } catch {}
+          localStorage.removeItem("ogss_demo_session");
+          setSession({ type: "cloud", user: data.user });
+          setProfil(p || { id: data.user.id, email: data.user.email, role: "gerant", nom_complet: data.user.email });
+          return;
+        } catch (err) {
+          if (err.message && (err.message.includes("fetch failed") || err.message.includes("NetworkError") || err.message.includes("Failed to fetch"))) {
+            throw new Error("Serveur Supabase inaccessible. Utilisez les boutons de connexion démo ci-dessous pour tester l'application.");
+          }
+          throw err;
+        }
+      }
+      throw new Error("Identifiants incorrects ou compte introuvable");
+    },
+    async loginDemo(roleOrEmail) {
+      if (!isDemoModeEnabled()) throw new Error("Mode démonstration désactivé en production.");
       await ensureLocalSeed();
-      const u = DEMO_USERS.find((x) => x.email === email.trim().toLowerCase());
-      if (!u || u.password !== password) throw new Error("Identifiants incorrects");
+      const clean = typeof roleOrEmail === "string" ? roleOrEmail.trim().toLowerCase() : "gerant";
+      const u = DEMO_USERS.find((x) => x.email === clean || x.role === clean) || DEMO_USERS[1] || DEMO_USERS[0];
       const { password: _p, ...safe } = u;
       const st = SEED_STATIONS.find((s) => s.id === u.station_id);
       const stations = { code: st?.code || null, nom: st?.nom || u.nom_complet };
@@ -104,9 +159,11 @@ export function AuthProvider({ children }) {
       return { ok: true };
     },
     async logout() {
-      const sb = getSupabase();
-      if (sb) await sb.auth.signOut();
       localStorage.removeItem("ogss_demo_session");
+      const sb = getSupabase();
+      if (sb) {
+        try { await sb.auth.signOut(); } catch {}
+      }
       setSession(null);
       setProfil(null);
     },

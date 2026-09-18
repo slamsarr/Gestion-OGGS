@@ -2,7 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { isCloudConfigured } from "./db";
 
 let client = null;
-const NET_TIMEOUT_MS = 8000;
+const NET_TIMEOUT_MS = 3000;
 const fetchWithTimeout = (input, init) => {
   const ctrl = new AbortController();
   if (init && init.signal) {

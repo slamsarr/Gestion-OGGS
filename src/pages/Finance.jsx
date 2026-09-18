@@ -26,22 +26,31 @@ export default function Finance() {
   const [opForm, setOpForm] = useState({ client_code: "", date_op: todayISO(), matricule: "", volume_l: "", valeur_cons: "", depot: "" });
 
   useEffect(() => {
+    let alive = true;
     (async () => {
-      const r = await loadReferentiel();
-      setRef(r);
-      const p = await getParametres();
-      if (p?.devise) setDevise(p.devise);
-      const raps = await listRapports({ page: 1, limit: 100 });
-      setRapports(raps);
-      setTotalPages(raps.pages || 1);
-      // Calculate soldes
-      const s = {};
-      for (const cl of (r.clients || [])) {
-        s[cl.code] = await soldeClient(cl.code);
+      try {
+        const r = await loadReferentiel();
+        if (!alive) return;
+        setRef(r);
+        const p = await getParametres().catch(() => null);
+        if (alive && p?.devise) setDevise(p.devise);
+        const raps = await listRapports({ page: 1, limit: 100 }).catch(() => []);
+        if (alive) {
+          setRapports(raps || []);
+          setTotalPages(raps?.pages || 1);
+        }
+        const s = {};
+        for (const cl of (r?.clients || [])) {
+          try { s[cl.code] = await soldeClient(cl.code); } catch {}
+        }
+        if (alive) setSoldes(s);
+      } catch (err) {
+        console.error("Finance load error:", err);
+      } finally {
+        if (alive) setLoading(false);
       }
-      setSoldes(s);
-      setLoading(false);
     })();
+    return () => { alive = false; };
   }, []);
 
   const loadMore = async () => {
@@ -86,6 +95,11 @@ export default function Finance() {
   const totalDep = valides.reduce((s, r) => s + n(r.depenses), 0);
   const totalTick = valides.reduce((s, r) => s + n(r.tickets), 0);
   const totalEcart = valides.reduce((s, r) => s + n(r.ecart_caisse), 0);
+  const totalCarburant = valides.reduce((s, r) => s + n(r.ca_carburant), 0);
+  const totalLavage = valides.reduce((s, r) => s + n(r.ca_lavage), 0);
+  const totalBoutique = valides.reduce((s, r) => s + n(r.boutique || r.ca_boutique), 0);
+  const totalLub = valides.reduce((s, r) => s + n(r.ca_lubrifiant), 0);
+  const totalGaz = valides.reduce((s, r) => s + n(r.ca_gaz), 0);
   const clients = ref?.clients || [];
 
   const exportSyscohada = () => {
@@ -106,10 +120,10 @@ export default function Finance() {
       <p className="text-sm mb-4" style={{ color: T.muted }}>{valides.length} rapports validés</p>
       {msg && <div className="rounded px-3 py-2 mb-3 text-sm" style={{ background: "#E3F4EA", color: T.ok }}>{msg}</div>}
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-5">
+      {/* KPIs Généraux */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
         {[
-          { label: "CA Total", value: `${F(totalCA)} ${devise}` },
+          { label: "CA Global Réseau", value: `${F(totalCA)} ${devise}` },
           { label: "Versements", value: `${F(totalVers)} ${devise}` },
           { label: "Dépenses", value: `${F(totalDep)} ${devise}` },
           { label: "Tickets/Bons", value: `${F(totalTick)} ${devise}` },
@@ -121,6 +135,35 @@ export default function Finance() {
             <div className="text-lg font-bold tabular" style={{ color: k.color || T.petrol }}>{k.value}</div>
           </div>
         ))}
+      </div>
+
+      {/* Ventilation multi-activités §2 / §38 */}
+      <div className="bg-white rounded-lg p-3.5 mb-5 border shadow-sm" style={{ borderColor: T.line }}>
+        <div className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">
+          Ventilation du Chiffre d'Affaires par Activité
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center">
+          <div className="p-2 rounded bg-blue-50">
+            <span className="text-[11px] block font-medium text-blue-900">⛽ Carburant</span>
+            <span className="text-sm font-bold text-blue-950 tabular">{F(totalCarburant)} F</span>
+          </div>
+          <div className="p-2 rounded bg-cyan-50">
+            <span className="text-[11px] block font-medium text-cyan-900">🚿 Lavage</span>
+            <span className="text-sm font-bold text-cyan-950 tabular">{F(totalLavage)} F</span>
+          </div>
+          <div className="p-2 rounded bg-amber-50">
+            <span className="text-[11px] block font-medium text-amber-900">🛒 Boutique</span>
+            <span className="text-sm font-bold text-amber-950 tabular">{F(totalBoutique)} F</span>
+          </div>
+          <div className="p-2 rounded bg-purple-50">
+            <span className="text-[11px] block font-medium text-purple-900">🛢️ Lubrifiants</span>
+            <span className="text-sm font-bold text-purple-950 tabular">{F(totalLub)} F</span>
+          </div>
+          <div className="p-2 rounded bg-emerald-50">
+            <span className="text-[11px] block font-medium text-emerald-900">🔥 Gaz</span>
+            <span className="text-sm font-bold text-emerald-950 tabular">{F(totalGaz)} F</span>
+          </div>
+        </div>
       </div>
 
       {/* Journal */}

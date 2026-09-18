@@ -2,6 +2,14 @@ import { db, ensureLocalSeed, getLocalRef, isCloudConfigured, setLocalRef } from
 import { getSupabase } from "./supabase";
 import { calculer, n, todayISO, uuid } from "./calcul";
 import { referentielFromSeed } from "./seed";
+import {
+  TABLES_CLOUD_METIER,
+  TABLES_META_METIER,
+  TABLES_OPS_CLOUD,
+  cloudTable,
+  dexieTable,
+  parseQueueMetierOp,
+} from "./metier-sync";
 
 export { isCloudConfigured };
 
@@ -179,7 +187,7 @@ export async function saveRapport(r, profil, ref, extras = {}) {
     ...r,
     ...extras,
     maj_le: new Date().toISOString(),
-    gerant_id: profil.id,
+    gerant_id: profil?.id || null,
     ...t,
   };
   await db.rapports.put(doc);
@@ -287,10 +295,14 @@ async function ecrireMouvementsLocaux(doc, ref) {
 }
 
 export async function stocksTheoriques(ref) {
+  const referentiel = ref || (await getLocalRef());
+  if (!referentiel) return [];
+  const stations = referentiel.stations || [];
+  const prods = [...(referentiel.lubrifiants || []), ...(referentiel.gaz || [])];
   const mvts = await db.mouvements.toArray();
   const map = {};
   for (const p of [...(ref.lubrifiants || []), ...(ref.gaz || [])]) {
-    for (const st of ref.stations) {
+    for (const st of stations) {
       const q = mvts.filter((m) => m.produit_id === p.id && m.station_id === st.id).reduce((s, m) => s + n(m.quantite), 0);
       map[`${st.code}:${p.designation}`] = q;
     }
@@ -317,7 +329,7 @@ export async function stocksTheoriques(ref) {
   const rows = [];
   for (const st of ref.stations) {
     const last = lastByStation[st.code];
-    for (const l of [...(ref.lubrifiants || []), ...(ref.gaz || [])]) {
+    for (const l of prods) {
       let stock = map[`${st.code}:${l.designation}`] || 0;
       if (stock === 0 && last) {
         const x = last.lubrifiants?.[l.designation] || last.gaz?.[l.designation];
@@ -369,6 +381,32 @@ async function syncQuartsCloud(withDate) {
   return synced;
 }
 
+async function replayMetierQueueItem(sb, item) {
+  const parsed = parseQueueMetierOp(item.op);
+  if (!parsed) return false;
+  const ct = cloudTable(parsed.table);
+  if (!ct) throw new Error(`Table cloud inconnue : ${parsed.table}`);
+  const dt = dexieTable(parsed.table);
+  if (parsed.action === "delete") {
+    const id = item.payload?.id;
+    if (!id) throw new Error("ID manquant pour suppression");
+    const { error } = await sb.from(ct).delete().eq("id", id);
+    if (error) throw new Error(error.message);
+    await db[dt].delete(id);
+    return true;
+  }
+  const row = item.payload;
+  if (parsed.action === "insert") {
+    const { error } = await sb.from(ct).insert(row);
+    if (error) throw new Error(error.message);
+  } else {
+    const { error } = await sb.from(ct).upsert(row);
+    if (error) throw new Error(error.message);
+  }
+  await db[dt].put(row);
+  return true;
+}
+
 export async function flushQueue() {
   const sb = getSupabase();
   if (!sb) return { flushed: 0 };
@@ -387,6 +425,10 @@ export async function flushQueue() {
         if (!cl) throw new Error("Client crédit introuvable au niveau du cloud");
         const { error } = await sb.from("operations_credit").insert({ ...op, client_id: cl.id });
         if (error) throw new Error(error.message);
+      } else if (await replayMetierQueueItem(sb, item)) {
+        // upsert_*, insert_*, update_*, delete_* métier / ops terrain
+      } else {
+        throw new Error(`Opération de file inconnue : ${item.op}`);
       }
       await db.queue.delete(item.id);
       flushed += 1;
@@ -561,7 +603,7 @@ export async function savePompiste(p) {
   return { ok: true, pompiste: row };
 }
 
-// ── Quarts pompistes ──
+// ══════════════════════════════════════════════════════════════════════════
 export async function listQuarts(dateISO) {
   const key = dateISO || todayISO();
   const sb = getSupabase();
@@ -743,5 +785,503 @@ export async function diagSync() {
   return result;
 }
 
+// ══════════════════════════════════════════════════════════════════════════
+// VAGUE 2 — CRUD générique §33/§34/§38 (offline-first : Supabase → Dexie + audit)
+// Convention identique à saveLivraison/createClientCredit : la grille par défaut
+// (§6 RBAC) est testée côté page ; ici uniquement persistance + audit local.
+// ══════════════════════════════════════════════════════════════════════════
+
+const TABLES_METIER = {
+  clients_pro: { libelle: "clients_professionnels", champCle: "code", cloud: "clients_professionnels" },
+  vehicules: { libelle: "vehicules", champCle: "immatriculation", cloud: "vehicules" },
+  fournisseurs: { libelle: "fournisseurs", champCle: "code", cloud: "fournisseurs" },
+  achats: { libelle: "achats", champCle: "id", cloud: "achats_carburant" },
+  depenses: { libelle: "depenses", champCle: "id", cloud: "depenses" },
+  equipements: { libelle: "equipements", champCle: "id", cloud: "equipements" },
+  maintenances: { libelle: "maintenances", champCle: "id", cloud: "maintenances" },
+  incidents: { libelle: "incidents", champCle: "id", cloud: "incidents" },
+};
+
+export function listTablesMetier() {
+  return Object.keys(TABLES_METIER);
+}
+
+// ── Formulaire générique (table → colonnes éditables sous forme de liste) ──
+export function colonnesMetier(table) {
+  if (table === "clients_pro") {
+    return [
+      { cle: "code", libelle: "Code client", requis: true },
+      { cle: "nom_entreprise", libelle: "Entreprise", requis: true },
+      { cle: "contact", libelle: "Contact", requis: false },
+      { cle: "telephone", libelle: "Téléphone", requis: false },
+      { cle: "email", libelle: "Email", requis: false },
+      { cle: "plafond_credit", libelle: "Plafond crédit (F)", requis: false },
+    ];
+  }
+  if (table === "vehicules") {
+    return [
+      { cle: "immatriculation", libelle: "Immatriculation", requis: true },
+      { cle: "marque", libelle: "Marque", requis: false },
+      { cle: "modele", libelle: "Modèle", requis: false },
+      { cle: "carburant", libelle: "Carburant", requis: false },
+    ];
+  }
+  if (table === "fournisseurs") {
+    return [
+      { cle: "code", libelle: "Code fournisseur", requis: true },
+      { cle: "nom_fournisseur", libelle: "Nom", requis: true },
+      { cle: "telephone", libelle: "Téléphone", requis: false },
+      { cle: "email", libelle: "Email", requis: false },
+    ];
+  }
+  if (table === "achats") {
+    return [
+      { cle: "date_achat", libelle: "Date", requis: true },
+      { cle: "designation", libelle: "Désignation", requis: true },
+      { cle: "quantite_achat", libelle: "Quantité", requis: false },
+      { cle: "montant_total", libelle: "Montant total (F)", requis: false },
+      { cle: "statut_achat", libelle: "Statut", requis: false },
+    ];
+  }
+  if (table === "depenses") {
+    return [
+      { cle: "date_depense", libelle: "Date", requis: true },
+      { cle: "categorie_depense", libelle: "Catégorie", requis: false },
+      { cle: "designation_depense", libelle: "Désignation", requis: false },
+      { cle: "montant_depense", libelle: "Montant (F)", requis: true },
+      { cle: "mode_paiement", libelle: "Mode paiement", requis: false },
+    ];
+  }
+  if (table === "equipements") {
+    return [
+      { cle: "type_equipement", libelle: "Type", requis: true },
+      { cle: "designation_equipement", libelle: "Désignation", requis: false },
+      { cle: "date_installation", libelle: "Installation", requis: false },
+      { cle: "etat_equipement", libelle: "État", requis: false },
+    ];
+  }
+  if (table === "maintenances") {
+    return [
+      { cle: "type_maintenance", libelle: "Type", requis: true },
+      { cle: "equipement_id", libelle: "Équipement", requis: true },
+      { cle: "date_maintenance", libelle: "Date", requis: false },
+      { cle: "cout_maintenance", libelle: "Coût (F)", requis: false },
+      { cle: "statut_maintenance", libelle: "Statut", requis: false },
+    ];
+  }
+  if (table === "incidents") {
+    return [
+      { cle: "motif_incident", libelle: "Motif", requis: true },
+      { cle: "incident_date", libelle: "Date", requis: true },
+      { cle: "description_incident", libelle: "Description", requis: false },
+      { cle: "priorite_incident", libelle: "Priorité", requis: false },
+    ];
+  }
+  return [];
+}
+
+// ── §33 : helpers métier génériques (collecte Supabase + Dexie, save, delete) ──
+// Tous les CRUD spécifiques (fournisseurs, achats, depenses, equipements,
+// maintenances, incidents, clients_pro, vehicules) sont construits sur ces
+// trois fonctions + TABLES_META_METIER / TABLES_CLOUD_METIER ci-dessous.
+
+export function champCle(table) {
+  return TABLES_METIER[table]?.champCle || TABLES_META_METIER[table]?.champCle || "id";
+}
+
+async function lastMetier(table) {
+  const dt = dexieTable(table);
+  try {
+    if (db[dt]?.orderBy) {
+      const rows = await db[dt].orderBy("created_at").reverse().limit(1).toArray();
+      if (rows.length) return rows;
+    }
+  } catch {}
+  try {
+    const all = await db[dt].toArray();
+    return all.length ? [all[all.length - 1]] : [];
+  } catch {
+    return [];
+  }
+}
+
+async function collectMetier(table, stationId) {
+  const sb = getSupabase();
+  const ct = cloudTable(table) || TABLES_METIER[table]?.cloud;
+  const dt = dexieTable(table);
+  const seen = new Set();
+  const rows = [];
+  if (sb && ct) {
+    try {
+      const { data } = await sb.from(ct).select("*").order("created_at", { ascending: false }).limit(500);
+      for (const r of data || []) {
+        const key = r.id || r.code;
+        if (key && !seen.has(key)) { seen.add(key); rows.push(r); }
+      }
+    } catch {}
+  }
+  let local = [];
+  try { local = await db[dt].orderBy("created_at").reverse().toArray(); } catch { try { local = await db[dt].toArray(); } catch {} }
+  for (const r of local) {
+    const key = r.id || r.code;
+    if (key && !seen.has(key)) { seen.add(key); rows.push(r); }
+  }
+  if (stationId) return rows.filter((r) => r.station_id === stationId || !r.station_id);
+  return rows;
+}
+
+export async function createMetier(table, data) {
+  const dt = dexieTable(table);
+  const ct = cloudTable(table) || TABLES_METIER[table]?.cloud;
+  const row = { ...data };
+  if (!row.id) row.id = uuid();
+  if (!row.created_at) row.created_at = new Date().toISOString();
+  const sb = getSupabase();
+  if (sb && ct) {
+    try {
+      const { error } = await sb.from(ct).insert(row);
+      if (error) throw new Error(error.message);
+    } catch (e) {
+      await db.queue.add({ op: `insert_${table}`, payload: row, created_at: Date.now(), error: String(e.message || e) });
+      await db[dt].put(row);
+      return { ok: true, cloud: false, pending: true, error: e.message, row };
+    }
+  }
+  await db[dt].put(row);
+  await db.audit_logs.put({ id: uuid(), table: table, action: "CREATE", objet_id: row.id || null, ancienne_valeur: null, nouvelle_valeur: row, created_at: new Date().toISOString() });
+  return { ok: true, row };
+}
+
+export async function updateMetier(table, id, patch) {
+  const dt = dexieTable(table);
+  const ct = cloudTable(table) || TABLES_METIER[table]?.cloud;
+  const existing = await db[dt].get(id);
+  const prev = existing || (await lastMetier(table))[0] || null;
+  const row = { ...(existing || {}), ...patch, id, maj_le: new Date().toISOString() };
+  const sb = getSupabase();
+  if (sb && ct) {
+    try {
+      const { error } = await sb.from(ct).update(patch).eq("id", id);
+      if (error) throw new Error(error.message);
+    } catch (e) {
+      await db.queue.add({ op: `update_${table}`, payload: row, created_at: Date.now(), error: String(e.message || e) });
+      await db[dt].put(row);
+      return { ok: true, cloud: false, pending: true, error: e.message, row };
+    }
+  }
+  await db[dt].put(row);
+  await db.audit_logs.put({ id: uuid(), table: table, action: "UPDATE", objet_id: id, ancienne_valeur: prev || {}, nouvelle_valeur: row, created_at: new Date().toISOString() });
+  return { ok: true, row };
+}
+
+export async function deleteMetier(table, id) {
+  const dt = dexieTable(table);
+  const ct = cloudTable(table) || TABLES_METIER[table]?.cloud;
+  const existing = await db[dt].get(id);
+  const prev = existing || null;
+  const sb = getSupabase();
+  if (sb && ct) {
+    try {
+      const { error } = await sb.from(ct).delete().eq("id", id);
+      if (error) throw new Error(error.message);
+    } catch (e) {
+      await db.queue.add({ op: `delete_${table}`, payload: { id }, created_at: Date.now(), error: String(e.message || e) });
+      await db[dt].delete(id);
+      return { ok: true, cloud: false, pending: true, error: e.message };
+    }
+  }
+  await db[dt].delete(id);
+  await db.audit_logs.put({ id: uuid(), table: table, action: "DELETE", objet_id: id, ancienne_valeur: prev || {}, nouvelle_valeur: null, created_at: new Date().toISOString() });
+  return { ok: true };
+}
+
+// ╔═════════════════════════════════════════════════════════════════════════
+// ║ VAGUE 2 — CRUD métier §33/§34/§38 (parametrage réseau, offline-first)
+// ╚═════════════════════════════════════════════════════════════════════════
+// Convention : Dexie = source de vérité locale (PWA hors-ligne) ;
+// Supabase = upsert best-effort quand cloud configuré, sinon file d'attente.
+// @param {string} table  — nom Dexie (§33 : clients_pro/vehicules/fournisseurs/…)
+// @param {object} payload
+function newIdMeta(table) {
+  return {
+    clients_pro: () => uuid(),
+    vehicules: () => uuid(),
+    fournisseurs: () => uuid(),
+    achats: () => uuid(),
+    depenses: () => uuid(),
+    equipements: () => uuid(),
+    maintenances: () => uuid(),
+    incidents: () => uuid(),
+    sessions_caisse: () => uuid(),
+  }[table]?.() || uuid();
+}
+export async function listMetier(table, stationId, champFiltre) {
+  const champ = champFiltre || TABLES_META_METIER[table]?.station;
+  const ct = cloudTable(table);
+  const dt = dexieTable(table);
+  const sb = getSupabase();
+  if (sb && ct && champ) {
+    try {
+      const { data } = await sb.from(ct).select("*").eq(champ, stationId).order("created_at", { ascending: false }).limit(500);
+      if (data?.length) {
+        for (const r of data) { try { await db[dt].put(r); } catch {} }
+        return data;
+      }
+    } catch {}
+  }
+  if (!champ) return db[dt].toArray();
+  return db[dt].where(champ).equals(stationId).reverse().sortBy("created_at");
+}
+
+export async function saveMetierRow(table, row) {
+  const meta = TABLES_META_METIER[table] || {};
+  const dt = dexieTable(table);
+  const ct = cloudTable(table);
+  const r = { ...row, id: row.id || newIdMeta(table) };
+  if (!r.created_at) r.created_at = new Date().toISOString();
+  r.maj_le = new Date().toISOString();
+  const sb = getSupabase();
+  if (sb && ct) {
+    try {
+      const { error } = await sb.from(ct).upsert(r);
+      if (error) throw new Error(error.message);
+    } catch (e) {
+      await db.queue.add({ op: `upsert_${table}`, payload: r, created_at: Date.now(), error: String(e.message || e) });
+      await db[dt].put(r);
+      return { ok: true, pending: true, row: r };
+    }
+  }
+  await db[dt].put(r);
+  await db.audit_logs.put({ id: uuid(), table, action: "SAVE", objet_id: r[meta.champCle] || r.id, nouvelle_valeur: r, created_at: new Date().toISOString() });
+  return { ok: true, row: r };
+}
+
+export async function deleteMetierRow(table, id) {
+  const dt = dexieTable(table);
+  const ct = cloudTable(table);
+  const sb = getSupabase();
+  if (sb && ct) {
+    try {
+      const { error } = await sb.from(ct).delete().eq("id", id);
+      if (error) throw new Error(error.message);
+    } catch (e) {
+      await db.queue.add({ op: `delete_${table}`, payload: { id }, created_at: Date.now(), error: String(e.message || e) });
+    }
+  }
+  await db[dt].delete(id);
+  await db.audit_logs.put({ id: uuid(), table, action: "DELETE", objet_id: id, ancienne_valeur: { id }, created_at: new Date().toISOString() });
+  return { ok: true };
+}
+
+/** Persistance offline-first pour opérations terrain Vague 2 */
+async function saveOpRow(table, row) {
+  const dt = dexieTable(table);
+  const ct = cloudTable(table);
+  const r = {
+    ...row,
+    id: row.id || uuid(),
+    created_at: row.created_at || new Date().toISOString(),
+    maj_le: new Date().toISOString(),
+  };
+  await db[dt].put(r);
+  const sb = getSupabase();
+  if (sb && ct) {
+    try {
+      const { error } = await sb.from(ct).upsert(r);
+      if (error) throw new Error(error.message);
+    } catch (e) {
+      await db.queue.add({ op: `upsert_${table}`, payload: r, created_at: Date.now(), error: String(e.message || e) });
+      return { ok: true, pending: true, row: r };
+    }
+  }
+  return { ok: true, row: r };
+}
+
+// ── CRUD clients_pro (clients professionnels) ──
+export async function createClientPro(c) { return saveMetierRow("clients_pro", { ...c, code: c.code || uuid() }); }
+export async function updateClientPro(id, patch) {
+  const gun = await saveMetierRow("clients_pro", { ...patch, id });
+  return gun;
+}
+export async function deleteClientPro(id) { return deleteMetierRow("clients_pro", id); }
+export async function listClientsPro(stationId) { return listMetier("clients_pro", stationId); }
+export async function createVehicule(v) { return saveMetierRow("vehicules", v); }
+export async function updateVehicule(id, patch) { return saveMetierRow("vehicules", { ...patch, id }); }
+export async function deleteVehicule(id) { return deleteMetierRow("vehicules", id); }
+export async function listVehicules(stationId, clientCode) {
+  return (await listMetier("vehicules", stationId)).filter((v) => !clientCode || v.client_code === clientCode);
+}
+export async function createFournisseur(f) { return saveMetierRow("fournisseurs", f); }
+export async function updateFournisseur(id, patch) { return saveMetierRow("fournisseurs", { ...patch, id }); }
+export async function deleteFournisseur(id) { return deleteMetierRow("fournisseurs", id); }
+export async function listFournisseurs(stationId) { return listMetier("fournisseurs", stationId); }
+export async function createAchat(a) { return saveMetierRow("achats", a); }
+export async function updateAchat(id, patch) { return saveMetierRow("achats", { ...patch, id }); }
+export async function deleteAchat(id) { return deleteMetierRow("achats", id); }
+export async function listAchats(stationId) { return listMetier("achats", stationId); }
+export async function createDepense(d) { return saveMetierRow("depenses", { ...d, montant: n(d.montant) }); }
+export async function updateDepense(id, patch) { return saveMetierRow("depenses", { ...patch, id }); }
+export async function deleteDepense(id) { return deleteMetierRow("depenses", id); }
+export async function listDepenses(stationId) {
+  const rows = await listMetier("depenses", stationId);
+  return rows.sort((a, b) => (b.date_depense || b.date || "").localeCompare(a.date_depense || a.date || ""));
+}
+export async function createEquipement(e) { return saveMetierRow("equipements", e); }
+export async function updateEquipement(id, patch) { return saveMetierRow("equipements", { ...patch, id }); }
+export async function deleteEquipement(id) { return deleteMetierRow("equipements", id); }
+export async function listEquipements(stationId) { return listMetier("equipements", stationId); }
+export async function createMaintenance(m) { return saveMetierRow("maintenances", m); }
+export async function updateMaintenance(id, patch) { return saveMetierRow("maintenances", { ...patch, id }); }
+export async function deleteMaintenance(id) { return deleteMetierRow("maintenances", id); }
+export async function listMaintenances(stationId) {
+  const rows = await listMetier("maintenances", stationId);
+  return rows.sort((a, b) => (b.date_maintenance || "").localeCompare(a.date_maintenance || ""));
+}
+export async function createIncident(x) { return saveMetierRow("incidents", x); }
+export async function updateIncident(id, patch) { return saveMetierRow("incidents", { ...patch, id }); }
+export async function deleteIncident(id) { return deleteMetierRow("incidents", id); }
+export async function listIncidents(stationId) {
+  const rows = await listMetier("incidents", stationId);
+  return rows.sort((a, b) => (b.date_incident || "").localeCompare(a.date_incident || ""));
+}
+export async function createSessionCaisse(s) { return saveMetierRow("sessions_caisse", s); }
+export async function updateSessionCaisse(id, patch) { return saveMetierRow("sessions_caisse", { ...patch, id }); }
+export async function listSessionsCaisse(stationId) { return listMetier("sessions_caisse", stationId); }
+
 export { referentielFromSeed };
+
+
+export const saveDepense = createDepense;
+
+// ── VAGUE 2 : CRUD Descentes pompistes (§2 & §37) ──
+export async function createDescente(d) {
+  const res = await saveOpRow("descentes", { ...d, statut: d.statut || "EN_COURS" });
+  return { ok: true, descente: res.row, pending: res.pending };
+}
+
+export async function updateDescente(id, patch) {
+  const existing = (await db.descentes.get(id)) || {};
+  const res = await saveOpRow("descentes", { ...existing, ...patch, id });
+  return { ok: true, descente: res.row, pending: res.pending };
+}
+
+export async function listDescentes(stationId, date) {
+  await ensureLocalSeed();
+  let rows = await db.descentes.toArray();
+  if (stationId) rows = rows.filter((d) => d.station_id === stationId);
+  if (date) rows = rows.filter((d) => d.date === date);
+  return rows.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+}
+
+export async function getDescente(id) {
+  return db.descentes.get(id);
+}
+
+// ── VAGUE 2 : CRUD Lavage (§2 & §37) ──
+export async function createPrestationLavage(p) {
+  const res = await saveOpRow("prestations_lavage", p);
+  return { ok: true, prestation: res.row, pending: res.pending };
+}
+
+export async function listPrestationsLavage(stationId, date) {
+  await ensureLocalSeed();
+  let rows = await db.prestations_lavage.toArray();
+  if (stationId) rows = rows.filter((p) => p.station_id === stationId);
+  if (date) rows = rows.filter((p) => p.date === date);
+  return rows.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+}
+
+export async function deletePrestationLavage(id) {
+  return deleteMetierRow("prestations_lavage", id);
+}
+
+// ── VAGUE 2 : CRUD Boutique & POS (§2 & §37) ──
+export async function listProduitsBoutique(stationId) {
+  await ensureLocalSeed();
+  let rows = await db.produits_boutique.toArray();
+  if (!rows || rows.length === 0) {
+    const ref = await getLocalRef();
+    const defaults = (ref.produits_boutique || []).map((p) => ({
+      ...p,
+      id: p.code,
+      station_id: stationId || "st-hann",
+      actif: true,
+    }));
+    await db.produits_boutique.bulkPut(defaults);
+    rows = defaults;
+  }
+  if (stationId) rows = rows.filter((p) => !p.station_id || p.station_id === stationId);
+  return rows;
+}
+
+export async function updateProduitBoutique(id, patch) {
+  const existing = (await db.produits_boutique.get(id)) || {};
+  const res = await saveOpRow("produits_boutique", { ...existing, ...patch, id });
+  return { ok: true, produit: res.row, pending: res.pending };
+}
+
+export async function createVenteBoutique(v) {
+  const res = await saveOpRow("ventes_boutique", v);
+  const row = res.row;
+  if (Array.isArray(row.lignes)) {
+    for (const item of row.lignes) {
+      const prodId = item.id || item.code;
+      if (prodId) {
+        const p = await db.produits_boutique.get(prodId);
+        if (p) {
+          const nouveauStock = Math.max(0, (n(p.stock) || 0) - (n(item.quantite) || 1));
+          await db.produits_boutique.update(prodId, { stock: nouveauStock });
+        }
+      }
+    }
+  }
+  return { ok: true, vente: row, pending: res.pending };
+}
+
+export async function listVentesBoutique(stationId, date) {
+  await ensureLocalSeed();
+  let rows = await db.ventes_boutique.toArray();
+  if (stationId) rows = rows.filter((v) => v.station_id === stationId);
+  if (date) rows = rows.filter((v) => v.date === date);
+  return rows.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+}
+
+// ── VAGUE 2 : Rapprochement Cuves & Jauges physiques (§2 & §37) ──
+export async function listJaugesCuves(stationId, date) {
+  await ensureLocalSeed();
+  let rows = await db.jauges_cuves.toArray();
+  if (stationId) rows = rows.filter((j) => j.station_id === stationId);
+  if (date) rows = rows.filter((j) => j.date === date);
+  return rows.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+}
+
+export async function saveJaugeCuve(j) {
+  const res = await saveOpRow("jauges_cuves", j);
+  return { ok: true, jauge: res.row, pending: res.pending };
+}
+
+// ── Pistolets / Pompes dynamiques ──
+export async function savePistolet(pist) {
+  const ref = await getLocalRef();
+  const station = (ref.stations || []).find((s) => s.id === pist.station_id || s.code === pist.station_code) || { id: pist.station_id || "st-hann", code: pist.station_code || "HANN" };
+  const row = {
+    id: pist.id || `${station.id}-${String(pist.code).toLowerCase()}`,
+    station_id: station.id,
+    station_code: station.code,
+    code: String(pist.code).toLowerCase(),
+    produit: pist.produit || "GASOIL",
+    ordre: pist.ordre || ((ref.pistolets || []).length + 1),
+    actif: pist.actif !== false,
+  };
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      await sb.from("pistolets").upsert(row, { onConflict: "station_id,code" });
+    } catch {}
+  }
+  ref.pistolets = [...(ref.pistolets || []).filter((p) => !(p.station_id === row.station_id && p.code === row.code)), row];
+  await setLocalRef(ref);
+  return { ok: true, pistolet: row };
+}
+
 
