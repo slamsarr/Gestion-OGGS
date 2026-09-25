@@ -87,6 +87,17 @@ const ENTITES = {
     creer: ["admin", "gerant", "superviseur", "directeur", "resp_maint", "pompiste"],
     resoudre: ["admin", "superviseur", "directeur", "resp_maint"],
   },
+  fidelite: {
+    consulter: ["admin", "gerant", "superviseur", "directeur", "commercial", "pompiste", "boutique", "lavage"],
+    crediter: ["admin", "gerant", "superviseur", "directeur", "commercial", "pompiste", "boutique", "lavage"],
+    debiter: ["admin", "gerant", "superviseur", "directeur", "commercial"],
+    gerer: ["admin", "gerant", "superviseur", "directeur"],
+  },
+  depotage: {
+    creer: ["admin", "gerant", "superviseur", "directeur", "resp_stock", "stock"],
+    consulter: ["admin", "gerant", "superviseur", "directeur", "resp_stock", "stock", "comptable"],
+    valider: ["admin", "gerant", "superviseur", "directeur"],
+  },
 };
 
 export function peutAgir(role, entite, action, scope = null, roleScope = null) {
@@ -115,21 +126,26 @@ export function peutValiderRapport(role) {
 
 // ── Accès aux routes UI selon le rôle ───────────────────────────────────────
 const ROUTES = {
-  "/": ["admin", "gerant", "superviseur", "directeur", "comptable", "pompiste", "magasinier", "resp_stock", "resp_achats", "resp_maint", "commercial"],
+  "/": ["admin", "gerant", "superviseur", "directeur", "comptable", "pompiste", "magasinier", "resp_stock", "stock", "resp_achats", "resp_maint", "maintenance", "commercial", "lavage", "boutique"],
   "/historique": ["admin", "gerant", "superviseur", "directeur", "comptable"],
   "/rapport": ["admin", "gerant", "superviseur", "directeur"],
-  "/stocks": ["admin", "gerant", "superviseur", "directeur", "comptable", "magasinier", "resp_stock"],
+  "/stocks": ["admin", "gerant", "superviseur", "directeur", "comptable", "magasinier", "resp_stock", "stock"],
   "/achats": ["admin", "gerant", "superviseur", "directeur", "resp_achats"],
-  "/fournisseurs": ["admin", "gerant", "superviseur", "directeur", "resp_achats"],
+  "/fournisseurs": ["admin", "gerant", "superviseur", "directeur", "resp_achats", "comptable"],
   "/depenses": ["admin", "gerant", "superviseur", "directeur", "comptable"],
   "/pistolets": ["admin", "gerant", "superviseur", "directeur"],
   "/pompistes": ["admin", "gerant", "superviseur", "directeur"],
-  "/maintenance": ["admin", "gerant", "superviseur", "directeur", "resp_maint"],
-  "/incidents": ["admin", "gerant", "superviseur", "directeur", "resp_maint", "pompiste"],
+  "/cuves": ["admin", "gerant", "superviseur", "directeur", "stock", "resp_stock"],
+  "/descente": ["admin", "gerant", "superviseur", "directeur", "pompiste"],
+  "/lavage": ["admin", "gerant", "superviseur", "directeur", "lavage"],
+  "/boutique": ["admin", "gerant", "superviseur", "directeur", "boutique", "stock", "resp_stock"],
+  "/maintenance": ["admin", "gerant", "superviseur", "directeur", "resp_maint", "maintenance"],
+  "/incidents": ["admin", "gerant", "superviseur", "directeur", "resp_maint", "maintenance", "pompiste"],
   "/clients-pro": ["admin", "gerant", "superviseur", "directeur", "commercial", "comptable", "client_pro"],
   "/finance": ["admin", "superviseur", "directeur", "comptable"],
   "/parametres": ["admin", "directeur"],
   "/espace-client": ["client_pro"],
+  "/fidelite": ["admin", "gerant", "superviseur", "directeur", "commercial", "pompiste", "boutique", "lavage"],
 };
 
 export function rolesRoute(role, route) {

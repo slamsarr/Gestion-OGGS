@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { loadReferentiel, getRapport, saveRapport, indexVeille, listDescentes, listPrestationsLavage, listVentesBoutique } from "../lib/api";
+import { loadReferentiel, getRapport, saveRapport, indexVeille, listDescentes, listPrestationsLavage, listVentesBoutique, listDepenses } from "../lib/api";
 import { calculer, controler, ecrireSyscohada, rapportVide, COUPURES, SEUIL_ECART, F, n, fmtDate, todayISO, T } from "../lib/calcul";
 import { exporterExcel, exporterCsv } from "../lib/exportExcel";
 import { Num, Row, Section, Alerte } from "../components/ui";
@@ -96,6 +96,29 @@ export default function Rapport() {
             const ventes = await listVentesBoutique(selectedStation, date);
             const totalBoutique = (ventes || []).reduce((s, item) => s + (n(item.total_montant) || 0), 0);
             if (totalBoutique > 0) fresh.boutique = totalBoutique;
+          } catch {}
+
+          // 4. Auto-remplissage des tickets / bons carburant depuis les descentes
+          try {
+            const totalBons = (jourDescentes || []).reduce((sum, d) => {
+              const fromBons = (d.bons || []).reduce((sb, b) => sb + n(b.montant), 0);
+              return sum + (fromBons > 0 ? fromBons : n(d.total_bons));
+            }, 0);
+            if (totalBons > 0) fresh.tickets = totalBons;
+          } catch {}
+
+          // 5. Auto-remplissage des dépenses réseau enregistrées pour la date
+          try {
+            const deps = await listDepenses(selectedStation);
+            const dayDeps = (deps || []).filter((d) => d.date_depense === date);
+            if (dayDeps.length > 0) {
+              fresh.depenses = dayDeps.map((d) => ({
+                categorie: d.categorie_code || d.categorie || "Autre",
+                libelle: d.libelle || "",
+                montant: n(d.montant),
+                photo: d.justificatif_url || null,
+              }));
+            }
           } catch {}
 
           if (alive) setR(fresh);

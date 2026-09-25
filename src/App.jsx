@@ -18,6 +18,7 @@ import Lavage from "./pages/Lavage";
 import Boutique from "./pages/Boutique";
 import CuvesCarburant from "./pages/CuvesCarburant";
 import Maintenance from "./pages/Maintenance";
+import Fidelite from "./pages/Fidelite";
 
 function RequireAuth({ children }) {
   const { session, loading } = useAuth();
@@ -42,6 +43,7 @@ function HomeRouter() {
   if (role === "boutique") return <Navigate to="/boutique" replace />;
   if (role === "stock") return <Navigate to="/cuves" replace />;
   if (role === "maintenance") return <Navigate to="/maintenance" replace />;
+  if (role === "commercial") return <Navigate to="/clients-pro" replace />;
   return <Dashboard />;
 }
 
@@ -59,9 +61,10 @@ export default function App() {
         <Route path="/" element={<HomeRouter />} />
         {/* Modules opérationnels terrain §37 */}
         <Route path="/descente" element={<RequireRole roles={["admin", "gerant", "superviseur", "directeur", "pompiste"]}><DescentePompiste /></RequireRole>} />
+        <Route path="/cuves" element={<RequireRole roles={["admin", "gerant", "superviseur", "directeur", "stock"]}><CuvesCarburant /></RequireRole>} />
+        <Route path="/fidelite" element={<RequireRole roles={["admin", "gerant", "superviseur", "directeur", "commercial", "pompiste", "boutique", "lavage"]}><Fidelite /></RequireRole>} />
         <Route path="/lavage" element={<RequireRole roles={["admin", "gerant", "superviseur", "directeur", "lavage"]}><Lavage /></RequireRole>} />
         <Route path="/boutique" element={<RequireRole roles={["admin", "gerant", "superviseur", "directeur", "boutique", "stock"]}><Boutique /></RequireRole>} />
-        <Route path="/cuves" element={<RequireRole roles={["admin", "gerant", "superviseur", "directeur", "stock"]}><CuvesCarburant /></RequireRole>} />
         <Route path="/maintenance" element={<RequireRole roles={["admin", "gerant", "superviseur", "directeur", "maintenance"]}><Maintenance /></RequireRole>} />
 
         {/* Modules de gestion & pilotage */}
@@ -70,7 +73,7 @@ export default function App() {
         <Route path="/stocks" element={<RequireRole roles={["admin", "gerant", "superviseur", "directeur", "comptable", "stock"]}><Stocks /></RequireRole>} />
         <Route path="/finance" element={<RequireRole roles={["admin", "superviseur", "directeur", "comptable"]}><Finance /></RequireRole>} />
         <Route path="/depenses" element={<RequireRole roles={["admin", "gerant", "superviseur", "directeur", "comptable"]}><Depenses /></RequireRole>} />
-        <Route path="/clients-pro" element={<RequireRole roles={["admin", "gerant", "superviseur", "directeur", "comptable"]}><ClientsPro /></RequireRole>} />
+        <Route path="/clients-pro" element={<RequireRole roles={["admin", "gerant", "superviseur", "directeur", "comptable", "commercial"]}><ClientsPro /></RequireRole>} />
         <Route path="/fournisseurs" element={<RequireRole roles={["admin", "superviseur", "directeur", "comptable"]}><Fournisseurs /></RequireRole>} />
         <Route path="/pistolets" element={<RequireRole roles={["admin", "superviseur", "directeur", "gerant"]}><Pistolets /></RequireRole>} />
         <Route path="/pompistes" element={<RequireRole roles={["admin", "superviseur", "directeur", "gerant"]}><Pompistes /></RequireRole>} />

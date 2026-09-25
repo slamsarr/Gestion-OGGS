@@ -1087,7 +1087,20 @@ async function saveOpRow(table, row) {
   const sb = getSupabase();
   if (sb && ct) {
     try {
-      const { error } = await sb.from(ct).upsert(r);
+      let cloudRow = r;
+      if (TABLES_OPS_CLOUD[table]) {
+        cloudRow = {
+          id: r.id,
+          station_id: r.station_id,
+          date: r.date,
+          statut: r.statut || "EN_COURS",
+          pompiste_id: r.pompiste_id || null,
+          payload: r,
+          created_at: r.created_at,
+          maj_le: r.maj_le,
+        };
+      }
+      const { error } = await sb.from(ct).upsert(cloudRow);
       if (error) throw new Error(error.message);
     } catch (e) {
       await db.queue.add({ op: `upsert_${table}`, payload: r, created_at: Date.now(), error: String(e.message || e) });
@@ -1282,6 +1295,281 @@ export async function savePistolet(pist) {
   ref.pistolets = [...(ref.pistolets || []).filter((p) => !(p.station_id === row.station_id && p.code === row.code)), row];
   await setLocalRef(ref);
   return { ok: true, pistolet: row };
+}
+
+// ── VAGUE 3 : RAPPORTS DE DÉPOTAGE (PV DE DÉPOTAGE CARBURANT) ──
+
+export async function saveRapportDepotage(r) {
+  await ensureLocalSeed();
+  const volumeBl = n(r.volume_bl) || 0;
+  const jaugeAvantL = n(r.jauge_avant_litres || r.volume_avant_l) || 0;
+  const jaugeApresL = n(r.jauge_apres_litres || r.volume_apres_l) || 0;
+  const volDecharge = r.volume_decharge_reel != null ? n(r.volume_decharge_reel) : (jaugeApresL - jaugeAvantL);
+  const ecartL = volDecharge - volumeBl;
+  const ecartPct = volumeBl > 0 ? (ecartL / volumeBl) * 100 : 0;
+  const conformite = Math.abs(ecartPct) <= 0.20; // Seuil standard tolérance dépotage citerne : ±0.20%
+
+  const row = {
+    ...r,
+    id: r.id || uuid(),
+    date: r.date || todayISO(),
+    volume_bl: volumeBl,
+    jauge_avant_litres: jaugeAvantL,
+    jauge_apres_litres: jaugeApresL,
+    volume_decharge_reel: volDecharge,
+    ecart_litres: ecartL,
+    ecart_pourcentage: Number(ecartPct.toFixed(2)),
+    conformite_ecart: conformite,
+    statut: r.statut || (conformite ? "CONFORME" : "LITIGE"),
+    created_at: r.created_at || new Date().toISOString(),
+  };
+
+  const res = await saveMetierRow("rapports_depotage", row);
+
+  // Maintien compatibilité dashboard existant : enregistrement livraison standard
+  try {
+    await saveLivraison({
+      station_id: row.station_id,
+      date_livraison: row.date,
+      date: row.date,
+      numero_bl: row.numero_bl,
+      produit: row.produit,
+      volume_l: row.volume_bl,
+      fournisseur: row.fournisseur,
+      chauffeur: row.nom_chauffeur,
+      camion: row.immatriculation_camion,
+      manquant_l: ecartL < 0 ? Math.abs(ecartL) : 0,
+    });
+  } catch (err) {
+    console.warn("Notice: Sync livraison standard dépotage", err);
+  }
+
+  // Maintien jauge physique après dépotage
+  if (jaugeApresL > 0) {
+    try {
+      await saveJaugeCuve({
+        station_id: row.station_id,
+        date: row.date,
+        produit: row.produit,
+        hauteur_cm: n(row.jauge_apres_cm || row.hauteur_apres_cm),
+        volume_physique: jaugeApresL,
+        stock_theorique: jaugeAvantL + volumeBl,
+        ecart_litres: ecartL,
+        operateur: row.responsable_reception || "Responsable Dépotage",
+      });
+    } catch (err) {
+      console.warn("Notice: Sync jauge après dépotage", err);
+    }
+  }
+
+  return { ok: true, rapport: res.row, pending: res.pending };
+}
+
+export async function listRapportsDepotage(stationId, date) {
+  await ensureLocalSeed();
+  let rows = await listMetier("rapports_depotage", stationId);
+  if (date) rows = rows.filter((r) => r.date === date);
+  return rows.sort((a, b) => (b.created_at || b.date || "").localeCompare(a.created_at || a.date || ""));
+}
+
+export async function getRapportDepotage(id) {
+  await ensureLocalSeed();
+  return db.rapports_depotage.get(id);
+}
+
+// ── VAGUE 3 : PROGRAMME DE FIDÉLISATION CLIENTS ──
+
+function computePalierFidelite(pointsCumules) {
+  const pts = n(pointsCumules) || 0;
+  if (pts >= 4000) return "Platine";
+  if (pts >= 1500) return "Gold";
+  if (pts >= 500) return "Silver";
+  return "Bronze";
+}
+
+export function calculerPointsFidelite(typeOperation, montantOuLitres) {
+  const val = n(montantOuLitres) || 0;
+  switch (typeOperation) {
+    case "CARBURANT_LITRES":
+      return Math.round(val); // 1 L = 1 point
+    case "CARBURANT_MONTANT":
+      return Math.floor(val / 100); // 10 pts pour 1000 FCFA
+    case "LAVAGE":
+      return Math.floor((val / 1000) * 15); // 15 pts pour 1000 FCFA
+    case "BOUTIQUE":
+    default:
+      return Math.floor((val / 1000) * 10); // 10 pts pour 1000 FCFA
+  }
+}
+
+export async function listMembresFidelite(stationId, search) {
+  await ensureLocalSeed();
+  let rows = await db.membres_fidelite.toArray();
+  if (stationId) {
+    rows = rows.filter((m) => !m.station_id || m.station_id === stationId);
+  }
+  if (search && search.trim()) {
+    const q = search.trim().toLowerCase();
+    rows = rows.filter((m) =>
+      (m.nom && m.nom.toLowerCase().includes(q)) ||
+      (m.telephone && m.telephone.toLowerCase().includes(q)) ||
+      (m.numero_carte && m.numero_carte.toLowerCase().includes(q))
+    );
+  }
+  return rows.sort((a, b) => (a.nom || "").localeCompare(b.nom || ""));
+}
+
+export async function getMembreFidelite(idOrCardOrPhone) {
+  await ensureLocalSeed();
+  if (!idOrCardOrPhone) return null;
+  const q = String(idOrCardOrPhone).trim().toLowerCase();
+  const direct = await db.membres_fidelite.get(idOrCardOrPhone);
+  if (direct) return direct;
+  const all = await db.membres_fidelite.toArray();
+  return all.find(
+    (m) =>
+      m.id === idOrCardOrPhone ||
+      (m.numero_carte && m.numero_carte.toLowerCase() === q) ||
+      (m.telephone && m.telephone.replace(/\s+/g, "") === q.replace(/\s+/g, ""))
+  ) || null;
+}
+
+export async function saveMembreFidelite(m) {
+  await ensureLocalSeed();
+  const solde = n(m.points_solde) || 0;
+  const cumules = m.points_cumules != null ? n(m.points_cumules) : solde;
+  const palier = m.statut_palier || computePalierFidelite(cumules);
+
+  // Numéro de carte automatique si absent
+  let numCarte = m.numero_carte;
+  if (!numCarte || !numCarte.trim()) {
+    const annee = new Date().getFullYear();
+    const rand = Math.floor(1000 + Math.random() * 9000);
+    numCarte = `FID-${annee}-${rand}`;
+  }
+
+  const row = {
+    ...m,
+    id: m.id || uuid(),
+    numero_carte: numCarte.trim(),
+    nom: (m.nom || "").trim(),
+    telephone: (m.telephone || "").trim(),
+    points_solde: solde,
+    points_cumules: cumules,
+    statut_palier: palier,
+    actif: m.actif !== false,
+    date_adhesion: m.date_adhesion || todayISO(),
+    created_at: m.created_at || new Date().toISOString(),
+  };
+
+  const res = await saveMetierRow("membres_fidelite", row);
+  return { ok: true, membre: res.row, pending: res.pending };
+}
+
+export async function crediterPointsFidelite({ membre_id, station_id, type_operation, montant, points, reference_piece, notes, created_by }) {
+  await ensureLocalSeed();
+  const m = await db.membres_fidelite.get(membre_id);
+  if (!m) return { ok: false, error: "Adhérent introuvable" };
+
+  const pts = points != null ? n(points) : calculerPointsFidelite(type_operation || "BOUTIQUE", montant);
+  if (pts <= 0) return { ok: false, error: "Nombre de points invalide (doit être > 0)" };
+
+  const nouveauSolde = (n(m.points_solde) || 0) + pts;
+  const nouveauxCumules = (n(m.points_cumules) || (n(m.points_solde) || 0)) + pts;
+  const nouveauPalier = computePalierFidelite(nouveauxCumules);
+
+  const tx = {
+    id: uuid(),
+    membre_id: m.id,
+    station_id: station_id || m.station_id,
+    type_operation: type_operation || "CARBURANT",
+    sens: "CREDIT",
+    points: pts,
+    solde_apres: nouveauSolde,
+    montant: n(montant) || null,
+    reference_piece: reference_piece || "",
+    notes: notes || "",
+    created_by: created_by || "Guichet",
+    created_at: new Date().toISOString(),
+  };
+
+  await saveMetierRow("transactions_fidelite", tx);
+
+  const updatedMembre = {
+    ...m,
+    points_solde: nouveauSolde,
+    points_cumules: nouveauxCumules,
+    statut_palier: nouveauPalier,
+    date_derniere_visite: todayISO(),
+  };
+
+  await saveMetierRow("membres_fidelite", updatedMembre);
+
+  return { ok: true, membre: updatedMembre, transaction: tx, points_ajoutes: pts, nouveau_solde: nouveauSolde };
+}
+
+export async function utiliserPointsFidelite({ membre_id, recompense_id, station_id, points_deduits, notes, created_by }) {
+  await ensureLocalSeed();
+  const m = await db.membres_fidelite.get(membre_id);
+  if (!m) return { ok: false, error: "Adhérent introuvable" };
+
+  let pts = n(points_deduits) || 0;
+  let recTitre = "";
+  if (recompense_id) {
+    const rec = await db.recompenses_fidelite.get(recompense_id);
+    if (rec) {
+      pts = pts || n(rec.points_requis);
+      recTitre = rec.titre;
+    }
+  }
+
+  if (pts <= 0) return { ok: false, error: "Nombre de points à débiter invalide" };
+  const soldeActuel = n(m.points_solde) || 0;
+  if (soldeActuel < pts) {
+    return { ok: false, error: `Solde insuffisant (${soldeActuel} pts disponibles, ${pts} pts requis)` };
+  }
+
+  const nouveauSolde = soldeActuel - pts;
+
+  const tx = {
+    id: uuid(),
+    membre_id: m.id,
+    station_id: station_id || m.station_id,
+    type_operation: "RECOMPENSE",
+    sens: "DEBIT",
+    points: -pts,
+    solde_apres: nouveauSolde,
+    reference_piece: recTitre || notes || "Échange Récompense",
+    notes: notes || (recTitre ? `Récompense : ${recTitre}` : "Débit points"),
+    created_by: created_by || "Guichet",
+    created_at: new Date().toISOString(),
+  };
+
+  await saveMetierRow("transactions_fidelite", tx);
+
+  const updatedMembre = {
+    ...m,
+    points_solde: nouveauSolde,
+    date_derniere_visite: todayISO(),
+  };
+
+  await saveMetierRow("membres_fidelite", updatedMembre);
+
+  return { ok: true, membre: updatedMembre, transaction: tx, points_deduits: pts, nouveau_solde: nouveauSolde };
+}
+
+export async function listTransactionsFidelite(membreId, stationId) {
+  await ensureLocalSeed();
+  let rows = await db.transactions_fidelite.toArray();
+  if (membreId) rows = rows.filter((t) => t.membre_id === membreId);
+  if (stationId) rows = rows.filter((t) => !t.station_id || t.station_id === stationId);
+  return rows.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+}
+
+export async function listRecompensesFidelite() {
+  await ensureLocalSeed();
+  let rows = await db.recompenses_fidelite.toArray();
+  return rows.sort((a, b) => (n(a.points_requis) || 0) - (n(b.points_requis) || 0));
 }
 
 

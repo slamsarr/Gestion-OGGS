@@ -55,6 +55,7 @@ import Lavage from "../src/pages/Lavage.jsx";
 import Boutique from "../src/pages/Boutique.jsx";
 import CuvesCarburant from "../src/pages/CuvesCarburant.jsx";
 import Maintenance from "../src/pages/Maintenance.jsx";
+import Fidelite from "../src/pages/Fidelite.jsx";
 
 const mockAuthValue = {
   profil: {
@@ -92,6 +93,7 @@ describe("Affichage de toutes les pages sans crash", () => {
     ["Boutique", Boutique],
     ["CuvesCarburant", CuvesCarburant],
     ["Maintenance", Maintenance],
+    ["Fidelite", Fidelite],
   ];
 
   for (const [nom, Component] of pages) {

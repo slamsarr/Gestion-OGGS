@@ -117,37 +117,45 @@ export default function Dashboard() {
   // Raccourcis opérationnels rapides
   const quickActions = [
     { label: "Saisie Descente", sub: "Index & Ventes quart", icon: "⛽", to: "/descente", color: "from-blue-600 to-indigo-600" },
-    { label: "Cuves & Coulage", sub: "Jauge & Stocks L", icon: "🛢️", to: "/cuves", color: "from-amber-500 to-orange-600" },
+    { label: "Cuves & Dépotage", sub: "Jauge & PV citerne", icon: "🛢️", to: "/cuves", color: "from-amber-500 to-orange-600" },
+    { label: "Fidélité Clients", sub: "Cartes & Récompenses", icon: "🎁", to: "/fidelite", color: "from-purple-600 to-pink-600" },
     { label: "Lavage Auto", sub: "Encaissement client", icon: "🚿", to: "/lavage", color: "from-emerald-500 to-teal-600" },
-    { label: "Shop Boutique", sub: "Vente & Caisse POS", icon: "🛒", to: "/boutique", color: "from-purple-500 to-violet-600" },
+    { label: "Shop Boutique", sub: "Vente & Caisse POS", icon: "🛒", to: "/boutique", color: "from-amber-600 to-amber-700" },
     { label: "Rapport Jour", sub: "Bordereau & Clôture", icon: "📋", to: "/rapport", color: "from-slate-700 to-slate-900" },
   ];
 
   return (
     <div className="space-y-5">
-      {/* BANNIÈRE D'ACCUEIL & PILOTAGE */}
-      <div className="rounded-2xl p-5 bg-gradient-to-r from-[#0B2530] via-[#0F3545] to-[#124458] text-white shadow-md relative overflow-hidden border border-slate-700/60">
-        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-400 text-slate-950">
-                PROGICIEL RÉSEAU STATION
-              </span>
-              <span className="text-xs text-slate-300 font-medium">· {fmtDate(today)}</span>
+      {/* BANNIÈRE OFFICIELLE STAR ENERGY */}
+      <div className="rounded-2xl overflow-hidden shadow-lg border border-purple-900/30 relative">
+        <img
+          src="/star_energy_cover.jpg"
+          alt="Star Energy Sénégal — Une marque sénégalaise, li nio ko mom !"
+          className="w-full h-auto object-cover max-h-48 sm:max-h-56 w-full"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#1F0626]/90 via-[#1F0626]/40 to-transparent flex flex-col justify-end p-4 sm:p-5 text-white">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-[10px] sm:text-xs font-black px-2.5 py-0.5 rounded-full bg-amber-500 text-slate-950 uppercase tracking-wide">
+                  COCKPIT RÉSEAU STAR ENERGY
+                </span>
+                <span className="text-xs text-amber-200 font-medium">· {fmtDate(today)}</span>
+              </div>
+              <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                Bonjour, {profil?.nom_complet || "Chef de Station"} 👋
+              </h1>
+              <p className="text-xs text-purple-200 mt-0.5">
+                {profil?.stations?.nom || "Station Hann Mariste"} · 45 stations-service au Sénégal
+              </p>
             </div>
-            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">
-              Bonjour, {profil?.nom_complet || "Chef de Station"} 👋
-            </h1>
-            <p className="text-xs text-slate-300 mt-1 max-w-xl">
-              Suivi consolidé en temps réel du chiffre d'affaires, des encaissements multi-activités et du coulage cuves.
-            </p>
-          </div>
-          <div className="flex sm:flex-col items-end gap-1.5 text-right shrink-0">
-            <div className="text-[11px] text-slate-300">Chiffre d'Affaires Global Jour</div>
-            <div className="text-2xl font-black tabular tracking-tight text-amber-300">
-              {F(caJ)} FCFA
+            <div className="text-right bg-black/40 backdrop-blur-sm px-4 py-2 rounded-xl border border-white/10">
+              <div className="text-[10px] text-amber-300 uppercase font-bold">Chiffre d'Affaires Global Jour</div>
+              <div className="text-xl sm:text-2xl font-black tabular text-white">
+                {F(caJ)} <span className="text-xs font-normal text-amber-300">FCFA</span>
+              </div>
+              <div className="text-[10px] text-emerald-400 font-semibold">✓ Station opérationnelle</div>
             </div>
-            <div className="text-[10px] text-emerald-300 font-medium">✓ Station opérationnelle</div>
           </div>
         </div>
       </div>

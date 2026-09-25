@@ -164,6 +164,7 @@ export const DEMO_USERS = [
   { id: "u-boutique-hann", email: "boutique@ogss.demo", password: "Boutique2026!", nom_complet: "Fatou Ndiaye (Boutique)", role: "boutique", station_id: "st-hann" },
   { id: "u-stock-hann", email: "stock@ogss.demo", password: "Stock2026!", nom_complet: "Ibrahima Sarr (Resp. Stock)", role: "stock", station_id: "st-hann" },
   { id: "u-maint-hann", email: "maintenance@ogss.demo", password: "Maint2026!", nom_complet: "Cheikh Bâ (Technicien Maint.)", role: "maintenance", station_id: "st-hann" },
+  { id: "u-comm-hann", email: "commercial@ogss.demo", password: "Comm2026!", nom_complet: "Aïssatou Diallo (Commerciale)", role: "commercial", station_id: "st-hann" },
   { id: "u-super", email: "superviseur@ogss.demo", password: "Super2026!", nom_complet: "Superviseur Réseau", role: "superviseur", station_id: null },
 ];
 
@@ -177,6 +178,7 @@ export function referentielFromSeed() {
   const produits = SEED_PRODUITS.map(([code, designation, famille, unite, prix_vente, cout_achat, ordre]) => ({
     id: code, code, designation, famille, unite, prix_vente, cout_achat, seuil_alerte: 5, ordre, actif: true,
   }));
+  const plafondsMap = { "CP-ITS": 3500000, "CP-JOUKADAR": 2000000, "CP-RETBA": 1500000, "CP-ICONS": 1000000, "CP-TAXI-SN": 500000 };
   return {
     stations: SEED_STATIONS,
     prix: SEED_PRIX,
@@ -185,14 +187,14 @@ export function referentielFromSeed() {
     lubrifiants: produits.filter((p) => p.famille === "LUBRIFIANT" || p.famille === "ACCESSOIRE"),
     gaz: produits.filter((p) => p.famille === "GAZ"),
     categories: SEED_CATEGORIES.map(([code, libelle, nature, compte_syscohada]) => ({ code, libelle, nature, compte_syscohada })),
-    clients: SEED_CLIENTS.map(([code, nom]) => ({ code, nom, plafond: 0, actif: true })),
+    clients: SEED_CLIENTS.map(([code, nom]) => ({ code, nom, plafond: plafondsMap[code] || 0, actif: true })),
     cuves: SEED_STATIONS.flatMap((st) =>
       SEED_CUVES.map(([produit, capacite_l]) => ({ id: `${st.id}-cuve-${produit.toLowerCase()}`, station_id: st.id, produit, capacite_l }))
     ),
     // ── §33 / §38 : nouveaux référentiels ──────────────────────────────────
     clients_pro: SEED_STATIONS.flatMap((st) =>
       SEED_CLIENTS_PRO.map(([code, societe, contact, tel, email_]) => ({
-        code, nom_entreprise: societe, contact, telephone: tel, email: email_, station_id: st.id, plafond_credit: 0, actif: true,
+        code, nom_entreprise: societe, contact, telephone: tel, email: email_, station_id: st.id, plafond_credit: plafondsMap[code] || 1000000, actif: true,
       }))
     ),
     vehicules: SEED_CLIENTS_PRO.flatMap(([code, societe]) =>
@@ -211,5 +213,23 @@ export function referentielFromSeed() {
     motifs_incidents: SEED_INCIDENT_MOTIFS.map(([code, libelle, priorite]) => ({ code, libelle, priorite })),
     tarifs_lavage: SEED_TARIFS_LAVAGE,
     produits_boutique: SEED_PRODUITS_BOUTIQUE,
+    recompenses_fidelite: SEED_RECOMPENSES_FIDELITE,
+    membres_fidelite: SEED_MEMBRES_FIDELITE,
   };
 }
+
+export const SEED_RECOMPENSES_FIDELITE = [
+  { id: "rec-1", code: "BON-CARB-5000", titre: "Bon Carburant 5 000 FCFA", description: "Valable sur Gasoil et Super", points_requis: 500, valeur_fcfa: 5000, categorie: "CARBURANT", actif: true, ordre: 1 },
+  { id: "rec-2", code: "BON-CARB-10000", titre: "Bon Carburant 10 000 FCFA", description: "Valable sur Gasoil et Super", points_requis: 1000, valeur_fcfa: 10000, categorie: "CARBURANT", actif: true, ordre: 2 },
+  { id: "rec-3", code: "LAVAGE-VIP", titre: "Lavage Complet Intérieur / Extérieur", description: "Prestation lavage haute pression offerte", points_requis: 350, valeur_fcfa: 3500, categorie: "LAVAGE", actif: true, ordre: 3 },
+  { id: "rec-4", code: "LAVE-GLACE", titre: "Bidon Lave-Glace 5L", description: "Liquide lave-glace toutes saisons", points_requis: 150, valeur_fcfa: 1500, categorie: "BOUTIQUE", actif: true, ordre: 4 },
+  { id: "rec-5", code: "DESODORISANT", titre: "Désodorisant Voiture Arbre Magique", description: "Parfum au choix en boutique", points_requis: 100, valeur_fcfa: 1000, categorie: "BOUTIQUE", actif: true, ordre: 5 },
+];
+
+export const SEED_MEMBRES_FIDELITE = [
+  { id: "mem-1", station_id: "st-hann", numero_carte: "FID-1001", nom_complet: "Cheikh Ndiaye (Transporteur)", telephone: "77 123 45 67", email: "c.ndiaye@gmail.com", immatriculation: "DK-5512-AB", points_solde: 1250, points_cumules: 1850, statut: "SILVER", volume_total_l: 1850, depense_totale: 1396750, date_adhesion: "2026-01-15", actif: true },
+  { id: "mem-2", station_id: "st-hann", numero_carte: "FID-1002", nom_complet: "Awa Seck", telephone: "78 456 78 90", email: "awa.seck@orange.sn", immatriculation: "DK-9021-BC", points_solde: 450, points_cumules: 450, statut: "BRONZE", volume_total_l: 450, depense_totale: 445500, date_adhesion: "2026-02-10", actif: true },
+  { id: "mem-3", station_id: "st-hann", numero_carte: "FID-1003", nom_complet: "Moussa Traoré (Flotte BTP)", telephone: "76 789 01 23", email: "moussa@btp-dakar.sn", immatriculation: "SD-3301-AA", points_solde: 4200, points_cumules: 6500, statut: "PLATINE", volume_total_l: 6500, depense_totale: 4907500, date_adhesion: "2026-01-02", actif: true },
+  { id: "mem-4", station_id: "st-ndia", numero_carte: "FID-2001", nom_complet: "Ousmane Diallo", telephone: "77 888 99 00", email: "diallo.ousmane@gmail.com", immatriculation: "DK-1204-CD", points_solde: 1600, points_cumules: 2100, statut: "GOLD", volume_total_l: 2100, depense_totale: 1585500, date_adhesion: "2026-03-01", actif: true },
+];
+

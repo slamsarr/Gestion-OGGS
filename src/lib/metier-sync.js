@@ -9,6 +9,10 @@ export const TABLES_CLOUD_METIER = {
   maintenances: "maintenances",
   incidents: "incidents",
   sessions_caisse: "sessions_caisse",
+  rapports_depotage: "rapports_depotage",
+  membres_fidelite: "membres_fidelite",
+  transactions_fidelite: "transactions_fidelite",
+  recompenses_fidelite: "recompenses_fidelite",
 };
 
 /** Tables cloud Vague 2 (opérations terrain) */
@@ -35,6 +39,10 @@ export const TABLES_META_METIER = {
   ventes_boutique: { champCle: "id", station: "station_id" },
   jauges_cuves: { champCle: "id", station: "station_id" },
   produits_boutique: { champCle: "code", station: "station_id" },
+  rapports_depotage: { champCle: "id", station: "station_id" },
+  membres_fidelite: { champCle: "id", station: "station_id" },
+  transactions_fidelite: { champCle: "id", station: "station_id" },
+  recompenses_fidelite: { champCle: "id", station: null },
 };
 
 /** Nom Dexie local (peut différer de la clé API) */

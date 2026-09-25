@@ -23,7 +23,9 @@ const NAV_POLES = [
     roles: ["pompiste", "gerant", "admin", "superviseur", "directeur", "stock", "lavage", "boutique", "maintenance"],
     items: [
       { to: "/descente", label: "Ma Descente", icon: "⛽", roles: ["pompiste", "gerant", "admin", "superviseur", "directeur"] },
-      { to: "/cuves", label: "Cuves & Jauges", icon: "🛢️", roles: ["stock", "gerant", "admin", "superviseur", "directeur"] },
+      { to: "/cuves", label: "Cuves & Dépotage", icon: "🛢️", roles: ["stock", "gerant", "admin", "superviseur", "directeur"] },
+      { to: "/stocks", label: "Stocks Produits & Cuves", icon: "📦", roles: ["stock", "gerant", "admin", "superviseur", "directeur"] },
+      { to: "/fidelite", label: "Fidélité Clients", icon: "🎁", roles: ["pompiste", "boutique", "lavage", "gerant", "admin", "superviseur", "directeur", "commercial"] },
       { to: "/lavage", label: "Lavage Auto", icon: "🚿", roles: ["lavage", "gerant", "admin", "superviseur", "directeur"] },
       { to: "/boutique", label: "Boutique / Shop", icon: "🛒", roles: ["boutique", "stock", "gerant", "admin", "superviseur", "directeur"] },
       { to: "/maintenance", label: "Maintenance", icon: "🛠️", roles: ["maintenance", "gerant", "admin", "superviseur", "directeur"] },
@@ -32,11 +34,11 @@ const NAV_POLES = [
   {
     id: "finance",
     label: "💼 Finance & Crédits",
-    roles: ["superviseur", "directeur", "comptable", "gerant", "admin"],
+    roles: ["superviseur", "directeur", "comptable", "gerant", "admin", "commercial"],
     items: [
       { to: "/finance", label: "Finance & Caisse", icon: "💰", roles: ["superviseur", "directeur", "comptable", "admin"] },
       { to: "/depenses", label: "Dépenses & Justifs", icon: "🧾", roles: ["gerant", "superviseur", "directeur", "comptable", "admin"] },
-      { to: "/clients-pro", label: "Clients Pro & Crédits", icon: "👥", roles: ["gerant", "superviseur", "directeur", "comptable", "admin"] },
+      { to: "/clients-pro", label: "Clients Pro & Crédits", icon: "👥", roles: ["gerant", "superviseur", "directeur", "comptable", "admin", "commercial"] },
       { to: "/fournisseurs", label: "Fournisseurs & BL", icon: "🚚", roles: ["superviseur", "directeur", "comptable", "admin"] },
     ],
   },
@@ -47,7 +49,7 @@ const NAV_POLES = [
     items: [
       { to: "/pistolets", label: "Pistolets & Pompes", icon: "🔫", roles: ["superviseur", "directeur", "gerant", "admin"] },
       { to: "/pompistes", label: "Équipe Pompistes", icon: "👷", roles: ["superviseur", "directeur", "gerant", "admin"] },
-      { to: "/stocks", label: "Stocks Récapitulatifs", icon: "📦", roles: ["gerant", "superviseur", "directeur", "comptable", "admin"] },
+      { to: "/stocks", label: "Stocks Récapitulatifs", icon: "📦", roles: ["gerant", "superviseur", "directeur", "comptable", "admin", "stock"] },
       { to: "/parametres", label: "Paramètres Réseau", icon: "⚙️", roles: ["directeur", "admin"] },
     ],
   },
@@ -64,7 +66,7 @@ export default function Layout() {
   const [notifs, setNotifs] = useState([]);
   const [showNotifs, setShowNotifs] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [nomReseau, setNomReseau] = useState("OGSS Réseau");
+  const [nomReseau, setNomReseau] = useState("STAR ENERGY");
 
   const unread = notifs.filter((n) => !n.lu).length;
 
@@ -142,29 +144,29 @@ export default function Layout() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans">
       {/* HEADER SUPÉRIEUR */}
-      <header className="sticky top-0 z-40 bg-[#0B2530] text-white shadow-md border-b border-slate-800">
+      <header className="sticky top-0 z-40 bg-gradient-to-r from-[#2A0932] via-[#431454] to-[#1E0624] text-white shadow-md border-b-2 border-amber-500">
         <div className="max-w-6xl mx-auto px-3 sm:px-4 py-2.5 flex items-center justify-between gap-3">
           {/* Logo & Identité Station */}
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={() => setMobileMenuOpen((v) => !v)}
-              className="md:hidden p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200"
+              className="md:hidden p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-slate-200"
               aria-label="Menu"
             >
               <span className="text-lg">☰</span>
             </button>
-            <NavLink to="/" className="flex items-center gap-2 group">
-              <div className="w-8 h-8 rounded-lg bg-amber-400 text-slate-950 font-black flex items-center justify-center text-sm shadow-xs group-hover:scale-105 transition-transform">
-                ⛽
+            <NavLink to="/" className="flex items-center gap-2.5 group">
+              <div className="w-9 h-9 rounded-xl overflow-hidden bg-white p-0.5 shadow-sm border border-amber-400/40 shrink-0 flex items-center justify-center group-hover:scale-105 transition-transform">
+                <img src="/star_energy_logo.jpg" alt="Star Energy" className="w-full h-full object-contain" />
               </div>
               <div>
-                <div className="font-extrabold text-sm tracking-tight text-white flex items-center gap-1.5">
+                <div className="font-black text-sm tracking-tight text-white flex items-center gap-1.5">
                   <span>{nomReseau}</span>
-                  <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-400/20 text-amber-300 border border-amber-400/30">PRO</span>
+                  <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-amber-500 text-white shadow-xs">SÉNÉGAL</span>
                 </div>
-                <div className="text-[11px] text-slate-400 font-medium">
-                  {profil?.stations?.nom || (profil?.station_id ? `Station ${profil.station_id.replace("st-", "").toUpperCase()}` : "Réseau Global")}
+                <div className="text-[10px] text-amber-200/90 font-medium truncate max-w-[200px] sm:max-w-none">
+                  {profil?.stations?.nom || (profil?.station_id ? `Station ${profil.station_id.replace("st-", "").toUpperCase()}` : "Réseau de 45 stations · Li nio ko mom !")}
                 </div>
               </div>
             </NavLink>
@@ -262,7 +264,7 @@ export default function Layout() {
 
         {/* NIVEAU 1 : SÉLECTEUR DE PÔLES MÉTIER (Desktop) */}
         {availablePoles.length > 1 && (
-          <div className="hidden md:flex max-w-6xl mx-auto px-4 gap-1 border-t border-slate-800/80 text-xs bg-[#091D26]">
+          <div className="hidden md:flex max-w-6xl mx-auto px-4 gap-1 border-t border-purple-900/60 text-xs bg-[#240A2C]">
             {availablePoles.map((pole) => {
               const isSelected = pole.id === selectedPoleId;
               return (
@@ -272,12 +274,12 @@ export default function Layout() {
                   onClick={() => setSelectedPoleId(pole.id)}
                   className={`px-4 py-2 font-bold transition-all border-b-2 flex items-center gap-1.5 ${
                     isSelected
-                      ? "border-amber-400 text-white bg-slate-800/50"
-                      : "border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/20"
+                      ? "border-amber-400 text-white bg-purple-900/50"
+                      : "border-transparent text-purple-200/70 hover:text-white hover:bg-purple-900/20"
                   }`}
                 >
                   <span>{pole.label}</span>
-                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-700 text-slate-300">
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-purple-950 text-amber-300 border border-purple-800">
                     {pole.items.length}
                   </span>
                 </button>
@@ -287,7 +289,7 @@ export default function Layout() {
         )}
 
         {/* NIVEAU 2 : SOUS-NAVIGATION DU PÔLE ACTIF */}
-        <nav className="max-w-6xl mx-auto px-3 sm:px-4 flex overflow-x-auto gap-1.5 py-2 bg-[#07171E] border-t border-slate-800/60 no-scrollbar">
+        <nav className="max-w-6xl mx-auto px-3 sm:px-4 flex overflow-x-auto gap-1.5 py-2 bg-[#1A0620] border-t border-purple-950 no-scrollbar">
           {activePole?.items.map((item) => {
             const isRoot = item.to === "/";
             return (
@@ -298,8 +300,8 @@ export default function Layout() {
                 className={({ isActive }) =>
                   `px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap flex items-center gap-1.5 transition-all shadow-xs ${
                     isActive
-                      ? "bg-amber-400 text-slate-950 shadow-md font-bold"
-                      : "bg-slate-800/60 text-slate-300 hover:bg-slate-700/80 hover:text-white"
+                      ? "bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 shadow-md font-bold ring-1 ring-amber-300"
+                      : "bg-purple-950/70 text-purple-100 hover:bg-purple-900/80 hover:text-white border border-purple-900/40"
                   }`
                 }
               >
@@ -315,15 +317,20 @@ export default function Layout() {
       {mobileMenuOpen && (
         <div className="fixed inset-0 z-50 md:hidden bg-black/70 backdrop-blur-xs flex">
           <div className="w-4/5 max-w-sm bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-left duration-200">
-            <div className="p-4 bg-[#0B2530] text-white flex items-center justify-between">
-              <div>
-                <div className="font-extrabold text-sm">{nomReseau}</div>
-                <div className="text-xs text-amber-300">{profil?.nom_complet} ({ROLE_LABELS[role] || role})</div>
+            <div className="p-4 bg-gradient-to-r from-[#2A0932] to-[#431454] text-white flex items-center justify-between border-b-2 border-amber-500">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg overflow-hidden bg-white p-0.5 shadow-sm border border-amber-400 shrink-0 flex items-center justify-center">
+                  <img src="/star_energy_logo.jpg" alt="Star Energy" className="w-full h-full object-contain" />
+                </div>
+                <div>
+                  <div className="font-extrabold text-sm">{nomReseau}</div>
+                  <div className="text-[10px] text-amber-300 font-medium">{profil?.nom_complet} ({ROLE_LABELS[role] || role})</div>
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => setMobileMenuOpen(false)}
-                className="p-1.5 rounded-lg bg-slate-800 text-white font-bold"
+                className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold"
               >
                 ✕
               </button>
@@ -332,8 +339,9 @@ export default function Layout() {
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {availablePoles.map((pole) => (
                 <div key={pole.id} className="space-y-1">
-                  <div className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider px-2 mb-1">
-                    {pole.label}
+                  <div className="text-[11px] font-extrabold text-purple-950 uppercase tracking-wider px-2 mb-1 flex items-center justify-between">
+                    <span>{pole.label}</span>
+                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-purple-100 text-purple-800">{pole.items.length}</span>
                   </div>
                   <div className="grid gap-1">
                     {pole.items.map((item) => (
@@ -343,10 +351,10 @@ export default function Layout() {
                         end={item.to === "/"}
                         onClick={() => setMobileMenuOpen(false)}
                         className={({ isActive }) =>
-                          `flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium transition ${
+                          `flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition ${
                             isActive
-                              ? "bg-amber-400 text-slate-950 font-bold shadow-xs"
-                              : "text-slate-700 hover:bg-slate-100"
+                              ? "bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-bold shadow-xs"
+                              : "text-slate-700 hover:bg-purple-50"
                           }`
                         }
                       >
@@ -383,9 +391,19 @@ export default function Layout() {
         <Outlet />
       </main>
 
-      {/* PIED DE PAGE DISCRET */}
-      <footer className="bg-white border-t border-slate-200 py-3 text-center text-[11px] text-slate-400 font-medium">
-        {nomReseau} · Système Intégré de Gestion Pétrolière & PWA Hors-ligne · Version 2026
+      {/* PIED DE PAGE STAR ENERGY */}
+      <footer className="bg-white border-t border-slate-200 py-3.5 text-center text-[11px] text-slate-500 font-medium">
+        <div className="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <img src="/star_energy_logo.jpg" alt="Star Energy" className="w-5 h-5 object-contain rounded" />
+            <span className="font-extrabold text-[#56216C]">STAR ENERGY SÉNÉGAL</span>
+            <span className="text-gray-300 hidden sm:inline">•</span>
+            <span className="text-amber-700 font-semibold italic">« Une marque sénégalaise — Li nio ko mom ! »</span>
+          </div>
+          <div className="text-gray-400 text-[10px]">
+            45 Stations-Service au Sénégal · Système Intégré de Gestion Pétrolière
+          </div>
+        </div>
       </footer>
     </div>
   );
