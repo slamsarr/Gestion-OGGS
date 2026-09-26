@@ -1135,9 +1135,12 @@ export async function listAchats(stationId) { return listMetier("achats", statio
 export async function createDepense(d) { return saveMetierRow("depenses", { ...d, montant: n(d.montant) }); }
 export async function updateDepense(id, patch) { return saveMetierRow("depenses", { ...patch, id }); }
 export async function deleteDepense(id) { return deleteMetierRow("depenses", id); }
-export async function listDepenses(stationId) {
+export async function listDepenses(stationId, date) {
   const rows = await listMetier("depenses", stationId);
-  return rows.sort((a, b) => (b.date_depense || b.date || "").localeCompare(a.date_depense || a.date || ""));
+  const filtered = date
+    ? rows.filter((r) => (r.date_depense || r.date || "").startsWith(date))
+    : rows;
+  return filtered.sort((a, b) => (b.date_depense || b.date || "").localeCompare(a.date_depense || a.date || ""));
 }
 export async function createEquipement(e) { return saveMetierRow("equipements", e); }
 export async function updateEquipement(id, patch) { return saveMetierRow("equipements", { ...patch, id }); }
@@ -1301,11 +1304,32 @@ export async function savePistolet(pist) {
 
 export async function saveRapportDepotage(r) {
   await ensureLocalSeed();
-  const volumeBl = n(r.volume_bl) || 0;
-  const jaugeAvantL = n(r.jauge_avant_litres || r.volume_avant_l) || 0;
-  const jaugeApresL = n(r.jauge_apres_litres || r.volume_apres_l) || 0;
-  const volDecharge = r.volume_decharge_reel != null ? n(r.volume_decharge_reel) : (jaugeApresL - jaugeAvantL);
-  const ecartL = volDecharge - volumeBl;
+
+  const compartiments = Array.isArray(r.compartiments) && r.compartiments.length > 0 ? r.compartiments : null;
+
+  let volumeBl = n(r.volume_bl) || 0;
+  let jaugeAvantL = n(r.jauge_avant_litres || r.volume_avant_l) || 0;
+  let jaugeApresL = n(r.jauge_apres_litres || r.volume_apres_l) || 0;
+  let volDecharge = r.volume_decharge_reel != null ? n(r.volume_decharge_reel) : (jaugeApresL - jaugeAvantL);
+  let ecartL = volDecharge - volumeBl;
+  let totalManquantL = ecartL < 0 ? Math.abs(ecartL) : 0;
+  let totalManquantFcfa = n(r.manquant_fcfa) || 0;
+
+  if (compartiments) {
+    volumeBl = compartiments.reduce((sum, c) => sum + (n(c.volume_bl) || 0), 0);
+    volDecharge = compartiments.reduce((sum, c) => {
+      const v = c.volume_decharge_cuve != null ? n(c.volume_decharge_cuve) : (n(c.jauge_cuve_apres_l) - n(c.jauge_cuve_avant_l));
+      return sum + v;
+    }, 0);
+    ecartL = volDecharge - volumeBl;
+    totalManquantL = compartiments.reduce((sum, c) => {
+      const recu = c.volume_decharge_cuve != null ? n(c.volume_decharge_cuve) : (n(c.jauge_cuve_apres_l) - n(c.jauge_cuve_avant_l));
+      const diff = recu - (n(c.volume_bl) || 0);
+      return sum + (diff < 0 ? Math.abs(diff) : 0);
+    }, 0);
+    totalManquantFcfa = compartiments.reduce((sum, c) => sum + (n(c.valeur_manquant_fcfa) || 0), 0);
+  }
+
   const ecartPct = volumeBl > 0 ? (ecartL / volumeBl) * 100 : 0;
   const conformite = Math.abs(ecartPct) <= 0.20; // Seuil standard tolérance dépotage citerne : ±0.20%
 
@@ -1319,46 +1343,94 @@ export async function saveRapportDepotage(r) {
     volume_decharge_reel: volDecharge,
     ecart_litres: ecartL,
     ecart_pourcentage: Number(ecartPct.toFixed(2)),
+    manquant_litres: totalManquantL,
+    manquant_fcfa: totalManquantFcfa,
     conformite_ecart: conformite,
-    statut: r.statut || (conformite ? "CONFORME" : "LITIGE"),
+    statut: r.statut || (conformite ? "CONFORME" : ecartL < 0 ? "LITIGE" : "BONI"),
+    compartiments: compartiments || [],
     created_at: r.created_at || new Date().toISOString(),
   };
 
   const res = await saveMetierRow("rapports_depotage", row);
 
-  // Maintien compatibilité dashboard existant : enregistrement livraison standard
-  try {
-    await saveLivraison({
-      station_id: row.station_id,
-      date_livraison: row.date,
-      date: row.date,
-      numero_bl: row.numero_bl,
-      produit: row.produit,
-      volume_l: row.volume_bl,
-      fournisseur: row.fournisseur,
-      chauffeur: row.nom_chauffeur,
-      camion: row.immatriculation_camion,
-      manquant_l: ecartL < 0 ? Math.abs(ecartL) : 0,
-    });
-  } catch (err) {
-    console.warn("Notice: Sync livraison standard dépotage", err);
-  }
+  // Synchronisation des livraisons et des jauges par compartiment ou global
+  if (compartiments) {
+    for (const c of compartiments) {
+      const compBl = n(c.volume_bl) || 0;
+      const compRecu = c.volume_decharge_cuve != null ? n(c.volume_decharge_cuve) : (n(c.jauge_cuve_apres_l) - n(c.jauge_cuve_avant_l));
+      const compDiff = compRecu - compBl;
+      const compManquant = compDiff < 0 ? Math.abs(compDiff) : 0;
 
-  // Maintien jauge physique après dépotage
-  if (jaugeApresL > 0) {
+      try {
+        await saveLivraison({
+          station_id: row.station_id,
+          date_livraison: row.date,
+          date: row.date,
+          numero_bl: c.numero_bl || row.numero_bl || `BL-COMP-${c.numero_compartiment || "1"}`,
+          produit: c.produit || row.produit,
+          volume_l: compBl,
+          fournisseur: row.fournisseur,
+          chauffeur: row.nom_chauffeur,
+          camion: row.immatriculation_camion,
+          manquant_l: compManquant,
+        });
+      } catch (err) {
+        console.warn("Notice: Sync livraison compartiment", err);
+      }
+
+      // Jauge après pour chaque cuve réceptrice
+      if (n(c.jauge_cuve_apres_l) > 0) {
+        try {
+          await saveJaugeCuve({
+            station_id: row.station_id,
+            cuve_id: c.cuve_station_id,
+            date: row.date,
+            produit: c.produit,
+            hauteur_cm: n(c.jauge_cuve_apres_cm),
+            volume_physique: n(c.jauge_cuve_apres_l),
+            stock_theorique: (n(c.jauge_cuve_avant_l) || 0) + compBl,
+            ecart_litres: compDiff,
+            operateur: row.responsable_reception || "Responsable Dépotage",
+          });
+        } catch (err) {
+          console.warn("Notice: Sync jauge compartiment", err);
+        }
+      }
+    }
+  } else {
+    // Mode classique mono-produit
     try {
-      await saveJaugeCuve({
+      await saveLivraison({
         station_id: row.station_id,
+        date_livraison: row.date,
         date: row.date,
+        numero_bl: row.numero_bl,
         produit: row.produit,
-        hauteur_cm: n(row.jauge_apres_cm || row.hauteur_apres_cm),
-        volume_physique: jaugeApresL,
-        stock_theorique: jaugeAvantL + volumeBl,
-        ecart_litres: ecartL,
-        operateur: row.responsable_reception || "Responsable Dépotage",
+        volume_l: row.volume_bl,
+        fournisseur: row.fournisseur,
+        chauffeur: row.nom_chauffeur,
+        camion: row.immatriculation_camion,
+        manquant_l: ecartL < 0 ? Math.abs(ecartL) : 0,
       });
     } catch (err) {
-      console.warn("Notice: Sync jauge après dépotage", err);
+      console.warn("Notice: Sync livraison standard dépotage", err);
+    }
+
+    if (jaugeApresL > 0) {
+      try {
+        await saveJaugeCuve({
+          station_id: row.station_id,
+          date: row.date,
+          produit: row.produit,
+          hauteur_cm: n(row.jauge_apres_cm || row.hauteur_apres_cm),
+          volume_physique: jaugeApresL,
+          stock_theorique: jaugeAvantL + volumeBl,
+          ecart_litres: ecartL,
+          operateur: row.responsable_reception || "Responsable Dépotage",
+        });
+      } catch (err) {
+        console.warn("Notice: Sync jauge après dépotage", err);
+      }
     }
   }
 
@@ -1419,19 +1491,41 @@ export async function listMembresFidelite(stationId, search) {
   return rows.sort((a, b) => (a.nom || "").localeCompare(b.nom || ""));
 }
 
-export async function getMembreFidelite(idOrCardOrPhone) {
+export async function getMembreFidelite(queryOrQr) {
   await ensureLocalSeed();
-  if (!idOrCardOrPhone) return null;
-  const q = String(idOrCardOrPhone).trim().toLowerCase();
-  const direct = await db.membres_fidelite.get(idOrCardOrPhone);
+  if (!queryOrQr) return null;
+  let q = String(queryOrQr).trim();
+
+  // Si c'est un format QR spécial comme STARFID:<id> ou URL ?client=<id> ou /espace-fidelite/<id>
+  if (q.startsWith("STARFID:")) {
+    q = q.replace("STARFID:", "").trim();
+  } else if (q.includes("client=")) {
+    try {
+      const url = new URL(q, "http://localhost");
+      q = url.searchParams.get("client") || q;
+    } catch {}
+  } else if (q.includes("/espace-fidelite/")) {
+    const parts = q.split("/espace-fidelite/");
+    if (parts[1]) q = parts[1].split("?")[0].trim();
+  }
+
+  const qLower = q.toLowerCase();
+  const qPhone = q.replace(/[^0-9]/g, "");
+
+  const direct = await db.membres_fidelite.get(q);
   if (direct) return direct;
+
   const all = await db.membres_fidelite.toArray();
-  return all.find(
-    (m) =>
-      m.id === idOrCardOrPhone ||
-      (m.numero_carte && m.numero_carte.toLowerCase() === q) ||
-      (m.telephone && m.telephone.replace(/\s+/g, "") === q.replace(/\s+/g, ""))
-  ) || null;
+  return (
+    all.find((m) => {
+      if (m.id === q) return true;
+      if (m.numero_carte && m.numero_carte.toLowerCase() === qLower) return true;
+      if (qPhone && m.telephone && m.telephone.replace(/[^0-9]/g, "") === qPhone) return true;
+      if (m.immatriculation && m.immatriculation.replace(/[^A-Za-z0-9]/g, "").toLowerCase() === q.replace(/[^A-Za-z0-9]/g, "").toLowerCase()) return true;
+      if (m.nom && m.nom.toLowerCase() === qLower) return true;
+      return false;
+    }) || null
+  );
 }
 
 export async function saveMembreFidelite(m) {
@@ -1448,14 +1542,19 @@ export async function saveMembreFidelite(m) {
     numCarte = `FID-${annee}-${rand}`;
   }
 
+  const nom = (m.nom || m.nom_complet || "").trim();
   const row = {
     ...m,
     id: m.id || uuid(),
     numero_carte: numCarte.trim(),
-    nom: (m.nom || "").trim(),
+    nom,
+    nom_complet: nom,
     telephone: (m.telephone || "").trim(),
+    immatriculation: (m.immatriculation || "").trim().toUpperCase(),
+    carburant_prefere: m.carburant_prefere || "GASOIL",
     points_solde: solde,
     points_cumules: cumules,
+    points_derniere_transaction: m.points_derniere_transaction || 0,
     statut_palier: palier,
     actif: m.actif !== false,
     date_adhesion: m.date_adhesion || todayISO(),
@@ -1466,7 +1565,17 @@ export async function saveMembreFidelite(m) {
   return { ok: true, membre: res.row, pending: res.pending };
 }
 
-export async function crediterPointsFidelite({ membre_id, station_id, type_operation, montant, points, reference_piece, notes, created_by }) {
+export async function crediterPointsFidelite({
+  membre_id,
+  station_id,
+  type_operation,
+  montant,
+  points,
+  mode_paiement,
+  reference_piece,
+  notes,
+  created_by,
+}) {
   await ensureLocalSeed();
   const m = await db.membres_fidelite.get(membre_id);
   if (!m) return { ok: false, error: "Adhérent introuvable" };
@@ -1487,6 +1596,7 @@ export async function crediterPointsFidelite({ membre_id, station_id, type_opera
     points: pts,
     solde_apres: nouveauSolde,
     montant: n(montant) || null,
+    mode_paiement: mode_paiement || "ESPECES",
     reference_piece: reference_piece || "",
     notes: notes || "",
     created_by: created_by || "Guichet",
@@ -1499,6 +1609,7 @@ export async function crediterPointsFidelite({ membre_id, station_id, type_opera
     ...m,
     points_solde: nouveauSolde,
     points_cumules: nouveauxCumules,
+    points_derniere_transaction: pts,
     statut_palier: nouveauPalier,
     date_derniere_visite: todayISO(),
   };

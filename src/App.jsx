@@ -19,6 +19,8 @@ import Boutique from "./pages/Boutique";
 import CuvesCarburant from "./pages/CuvesCarburant";
 import Maintenance from "./pages/Maintenance";
 import Fidelite from "./pages/Fidelite";
+import BilanJournalierSite from "./pages/BilanJournalierSite";
+import EspaceClientFidelite from "./pages/EspaceClientFidelite";
 
 function RequireAuth({ children }) {
   const { session, loading } = useAuth();
@@ -51,6 +53,9 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      {/* Espace Client Fidélité public (Accessible par scan de QR Code sans mot de passe) */}
+      <Route path="/espace-fidelite" element={<EspaceClientFidelite />} />
+      <Route path="/espace-fidelite/:id" element={<EspaceClientFidelite />} />
       <Route
         element={
           <RequireAuth>
@@ -70,6 +75,7 @@ export default function App() {
         {/* Modules de gestion & pilotage */}
         <Route path="/historique" element={<RequireRole roles={["admin", "gerant", "superviseur", "directeur", "comptable"]}><Historique /></RequireRole>} />
         <Route path="/rapport" element={<RequireRole roles={["admin", "gerant", "superviseur", "directeur"]}><Rapport /></RequireRole>} />
+        <Route path="/bilan-site" element={<RequireRole roles={["admin", "gerant", "superviseur", "directeur", "comptable"]}><BilanJournalierSite /></RequireRole>} />
         <Route path="/stocks" element={<RequireRole roles={["admin", "gerant", "superviseur", "directeur", "comptable", "stock"]}><Stocks /></RequireRole>} />
         <Route path="/finance" element={<RequireRole roles={["admin", "superviseur", "directeur", "comptable"]}><Finance /></RequireRole>} />
         <Route path="/depenses" element={<RequireRole roles={["admin", "gerant", "superviseur", "directeur", "comptable"]}><Depenses /></RequireRole>} />

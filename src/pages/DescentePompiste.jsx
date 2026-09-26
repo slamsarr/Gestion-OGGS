@@ -52,16 +52,40 @@ export function normalizeDescente(d) {
     : [];
 
   const totalVolume = d.total_volume ?? pompes.reduce((acc, p) => acc + n(p.volume_vendu), 0);
-  const totalCaisse = d.total_caisse ?? d.montant_theorique ?? pompes.reduce((acc, p) => acc + n(p.montant), 0);
+  const totalCarburant = d.total_carburant ?? pompes.reduce((acc, p) => acc + n(p.montant), 0);
+  const lubrifiants = Array.isArray(d.lubrifiants) ? d.lubrifiants : [];
+  const totalLubrifiants = d.total_lubrifiants ?? lubrifiants.reduce((acc, l) => acc + n(l.montant), 0);
+  const totalCaisse = d.total_caisse ?? (totalCarburant + totalLubrifiants);
   const totalBons = d.total_bons ?? bons.reduce((acc, b) => acc + n(b.montant), 0);
+  const remiseCuveValeur = n(d.remise_cuve_valeur ?? d.remise_en_cuve);
+  const remiseCuveLitres = n(d.remise_cuve_litres);
 
   return {
     ...d,
     pompes,
     bons,
+    lubrifiants,
     total_volume: totalVolume,
+    total_carburant: totalCarburant,
+    total_lubrifiants: totalLubrifiants,
     total_caisse: totalCaisse,
     total_bons: totalBons,
+    remise_cuve_valeur: remiseCuveValeur,
+    remise_cuve_litres: remiseCuveLitres,
+    remise_cuve_motif: d.remise_cuve_motif || "",
+    remise_cuve_pistolet: d.remise_cuve_pistolet || "",
+    encaissements: {
+      especes: n(d.encaissements?.especes),
+      wave: n(d.encaissements?.wave),
+      orange_money: n(d.encaissements?.orange_money),
+      carte_bancaire: n(d.encaissements?.carte_bancaire),
+      petrosen: n(d.encaissements?.petrosen),
+      code_electronique: n(d.encaissements?.code_electronique),
+      tickets: n(d.encaissements?.tickets),
+      credit_client: totalBons,
+      bons: totalBons,
+      autre: n(d.encaissements?.autre),
+    },
   };
 }
 
@@ -112,11 +136,28 @@ export default function DescentePompiste() {
   const [bonMontant, setBonMontant] = useState("");
   const [bonObservation, setBonObservation] = useState("");
 
-  // ── Encaissements Reçus ──
+  // ── Ventes de Lubrifiants State ──
+  // Chaque ligne = { id, produit_code, libelle, quantite, prix_unitaire, montant }
+  const [lubrifiants, setLubrifiants] = useState([]);
+  const [showAddLubModal, setShowAddLubModal] = useState(false);
+  const [selectedLubCode, setSelectedLubCode] = useState("");
+  const [lubQuantite, setLubQuantite] = useState("1");
+  const [lubPrixUnitaire, setLubPrixUnitaire] = useState("");
+
+  // ── Remise en Cuve (Valeur Numéraire) State ──
+  const [remiseCuveValeur, setRemiseCuveValeur] = useState("");
+  const [remiseCuveLitres, setRemiseCuveLitres] = useState("");
+  const [remiseCuveMotif, setRemiseCuveMotif] = useState("");
+  const [remiseCuvePistolet, setRemiseCuvePistolet] = useState("");
+
+  // ── Encaissements Reçus (Multi-modes) ──
   const [especes, setEspeces] = useState("");
   const [wave, setWave] = useState("");
   const [orangeMoney, setOrangeMoney] = useState("");
   const [carteBancaire, setCarteBancaire] = useState("");
+  const [petrosen, setPetrosen] = useState("");
+  const [codeElectronique, setCodeElectronique] = useState("");
+  const [tickets, setTickets] = useState("");
   const [autrePaiement, setAutrePaiement] = useState("");
   const [commentaire, setCommentaire] = useState("");
 
@@ -186,6 +227,71 @@ export default function DescentePompiste() {
     });
     return Array.from(map.values()).sort((a, b) => a.nom.localeCompare(b.nom));
   }, [ref]);
+
+  // Liste des lubrifiants disponibles pour vente sur piste
+  const lubrifiantsList = useMemo(() => {
+    const fromRef = (ref?.produits || []).filter((p) => p.categorie === "LUBRIFIANT" || p.type === "LUBRIFIANT" || String(p.code).startsWith("LUB-"));
+    if (fromRef.length > 0) return fromRef;
+    return [
+      { code: "LUB-5W40-5L", nom: "5W40 5L", prix_vente: 29000 },
+      { code: "LUB-5W30-5L", nom: "5W30 5L", prix_vente: 33000 },
+      { code: "LUB-10W40-5L", nom: "10W40 5L", prix_vente: 18000 },
+      { code: "LUB-15W40-5L", nom: "15W40 5L", prix_vente: 15000 },
+      { code: "LUB-20W50-5L", nom: "20W50 5L", prix_vente: 13500 },
+      { code: "LUB-SAE50-5L", nom: "SAE50 5L", prix_vente: 13000 },
+      { code: "LUB-SAE50-1L", nom: "SAE50 1L", prix_vente: 2800 },
+      { code: "LUB-15W40-1L", nom: "15W40 1L", prix_vente: 3000 },
+      { code: "LUB-20W50-1L", nom: "20W50 1L", prix_vente: 2700 },
+      { code: "LUB-VRAC", nom: "Huile Vrac 1L", prix_vente: 2200 },
+      { code: "LUB-LAVE-GLACE", nom: "Lave Glace CEPSA", prix_vente: 1500 },
+      { code: "LUB-CEPSA-GLACIOL-5L", nom: "CEPSA Glaciol 5L", prix_vente: 5000 },
+      { code: "LUB-GRAISSE", nom: "Graisse Haute Pression", prix_vente: 3500 },
+    ];
+  }, [ref]);
+
+  const openAddLubModal = () => {
+    const first = lubrifiantsList[0];
+    setSelectedLubCode(first?.code || "");
+    setLubQuantite("1");
+    setLubPrixUnitaire(first?.prix_vente != null ? first.prix_vente.toString() : "15000");
+    setShowAddLubModal(true);
+  };
+
+  const handleSelectLubrifiant = (code) => {
+    setSelectedLubCode(code);
+    const item = lubrifiantsList.find((l) => l.code === code);
+    if (item && item.prix_vente) {
+      setLubPrixUnitaire(item.prix_vente.toString());
+    }
+  };
+
+  const handleSaveLubrifiant = (e) => {
+    e.preventDefault();
+    if (!selectedLubCode) return flash("Veuillez choisir un lubrifiant", "error");
+    const qte = n(lubQuantite);
+    if (qte <= 0) return flash("La quantité doit être supérieure à zéro", "error");
+    const pu = n(lubPrixUnitaire);
+    if (pu <= 0) return flash("Le prix unitaire doit être supérieur à zéro", "error");
+
+    const itemObj = lubrifiantsList.find((l) => l.code === selectedLubCode) || { nom: selectedLubCode };
+    const nouveauLub = {
+      id: uuid(),
+      produit_code: selectedLubCode,
+      libelle: itemObj.nom || itemObj.designation || selectedLubCode,
+      quantite: qte,
+      prix_unitaire: pu,
+      montant: qte * pu,
+    };
+
+    setLubrifiants((prev) => [...prev, nouveauLub]);
+    setShowAddLubModal(false);
+    flash("Vente de lubrifiant ajoutée");
+  };
+
+  const handleSupprimerLubrifiant = (lubId) => {
+    setLubrifiants((prev) => prev.filter((l) => l.id !== lubId));
+    flash("Ligne de lubrifiant supprimée");
+  };
 
   // ── GESTION DES POMPES & CAISSES ──
 
@@ -423,11 +529,32 @@ export default function DescentePompiste() {
       }))
     );
 
+    // Charger les lubrifiants
+    setLubrifiants(
+      (norm.lubrifiants || []).map((l) => ({
+        id: l.id || uuid(),
+        produit_code: l.produit_code,
+        libelle: l.libelle || l.produit_code,
+        quantite: n(l.quantite) || 1,
+        prix_unitaire: n(l.prix_unitaire) || 0,
+        montant: n(l.montant) || 0,
+      }))
+    );
+
+    // Charger la remise en cuve
+    setRemiseCuveValeur(norm.remise_cuve_valeur != null && norm.remise_cuve_valeur > 0 ? norm.remise_cuve_valeur.toString() : "");
+    setRemiseCuveLitres(norm.remise_cuve_litres != null && norm.remise_cuve_litres > 0 ? norm.remise_cuve_litres.toString() : "");
+    setRemiseCuveMotif(norm.remise_cuve_motif || "");
+    setRemiseCuvePistolet(norm.remise_cuve_pistolet || "");
+
     // Charger les encaissements
     setEspeces(norm.encaissements?.especes != null ? norm.encaissements.especes.toString() : "");
     setWave(norm.encaissements?.wave != null ? norm.encaissements.wave.toString() : "");
     setOrangeMoney(norm.encaissements?.orange_money != null ? norm.encaissements.orange_money.toString() : "");
     setCarteBancaire(norm.encaissements?.carte_bancaire != null ? norm.encaissements.carte_bancaire.toString() : "");
+    setPetrosen(norm.encaissements?.petrosen != null ? norm.encaissements.petrosen.toString() : "");
+    setCodeElectronique(norm.encaissements?.code_electronique != null ? norm.encaissements.code_electronique.toString() : "");
+    setTickets(norm.encaissements?.tickets != null ? norm.encaissements.tickets.toString() : "");
     setAutrePaiement(norm.encaissements?.autre != null ? norm.encaissements.autre.toString() : "");
     setCommentaire(norm.commentaire || "");
 
@@ -440,10 +567,18 @@ export default function DescentePompiste() {
     setEditingDescenteId(null);
     setDate(todayISO());
     setBons([]);
+    setLubrifiants([]);
+    setRemiseCuveValeur("");
+    setRemiseCuveLitres("");
+    setRemiseCuveMotif("");
+    setRemiseCuvePistolet("");
     setEspeces("");
     setWave("");
     setOrangeMoney("");
     setCarteBancaire("");
+    setPetrosen("");
+    setCodeElectronique("");
+    setTickets("");
     setAutrePaiement("");
     setCommentaire("");
 
@@ -473,11 +608,23 @@ export default function DescentePompiste() {
   // ── CALCULS GLOBAUX ──
 
   const totalVolumeVendu = pompes.reduce((acc, p) => acc + n(p.volume_vendu), 0);
-  const totalCaissePompiste = pompes.reduce((acc, p) => acc + n(p.montant), 0);
+  const totalCarburant = pompes.reduce((acc, p) => acc + n(p.montant), 0);
+  const totalLubrifiants = lubrifiants.reduce((acc, l) => acc + n(l.montant), 0);
+  const totalCaissePompiste = totalCarburant + totalLubrifiants;
   const totalBons = bons.reduce((acc, b) => acc + n(b.montant), 0);
+  const totalRemiseCuve = n(remiseCuveValeur);
+  const netTheoriqueAVerser = Math.max(0, totalCaissePompiste - totalRemiseCuve);
   const totalEncaisse =
-    n(especes) + n(wave) + n(orangeMoney) + n(carteBancaire) + totalBons + n(autrePaiement);
-  const ecart = totalEncaisse - totalCaissePompiste;
+    n(especes) +
+    n(wave) +
+    n(orangeMoney) +
+    n(carteBancaire) +
+    n(petrosen) +
+    n(codeElectronique) +
+    n(tickets) +
+    totalBons +
+    n(autrePaiement);
+  const ecart = totalEncaisse - (totalCaissePompiste - totalRemiseCuve);
 
   // ── VALIDATION & ENREGISTREMENT ──
 
@@ -513,7 +660,22 @@ export default function DescentePompiste() {
         montant: n(p.montant),
       })),
       total_volume: totalVolumeVendu,
+      total_carburant: totalCarburant,
+      // Ventes de lubrifiants
+      lubrifiants: lubrifiants.map((l) => ({
+        ...l,
+        quantite: n(l.quantite),
+        prix_unitaire: n(l.prix_unitaire),
+        montant: n(l.montant),
+      })),
+      total_lubrifiants: totalLubrifiants,
       total_caisse: totalCaissePompiste,
+      // Remise en cuve (valeur numéraire)
+      remise_cuve_valeur: totalRemiseCuve,
+      remise_cuve_litres: n(remiseCuveLitres),
+      remise_cuve_motif: remiseCuveMotif,
+      remise_cuve_pistolet: remiseCuvePistolet,
+      net_theorique: netTheoriqueAVerser,
       // Multi-bons
       bons: bons.map((b) => ({
         ...b,
@@ -526,6 +688,9 @@ export default function DescentePompiste() {
         wave: n(wave),
         orange_money: n(orangeMoney),
         carte_bancaire: n(carteBancaire),
+        petrosen: n(petrosen),
+        code_electronique: n(codeElectronique),
+        tickets: n(tickets),
         credit_client: totalBons,
         bons: totalBons,
         autre: n(autrePaiement),
@@ -605,6 +770,20 @@ export default function DescentePompiste() {
   • Caisse : *${F(p.montant)} FCFA*`;
     });
 
+    let lubLines = "";
+    if (data.lubrifiants && data.lubrifiants.length > 0) {
+      lubLines = "\n\n🛢️ *VENTES DE LUBRIFIANTS :*";
+      data.lubrifiants.forEach((l) => {
+        lubLines += `\n  • ${l.libelle} (x${l.quantite}) : *${F(l.montant)} FCFA*`;
+      });
+      lubLines += `\n👉 *TOTAL LUBRIFIANTS :* *+${F(data.total_lubrifiants || 0)} FCFA*`;
+    }
+
+    let remiseLines = "";
+    if (n(data.remise_cuve_valeur) > 0) {
+      remiseLines = `\n🔄 *REMISE EN CUVE DÉDUITE :* *-${F(data.remise_cuve_valeur)} FCFA* (${F(data.remise_cuve_litres || 0)} L${data.remise_cuve_motif ? " - " + data.remise_cuve_motif : ""})`;
+    }
+
     let bonsLines = "";
     if (data.bons && data.bons.length > 0) {
       bonsLines = "\n\n📝 *BONS D'ENCAISSEMENT CLIENTS :*";
@@ -614,24 +793,29 @@ export default function DescentePompiste() {
       bonsLines += `\n👉 *TOTAL BONS :* *${F(data.total_bons || data.encaissements?.credit_client || 0)} FCFA*`;
     }
 
+    const netTheorique = data.net_theorique ?? Math.max(0, (data.total_caisse || 0) - (data.remise_cuve_valeur || 0));
+
     return `*⛽ TICKET DE PASSATION DE QUART — STATION ${stationCode}*
 ----------------------------------------
 📅 *Date :* ${dateStr} à ${heureStr}
 👤 *Pompiste :* ${pNom}
 ⛽ *Nombre de pompes gérées :* ${(data.pompes || []).length}
 ----------------------------------------
-📊 *DÉTAIL DES CAISSES PAR POMPE :*${pompesLines}
+📊 *DÉTAIL DES CAISSES CARBURANT :*${pompesLines}
 ----------------------------------------
-💰 *TOTAL CAISSE POMPISTE :* *${F(data.total_caisse || data.montant_theorique)} FCFA*
-🛢️ *Volume Total Vendu :* *${F(data.total_volume || data.volume_vendu)} Litres*
+⛽ *Total Ventes Carburant :* *${F(data.total_carburant || data.total_caisse)} FCFA* (${F(data.total_volume || data.volume_vendu)} L)${lubLines}${remiseLines}
+👉 *NET THÉORIQUE À VERSER :* *${F(netTheorique)} FCFA*
 ----------------------------------------
 💵 *ENCAISSEMENTS REMIS :*
-• Espèces (Cash) : ${F(data.encaissements?.especes || 0)} FCFA
-• Wave           : ${F(data.encaissements?.wave || 0)} FCFA
-• Orange Money   : ${F(data.encaissements?.orange_money || 0)} FCFA
-• Carte / TPE    : ${F(data.encaissements?.carte_bancaire || 0)} FCFA
-• Bons Client Pro: ${F(data.total_bons || data.encaissements?.credit_client || 0)} FCFA
-• Autre          : ${F(data.encaissements?.autre || 0)} FCFA${bonsLines}
+• Espèces (Cash)   : ${F(data.encaissements?.especes || 0)} FCFA
+• Wave             : ${F(data.encaissements?.wave || 0)} FCFA
+• Orange Money     : ${F(data.encaissements?.orange_money || 0)} FCFA
+• Petrosen         : ${F(data.encaissements?.petrosen || 0)} FCFA
+• Code Électronique: ${F(data.encaissements?.code_electronique || 0)} FCFA
+• Tickets Carburant: ${F(data.encaissements?.tickets || 0)} FCFA
+• Carte / TPE      : ${F(data.encaissements?.carte_bancaire || 0)} FCFA
+• Bons Client Pro  : ${F(data.total_bons || data.encaissements?.credit_client || 0)} FCFA
+• Autre            : ${F(data.encaissements?.autre || 0)} FCFA${bonsLines}
 👉 *TOTAL ENCAISSÉ :* *${F(data.total_encaisse)} FCFA*
 ----------------------------------------
 ⚖️ *ÉCART DE CAISSE :* *${data.ecart >= 0 ? "+" : ""}${F(data.ecart)} FCFA* ${
@@ -948,6 +1132,177 @@ export default function DescentePompiste() {
           </div>
 
           {/* ────────────────────────────────────────────────────────── */}
+          {/* SECTION 1b : VENTE DE LUBRIFIANTS SUR PISTE                */}
+          {/* ────────────────────────────────────────────────────────── */}
+          <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: T.line }}>
+            <div className="flex items-center justify-between mb-3 pb-2 border-b" style={{ borderColor: T.line }}>
+              <div>
+                <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                  <span>🛢️</span> VENTES DE LUBRIFIANTS SUR PISTE
+                </h2>
+                <p className="text-[11px] text-gray-500">
+                  Enregistrement des bidons d'huile et lubrifiants vendus pendant le quart par le pompiste.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={openAddLubModal}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold text-white shadow-sm flex items-center gap-1.5 transition-transform active:scale-95 bg-emerald-700 hover:bg-emerald-800"
+              >
+                <span>➕</span> AJOUTER UN LUBRIFIANT
+              </button>
+            </div>
+
+            {lubrifiants.length === 0 ? (
+              <div className="text-center py-4 border border-dashed rounded-lg bg-gray-50/50" style={{ borderColor: T.line }}>
+                <p className="text-xs text-gray-500">Aucune vente de lubrifiant enregistrée pour ce quart.</p>
+                <button
+                  type="button"
+                  onClick={openAddLubModal}
+                  className="mt-1 text-xs font-semibold text-emerald-700 hover:underline"
+                >
+                  + Ajouter un bidon d'huile vendu
+                </button>
+              </div>
+            ) : (
+              <div className="overflow-x-auto mb-3">
+                <table className="w-full text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b bg-gray-50 text-gray-600 text-left" style={{ borderColor: T.line }}>
+                      <th className="py-2 px-3">Produit Lubrifiant</th>
+                      <th className="py-2 px-3 text-center">Quantité</th>
+                      <th className="py-2 px-3 text-right">Prix Unitaire</th>
+                      <th className="py-2 px-3 text-right">Total FCFA</th>
+                      <th className="py-2 px-3 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y" style={{ borderColor: T.line }}>
+                    {lubrifiants.map((l) => (
+                      <tr key={l.id} className="hover:bg-emerald-50/30 transition-colors">
+                        <td className="py-2 px-3 font-semibold text-gray-900">
+                          {l.libelle}
+                          <span className="text-[10px] text-gray-500 block font-mono">{l.produit_code}</span>
+                        </td>
+                        <td className="py-2 px-3 text-center font-bold text-emerald-800">{l.quantite}</td>
+                        <td className="py-2 px-3 text-right text-gray-700">{F(l.prix_unitaire)} F</td>
+                        <td className="py-2 px-3 text-right font-black text-gray-900 tabular">
+                          {F(l.montant)} FCFA
+                        </td>
+                        <td className="py-2 px-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => handleSupprimerLubrifiant(l.id)}
+                            className="text-red-500 hover:text-red-700 font-semibold text-[11px]"
+                          >
+                            Suppr.
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Total Lubrifiants */}
+            <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3 flex items-center justify-between">
+              <div>
+                <span className="text-xs font-bold text-emerald-950 uppercase tracking-wide">
+                  TOTAL VENTES LUBRIFIANTS
+                </span>
+                <span className="text-[11px] text-emerald-800 block">
+                  {lubrifiants.length} article(s) saisi(s)
+                </span>
+              </div>
+              <span className="text-base font-black text-emerald-950 tabular">{F(totalLubrifiants)} FCFA</span>
+            </div>
+          </div>
+
+          {/* ────────────────────────────────────────────────────────── */}
+          {/* SECTION 1c : REMISE EN CUVE (VALEUR NUMÉRAIRE DÉDUITE)     */}
+          {/* ────────────────────────────────────────────────────────── */}
+          <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: T.line }}>
+            <div className="flex items-center justify-between mb-3 pb-2 border-b" style={{ borderColor: T.line }}>
+              <div>
+                <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                  <span>🔄</span> REMISE EN CUVE (DÉDUCTION VALEUR NUMÉRAIRE)
+                </h2>
+                <p className="text-[11px] text-gray-500">
+                  Carburant passé au compteur mais retourné en cuve (étalonnage pistolet, jauge étalon, purge ou retour cuve). Cette valeur numéraire est automatiquement déduite de votre caisse théorique.
+                </p>
+              </div>
+              {totalRemiseCuve > 0 && (
+                <span className="px-2.5 py-1 rounded-full text-xs font-extrabold bg-indigo-100 text-indigo-900 border border-indigo-200">
+                  - {F(totalRemiseCuve)} FCFA
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-indigo-50/40 p-3 rounded-xl border border-indigo-100">
+              <div>
+                <label className="text-[11px] font-bold text-indigo-950 block mb-1">
+                  Valeur numéraire (FCFA) *
+                </label>
+                <input
+                  type="number"
+                  placeholder="0"
+                  value={remiseCuveValeur}
+                  onChange={(e) => setRemiseCuveValeur(e.target.value)}
+                  className="w-full text-xs border rounded p-2 font-black text-indigo-950 bg-white"
+                  style={{ borderColor: T.line }}
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-medium text-gray-700 block mb-1">
+                  Volume estimé (Litres)
+                </label>
+                <input
+                  type="number"
+                  placeholder="ex: 20"
+                  value={remiseCuveLitres}
+                  onChange={(e) => setRemiseCuveLitres(e.target.value)}
+                  className="w-full text-xs border rounded p-2 bg-white"
+                  style={{ borderColor: T.line }}
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-medium text-gray-700 block mb-1">
+                  Pistolet d'origine
+                </label>
+                <select
+                  value={remiseCuvePistolet}
+                  onChange={(e) => setRemiseCuvePistolet(e.target.value)}
+                  className="w-full text-xs border rounded p-2 bg-white font-medium"
+                  style={{ borderColor: T.line }}
+                >
+                  <option value="">Sélectionner (optionnel)</option>
+                  {pompes.map((p) => (
+                    <option key={p.id} value={p.pistolet_code}>
+                      {p.caisseId} — {p.pistolet_code?.toUpperCase()} ({p.produit})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-medium text-gray-700 block mb-1">
+                  Motif / Justification
+                </label>
+                <input
+                  type="text"
+                  placeholder="ex: Étalonnage jauge 20L"
+                  value={remiseCuveMotif}
+                  onChange={(e) => setRemiseCuveMotif(e.target.value)}
+                  className="w-full text-xs border rounded p-2 bg-white"
+                  style={{ borderColor: T.line }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* ────────────────────────────────────────────────────────── */}
           {/* SECTION 2 : BONS D'ENCAISSEMENT                            */}
           {/* ────────────────────────────────────────────────────────── */}
           <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: T.line }}>
@@ -1064,7 +1419,19 @@ export default function DescentePompiste() {
               <Num value={orangeMoney} onChange={setOrangeMoney} placeholder="0" w="w-36" />
             </Row>
             <Row>
-              <span className="text-xs font-medium">💳 Carte / TPE</span>
+              <span className="text-xs font-medium text-purple-700 font-bold">⛽ Paiement Petrosen (Plateforme / Cartes)</span>
+              <Num value={petrosen} onChange={setPetrosen} placeholder="0" w="w-36" />
+            </Row>
+            <Row>
+              <span className="text-xs font-medium text-cyan-700 font-bold">🔢 Code Électronique (Voucher / SMS)</span>
+              <Num value={codeElectronique} onChange={setCodeElectronique} placeholder="0" w="w-36" />
+            </Row>
+            <Row>
+              <span className="text-xs font-medium text-emerald-700 font-bold">🎟️ Tickets Valeurs / Bons Carburant</span>
+              <Num value={tickets} onChange={setTickets} placeholder="0" w="w-36" />
+            </Row>
+            <Row>
+              <span className="text-xs font-medium">💳 Carte Bancaire / TPE</span>
               <Num value={carteBancaire} onChange={setCarteBancaire} placeholder="0" w="w-36" />
             </Row>
             <Row>
@@ -1106,33 +1473,38 @@ export default function DescentePompiste() {
             <h3 className="text-xs font-bold uppercase tracking-wider mb-3 text-gray-700 flex items-center justify-between">
               <span>SYNTHÈSE DE MA CAISSE GLOBALE</span>
               <span className="text-[11px] font-semibold text-gray-500">
-                {pompes.length} pompe(s) · {bons.length} bon(s)
+                {pompes.length} pompe(s) · {lubrifiants.length} lubrifiant(s) · {bons.length} bon(s)
               </span>
             </h3>
 
             <div className="space-y-1.5 text-xs text-gray-700">
-              {pompes.map((p) => (
-                <div key={p.id} className="flex justify-between items-center text-[11px]">
-                  <span>
-                    Caisse {p.caisseId} ({(p.pistolet_code || "").toUpperCase()} - {p.produit}) :
-                  </span>
-                  <span className="font-semibold tabular">{F(p.montant)} FCFA</span>
+              <div className="flex justify-between items-center">
+                <span>Ventes Carburant (Compteurs Pompes) :</span>
+                <span className="font-semibold tabular">{F(totalCarburant)} FCFA</span>
+              </div>
+
+              {totalLubrifiants > 0 && (
+                <div className="flex justify-between items-center text-emerald-800">
+                  <span>+ Ventes Lubrifiants ({lubrifiants.length} réf.) :</span>
+                  <span className="font-semibold tabular">+{F(totalLubrifiants)} FCFA</span>
                 </div>
-              ))}
+              )}
+
+              {totalRemiseCuve > 0 && (
+                <div className="flex justify-between items-center text-indigo-800 font-bold">
+                  <span>- Remise en Cuve (Valeur numéraire) :</span>
+                  <span className="font-semibold tabular">-{F(totalRemiseCuve)} FCFA</span>
+                </div>
+              )}
 
               <div className="border-t pt-1.5 flex justify-between items-center font-bold text-gray-900">
-                <span>TOTAL CAISSE THÉORIQUE :</span>
-                <span className="tabular">{F(totalCaissePompiste)} FCFA</span>
+                <span>NET THÉORIQUE À JUSTIFIER / VERSER :</span>
+                <span className="text-sm font-extrabold tabular text-blue-950">{F(netTheoriqueAVerser)} FCFA</span>
               </div>
 
-              <div className="flex justify-between items-center font-bold text-amber-900">
-                <span>TOTAL BONS D'ENCAISSEMENT :</span>
-                <span className="tabular">{F(totalBons)} FCFA</span>
-              </div>
-
-              <div className="flex justify-between items-center font-bold text-gray-900">
+              <div className="border-t pt-1.5 flex justify-between items-center font-bold text-gray-900">
                 <span>TOTAL ENCAISSEMENTS REMIS :</span>
-                <span className="text-sm font-extrabold tabular text-blue-950">{F(totalEncaisse)} FCFA</span>
+                <span className="text-sm font-extrabold tabular text-emerald-900">{F(totalEncaisse)} FCFA</span>
               </div>
             </div>
 
@@ -1311,6 +1683,98 @@ export default function DescentePompiste() {
                   style={{ background: T.petrol }}
                 >
                   Ajouter à ma session
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ────────────────────────────────────────────────────────── */}
+      {/* MODAL AJOUT VENTE DE LUBRIFIANT                            */}
+      {/* ────────────────────────────────────────────────────────── */}
+      {showAddLubModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-3 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden border border-gray-200">
+            <div className="p-3.5 bg-emerald-800 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span>🛢️</span>
+                <span className="font-bold text-xs">Vente de Lubrifiant sur Piste</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddLubModal(false)}
+                className="text-emerald-200 hover:text-white text-base px-2"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveLubrifiant} className="p-4 space-y-3 text-xs">
+              <div>
+                <label className="block text-gray-700 font-bold mb-1">Article Lubrifiant *</label>
+                <select
+                  value={selectedLubCode}
+                  onChange={(e) => handleSelectLubrifiant(e.target.value)}
+                  className="w-full text-xs border rounded px-2.5 py-2 bg-white font-medium"
+                  style={{ borderColor: T.line }}
+                  required
+                >
+                  {lubrifiantsList.map((lub) => (
+                    <option key={lub.code} value={lub.code}>
+                      {lub.nom || lub.libelle || lub.code} — {F(lub.prix_vente)} FCFA
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-gray-700 font-medium mb-1">Quantité (bidons) *</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={lubQuantite}
+                    onChange={(e) => setLubQuantite(e.target.value)}
+                    className="w-full text-xs border rounded px-2.5 py-1.5 bg-white font-bold"
+                    style={{ borderColor: T.line }}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-gray-700 font-medium mb-1">Prix Unitaire (FCFA) *</label>
+                  <input
+                    type="number"
+                    value={lubPrixUnitaire}
+                    onChange={(e) => setLubPrixUnitaire(e.target.value)}
+                    className="w-full text-xs border rounded px-2.5 py-1.5 bg-white font-bold"
+                    style={{ borderColor: T.line }}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 flex justify-between items-center text-xs">
+                <span className="font-semibold text-emerald-900">Total à ajouter :</span>
+                <span className="font-black text-emerald-950 tabular text-sm">
+                  {F(n(lubQuantite) * n(lubPrixUnitaire))} FCFA
+                </span>
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2 border-t" style={{ borderColor: T.line }}>
+                <button
+                  type="button"
+                  onClick={() => setShowAddLubModal(false)}
+                  className="px-3 py-1.5 rounded-lg border bg-white text-gray-700 font-medium"
+                  style={{ borderColor: T.line }}
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 rounded-lg font-bold text-white shadow-sm bg-emerald-700 hover:bg-emerald-800"
+                >
+                  Valider l'ajout
                 </button>
               </div>
             </form>
@@ -1500,9 +1964,40 @@ export default function DescentePompiste() {
                   <span>VOLUME TOTAL :</span>
                   <span className="tabular">{F(ticketModal.total_volume || ticketModal.volume_vendu)} L</span>
                 </div>
-                <div className="flex justify-between font-black text-gray-950 pt-1 border-t border-dotted">
-                  <span>TOTAL THÉORIQUE CAISSE :</span>
-                  <span className="tabular">{F(ticketModal.total_caisse || ticketModal.montant_theorique)} FCFA</span>
+                <div className="flex justify-between font-bold text-gray-900 pt-1 border-t border-dotted">
+                  <span>VENTES CARBURANT :</span>
+                  <span className="tabular">{F(ticketModal.total_carburant || ticketModal.total_caisse || ticketModal.montant_theorique)} FCFA</span>
+                </div>
+
+                {/* Ventes Lubrifiants sur ticket */}
+                {ticketModal.lubrifiants && ticketModal.lubrifiants.length > 0 && (
+                  <div className="pt-1 mt-1 border-t border-dotted text-emerald-800 space-y-0.5">
+                    <div className="font-bold flex justify-between">
+                      <span>VENTES LUBRIFIANTS :</span>
+                      <span className="tabular">+{F(ticketModal.total_lubrifiants || 0)} F</span>
+                    </div>
+                    {ticketModal.lubrifiants.map((l) => (
+                      <div key={l.id} className="flex justify-between text-[10px] pl-1 text-gray-600">
+                        <span>• {l.libelle} (x{l.quantite})</span>
+                        <span className="tabular">{F(l.montant)} F</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Remise en Cuve sur ticket */}
+                {n(ticketModal.remise_cuve_valeur) > 0 && (
+                  <div className="pt-1 mt-1 border-t border-dotted text-indigo-900 flex justify-between font-bold">
+                    <span>REMISE EN CUVE (DÉDUITE) :</span>
+                    <span className="tabular">-{F(ticketModal.remise_cuve_valeur)} F</span>
+                  </div>
+                )}
+
+                <div className="flex justify-between font-black text-gray-950 pt-1.5 border-t border-gray-400">
+                  <span>NET THÉORIQUE À VERSER :</span>
+                  <span className="tabular">
+                    {F(ticketModal.net_theorique ?? Math.max(0, (ticketModal.total_caisse || 0) - (ticketModal.remise_cuve_valeur || 0)))} FCFA
+                  </span>
                 </div>
               </div>
 
@@ -1521,8 +2016,20 @@ export default function DescentePompiste() {
                   <span>Orange Money :</span>
                   <span className="tabular">{F(ticketModal.encaissements?.orange_money || 0)} F</span>
                 </div>
+                <div className="flex justify-between text-purple-800 font-medium">
+                  <span>Paiement Petrosen :</span>
+                  <span className="tabular">{F(ticketModal.encaissements?.petrosen || 0)} F</span>
+                </div>
+                <div className="flex justify-between text-cyan-800 font-medium">
+                  <span>Code Électronique :</span>
+                  <span className="tabular">{F(ticketModal.encaissements?.code_electronique || 0)} F</span>
+                </div>
+                <div className="flex justify-between text-emerald-800 font-medium">
+                  <span>Tickets Carburant :</span>
+                  <span className="tabular">{F(ticketModal.encaissements?.tickets || 0)} F</span>
+                </div>
                 <div className="flex justify-between">
-                  <span>Carte Bancaire :</span>
+                  <span>Carte Bancaire / TPE :</span>
                   <span className="tabular">{F(ticketModal.encaissements?.carte_bancaire || 0)} F</span>
                 </div>
                 <div className="flex justify-between font-bold text-amber-900">

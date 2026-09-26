@@ -14,6 +14,7 @@ const NAV_POLES = [
     items: [
       { to: "/", label: "Réseau / Dashboard", icon: "📈", roles: ["superviseur", "directeur", "comptable", "gerant", "admin"] },
       { to: "/rapport", label: "Rapport Journalier", icon: "📋", roles: ["gerant", "superviseur", "directeur", "admin"] },
+      { to: "/bilan-site", label: "Bilan Journalier Site", icon: "📑", roles: ["gerant", "superviseur", "directeur", "comptable", "admin"] },
       { to: "/historique", label: "Historique Rapports", icon: "📁", roles: ["superviseur", "directeur", "comptable", "gerant", "admin"] },
     ],
   },
