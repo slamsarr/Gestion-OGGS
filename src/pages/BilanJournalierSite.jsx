@@ -73,7 +73,8 @@ export default function BilanJournalierSite() {
       const codeElec = n(enc.code_electronique) || 0;
       const tickets = n(enc.tickets) || 0;
       const credits = n(enc.credits) || 0;
-      const totalVerse = especes + wave + om + cb + petrosen + codeElec + tickets + credits;
+      const depensesPompiste = n(d.depenses_valeur ?? d.depenses_montant ?? d.depenses) || 0;
+      const totalVerse = especes + wave + om + cb + petrosen + codeElec + tickets + credits + depensesPompiste;
       const ecart = totalVerse - totalTheorique;
 
       return {
@@ -85,6 +86,8 @@ export default function BilanJournalierSite() {
         caCarburant,
         caLub,
         remiseCuve,
+        depenses: depensesPompiste,
+        depensesMotif: d.depenses_motif || "",
         totalTheorique,
         especes,
         wave,
@@ -108,6 +111,7 @@ export default function BilanJournalierSite() {
           caCarburant: acc.caCarburant + p.caCarburant,
           caLub: acc.caLub + p.caLub,
           remiseCuve: acc.remiseCuve + p.remiseCuve,
+          depenses: acc.depenses + p.depenses,
           totalTheorique: acc.totalTheorique + p.totalTheorique,
           especes: acc.especes + p.especes,
           wave: acc.wave + p.wave,
@@ -121,7 +125,7 @@ export default function BilanJournalierSite() {
           ecart: acc.ecart + p.ecart,
         }),
         {
-          volume: 0, caCarburant: 0, caLub: 0, remiseCuve: 0,
+          volume: 0, caCarburant: 0, caLub: 0, remiseCuve: 0, depenses: 0,
           totalTheorique: 0, especes: 0, wave: 0, om: 0, cb: 0,
           petrosen: 0, codeElec: 0, tickets: 0, credits: 0,
           totalVerse: 0, ecart: 0,
@@ -356,6 +360,7 @@ export default function BilanJournalierSite() {
                     { label: "📟 Code Électronique", pompe: totPompes.codeElec, lav: 0, bou: 0 },
                     { label: "🎫 Tickets", pompe: totPompes.tickets, lav: 0, bou: 0 },
                     { label: "📋 Crédit / Bon", pompe: totPompes.credits, lav: totLavage.credit, bou: 0 },
+                    { label: "💸 Dépenses Pompiste (Justif.)", pompe: totPompes.depenses, lav: 0, bou: 0 },
                   ].map((row) => {
                     const total = row.pompe + row.lav + row.bou;
                     if (total === 0) return null;
@@ -372,7 +377,7 @@ export default function BilanJournalierSite() {
                 </tbody>
                 <tfoot className="border-t-2" style={{ borderColor: T.line }}>
                   <tr className="bg-gray-50">
-                    <td className="py-2.5 font-black text-gray-900 uppercase">TOTAL ENCAISSÉ</td>
+                    <td className="py-2.5 font-black text-gray-900 uppercase">TOTAL JUSTIFIÉ / ENCAISSÉ</td>
                     <td className="py-2.5 text-right font-black text-blue-900 tabular">{F(totPompes.totalVerse)} F</td>
                     <td className="py-2.5 text-right font-black text-blue-900 tabular">{F(totLavage.ca)} F</td>
                     <td className="py-2.5 text-right font-black text-blue-900 tabular">{F(totBoutique.ca)} F</td>
@@ -394,7 +399,7 @@ export default function BilanJournalierSite() {
                 <div className="text-2xl font-black text-amber-400 tabular">{F(especes_global)} F</div>
               </div>
               <div className="p-3 rounded-xl bg-slate-800">
-                <div className="text-[10px] text-gray-400 uppercase mb-1">(-) Dépenses Caisse</div>
+                <div className="text-[10px] text-gray-400 uppercase mb-1">(-) Dépenses Caisse Centrale</div>
                 <div className="text-2xl font-black text-rose-400 tabular">-{F(totDepenses.total)} F</div>
                 <div className="text-[11px] text-gray-500">{totDepenses.nb} dépense(s)</div>
               </div>
@@ -415,6 +420,7 @@ export default function BilanJournalierSite() {
                 </strong>
               </span>
               <span>Remises cuves déduites : <strong className="text-amber-400">{F(totPompes.remiseCuve)} F</strong></span>
+              <span>Dépenses pompistes : <strong className="text-rose-400">{F(totPompes.depenses)} F</strong></span>
               <span>Paiements électroniques : <strong className="text-blue-400">{F(mobile_global + cb_global + petrosen_global + codeElec_global + tickets_global)} F</strong></span>
               <span>Crédit accordé : <strong className="text-yellow-400">{F(credits_global + totLavage.credit)} F</strong></span>
             </div>
@@ -441,6 +447,7 @@ export default function BilanJournalierSite() {
                     <th className="pb-2.5 text-right">CA Carburant</th>
                     <th className="pb-2.5 text-right">Lubrifiants</th>
                     <th className="pb-2.5 text-right">Remise Cuve</th>
+                    <th className="pb-2.5 text-right">Dépenses</th>
                     <th className="pb-2.5 text-right">Théorique</th>
                     <th className="pb-2.5 text-right">Versé</th>
                     <th className="pb-2.5 text-right">Écart</th>
@@ -455,6 +462,9 @@ export default function BilanJournalierSite() {
                       <td className="py-2 text-right tabular">{F(p.caCarburant)}</td>
                       <td className="py-2 text-right tabular text-amber-700">{p.caLub > 0 ? F(p.caLub) : "—"}</td>
                       <td className="py-2 text-right tabular text-rose-700">{p.remiseCuve > 0 ? `-${F(p.remiseCuve)}` : "—"}</td>
+                      <td className="py-2 text-right tabular text-rose-700" title={p.depensesMotif || undefined}>
+                        {p.depenses > 0 ? F(p.depenses) : "—"}
+                      </td>
                       <td className="py-2 text-right tabular font-semibold">{F(p.totalTheorique)}</td>
                       <td className="py-2 text-right tabular font-semibold text-blue-900">{F(p.totalVerse)}</td>
                       <td className={`py-2 text-right tabular font-bold ${p.ecart === 0 ? "text-gray-500" : p.ecart > 0 ? "text-emerald-700" : "text-rose-700"}`}>
@@ -471,6 +481,7 @@ export default function BilanJournalierSite() {
                     <td className="py-2.5 text-right tabular">{F(totPompes.caCarburant)}</td>
                     <td className="py-2.5 text-right tabular text-amber-700">{F(totPompes.caLub)}</td>
                     <td className="py-2.5 text-right tabular text-rose-700">{totPompes.remiseCuve > 0 ? `-${F(totPompes.remiseCuve)}` : "—"}</td>
+                    <td className="py-2.5 text-right tabular text-rose-700">{totPompes.depenses > 0 ? F(totPompes.depenses) : "—"}</td>
                     <td className="py-2.5 text-right tabular" style={{ color: T.petrol }}>{F(totPompes.totalTheorique)}</td>
                     <td className="py-2.5 text-right tabular text-blue-900">{F(totPompes.totalVerse)}</td>
                     <td className={`py-2.5 text-right tabular ${totPompes.ecart > 0 ? "text-emerald-700" : totPompes.ecart < 0 ? "text-rose-700" : "text-gray-500"}`}>
@@ -496,6 +507,7 @@ export default function BilanJournalierSite() {
                   { label: "Code Électronique", val: totPompes.codeElec },
                   { label: "Tickets", val: totPompes.tickets },
                   { label: "Crédit / Bon", val: totPompes.credits },
+                  { label: "Dépenses Pompiste", val: totPompes.depenses },
                 ]
                   .filter((m) => m.val > 0)
                   .map((m) => (

@@ -244,4 +244,60 @@ describe("Module Compte Pompiste — Multi-Pompes et Bons d'encaissement", () =>
     expect(descenteMiseAJour.total_encaisse).toBe(377500);
     expect(descenteMiseAJour.ecart).toBe(0);
   });
+
+  // ── SCÉNARIO 10 : Ligne Dépense Pompiste (justificatif de sortie de caisse) ──
+  it("Scénario 10 : prend en compte la ligne dépense pompiste dans le calcul du total justifié et de l'écart", () => {
+    const descenteAvecDepense = {
+      id: "des-dep-001",
+      station_id: "st-hann",
+      date: "2026-09-26",
+      pompiste_nom: "Modou Fall",
+      pompes: [
+        {
+          id: "p1",
+          caisseId: "C1",
+          pistolet_code: "gasoil1",
+          index_debut: 10000,
+          index_fin: 10500,
+          prix_unitaire: 755,
+          montant: 377500,
+        },
+      ],
+      total_volume: 500,
+      total_caisse: 377500,
+      total_remise_cuve: 15000,
+      total_lubrifiants: 20000,
+      // Total théorique = 377 500 - 15 000 + 20 000 = 382 500 FCFA
+      // Le pompiste a payé un achat autorisé de 10 000 FCFA
+      depenses_valeur: 10000,
+      depenses_motif: "Achat ampoule projecteur piste",
+      encaissements: {
+        especes: 322500,
+        wave: 30000,
+        orange_money: 10000,
+        carte_bancaire: 5000,
+        credit_client: 5000,
+      },
+    };
+
+    const norm = normalizeDescente(descenteAvecDepense);
+    expect(norm.depenses_valeur).toBe(10000);
+    expect(norm.depenses_motif).toBe("Achat ampoule projecteur piste");
+
+    const totalTheorique =
+      norm.total_caisse - norm.total_remise_cuve + norm.total_lubrifiants;
+    expect(totalTheorique).toBe(382500);
+
+    const totalJustifie =
+      norm.encaissements.especes +
+      norm.encaissements.wave +
+      norm.encaissements.orange_money +
+      norm.encaissements.carte_bancaire +
+      norm.encaissements.credit_client +
+      norm.depenses_valeur;
+
+    expect(totalJustifie).toBe(382500);
+    const ecart = totalJustifie - totalTheorique;
+    expect(ecart).toBe(0);
+  });
 });

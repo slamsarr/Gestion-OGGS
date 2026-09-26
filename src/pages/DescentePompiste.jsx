@@ -59,6 +59,8 @@ export function normalizeDescente(d) {
   const totalBons = d.total_bons ?? bons.reduce((acc, b) => acc + n(b.montant), 0);
   const remiseCuveValeur = n(d.remise_cuve_valeur ?? d.remise_en_cuve);
   const remiseCuveLitres = n(d.remise_cuve_litres);
+  const depensesValeur = n(d.depenses_valeur ?? d.depenses_montant ?? d.depense ?? d.depenses);
+  const depensesMotif = d.depenses_motif || d.depense_motif || "";
 
   return {
     ...d,
@@ -74,6 +76,8 @@ export function normalizeDescente(d) {
     remise_cuve_litres: remiseCuveLitres,
     remise_cuve_motif: d.remise_cuve_motif || "",
     remise_cuve_pistolet: d.remise_cuve_pistolet || "",
+    depenses_valeur: depensesValeur,
+    depenses_motif: depensesMotif,
     encaissements: {
       especes: n(d.encaissements?.especes),
       wave: n(d.encaissements?.wave),
@@ -149,6 +153,10 @@ export default function DescentePompiste() {
   const [remiseCuveLitres, setRemiseCuveLitres] = useState("");
   const [remiseCuveMotif, setRemiseCuveMotif] = useState("");
   const [remiseCuvePistolet, setRemiseCuvePistolet] = useState("");
+
+  // ── Dépenses Pompiste (Justificatifs) State ──
+  const [depensesValeur, setDepensesValeur] = useState("");
+  const [depensesMotif, setDepensesMotif] = useState("");
 
   // ── Encaissements Reçus (Multi-modes) ──
   const [especes, setEspeces] = useState("");
@@ -547,6 +555,10 @@ export default function DescentePompiste() {
     setRemiseCuveMotif(norm.remise_cuve_motif || "");
     setRemiseCuvePistolet(norm.remise_cuve_pistolet || "");
 
+    // Charger les dépenses pompiste
+    setDepensesValeur(norm.depenses_valeur != null && norm.depenses_valeur > 0 ? norm.depenses_valeur.toString() : "");
+    setDepensesMotif(norm.depenses_motif || "");
+
     // Charger les encaissements
     setEspeces(norm.encaissements?.especes != null ? norm.encaissements.especes.toString() : "");
     setWave(norm.encaissements?.wave != null ? norm.encaissements.wave.toString() : "");
@@ -572,6 +584,8 @@ export default function DescentePompiste() {
     setRemiseCuveLitres("");
     setRemiseCuveMotif("");
     setRemiseCuvePistolet("");
+    setDepensesValeur("");
+    setDepensesMotif("");
     setEspeces("");
     setWave("");
     setOrangeMoney("");
@@ -613,6 +627,7 @@ export default function DescentePompiste() {
   const totalCaissePompiste = totalCarburant + totalLubrifiants;
   const totalBons = bons.reduce((acc, b) => acc + n(b.montant), 0);
   const totalRemiseCuve = n(remiseCuveValeur);
+  const totalDepensesPompiste = n(depensesValeur);
   const netTheoriqueAVerser = Math.max(0, totalCaissePompiste - totalRemiseCuve);
   const totalEncaisse =
     n(especes) +
@@ -623,7 +638,8 @@ export default function DescentePompiste() {
     n(codeElectronique) +
     n(tickets) +
     totalBons +
-    n(autrePaiement);
+    n(autrePaiement) +
+    totalDepensesPompiste;
   const ecart = totalEncaisse - (totalCaissePompiste - totalRemiseCuve);
 
   // ── VALIDATION & ENREGISTREMENT ──
@@ -675,6 +691,9 @@ export default function DescentePompiste() {
       remise_cuve_litres: n(remiseCuveLitres),
       remise_cuve_motif: remiseCuveMotif,
       remise_cuve_pistolet: remiseCuvePistolet,
+      // Dépenses pompiste (justificatifs)
+      depenses_valeur: totalDepensesPompiste,
+      depenses_motif: depensesMotif.trim(),
       net_theorique: netTheoriqueAVerser,
       // Multi-bons
       bons: bons.map((b) => ({
@@ -793,6 +812,11 @@ export default function DescentePompiste() {
       bonsLines += `\n👉 *TOTAL BONS :* *${F(data.total_bons || data.encaissements?.credit_client || 0)} FCFA*`;
     }
 
+    let depensesLines = "";
+    if (n(data.depenses_valeur) > 0) {
+      depensesLines = `\n• Dépenses Pompiste : ${F(data.depenses_valeur)} FCFA${data.depenses_motif ? " (" + data.depenses_motif + ")" : ""}`;
+    }
+
     const netTheorique = data.net_theorique ?? Math.max(0, (data.total_caisse || 0) - (data.remise_cuve_valeur || 0));
 
     return `*⛽ TICKET DE PASSATION DE QUART — STATION ${stationCode}*
@@ -806,7 +830,7 @@ export default function DescentePompiste() {
 ⛽ *Total Ventes Carburant :* *${F(data.total_carburant || data.total_caisse)} FCFA* (${F(data.total_volume || data.volume_vendu)} L)${lubLines}${remiseLines}
 👉 *NET THÉORIQUE À VERSER :* *${F(netTheorique)} FCFA*
 ----------------------------------------
-💵 *ENCAISSEMENTS REMIS :*
+💵 *ENCAISSEMENTS & JUSTIFICATIFS REMIS :*
 • Espèces (Cash)   : ${F(data.encaissements?.especes || 0)} FCFA
 • Wave             : ${F(data.encaissements?.wave || 0)} FCFA
 • Orange Money     : ${F(data.encaissements?.orange_money || 0)} FCFA
@@ -815,8 +839,8 @@ export default function DescentePompiste() {
 • Tickets Carburant: ${F(data.encaissements?.tickets || 0)} FCFA
 • Carte / TPE      : ${F(data.encaissements?.carte_bancaire || 0)} FCFA
 • Bons Client Pro  : ${F(data.total_bons || data.encaissements?.credit_client || 0)} FCFA
-• Autre            : ${F(data.encaissements?.autre || 0)} FCFA${bonsLines}
-👉 *TOTAL ENCAISSÉ :* *${F(data.total_encaisse)} FCFA*
+• Autre            : ${F(data.encaissements?.autre || 0)} FCFA${depensesLines}${bonsLines}
+👉 *TOTAL JUSTIFIÉ / ENCAISSÉ :* *${F(data.total_encaisse)} FCFA*
 ----------------------------------------
 ⚖️ *ÉCART DE CAISSE :* *${data.ecart >= 0 ? "+" : ""}${F(data.ecart)} FCFA* ${
       data.ecart === 0 ? "✅ (Conforme)" : data.ecart > 0 ? "🟢 (Excédent)" : "🚨 (MANQUANT)"
@@ -1448,6 +1472,27 @@ export default function DescentePompiste() {
               <Num value={autrePaiement} onChange={setAutrePaiement} placeholder="0" w="w-36" />
             </Row>
             <Row>
+              <div>
+                <span className="text-xs font-bold text-rose-700 flex items-center gap-1">
+                  <span>💸</span> Dépenses Pompiste (Justificatifs de sortie de caisse)
+                </span>
+                <span className="text-[10px] text-gray-500 block">
+                  Dépenses autorisées réglées avec la caisse du quart (fournitures, frais, petits achats avec reçu)
+                </span>
+              </div>
+              <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="Motif de la dépense..."
+                  value={depensesMotif}
+                  onChange={(e) => setDepensesMotif(e.target.value)}
+                  className="text-xs border rounded px-2.5 py-1.5 w-44 bg-white"
+                  style={{ borderColor: T.line }}
+                />
+                <Num value={depensesValeur} onChange={setDepensesValeur} placeholder="0" w="w-36" />
+              </div>
+            </Row>
+            <Row>
               <span className="text-xs font-medium">Commentaire / Observation</span>
               <input
                 type="text"
@@ -1503,9 +1548,16 @@ export default function DescentePompiste() {
               </div>
 
               <div className="border-t pt-1.5 flex justify-between items-center font-bold text-gray-900">
-                <span>TOTAL ENCAISSEMENTS REMIS :</span>
+                <span>TOTAL ENCAISSEMENTS & JUSTIFICATIFS REMIS :</span>
                 <span className="text-sm font-extrabold tabular text-emerald-900">{F(totalEncaisse)} FCFA</span>
               </div>
+
+              {totalDepensesPompiste > 0 && (
+                <div className="flex justify-between items-center text-rose-700 text-[11px] font-semibold pl-2">
+                  <span>• Dont Dépenses Pompiste ({depensesMotif || "Frais justifiés"}) :</span>
+                  <span className="tabular">+{F(totalDepensesPompiste)} FCFA</span>
+                </div>
+              )}
             </div>
 
             <div className="border-t pt-3 mt-3 flex justify-between items-center">
@@ -2036,6 +2088,12 @@ export default function DescentePompiste() {
                   <span>Bons Client Pro ({ticketModal.bons?.length || 0}) :</span>
                   <span className="tabular">{F(ticketModal.total_bons || ticketModal.encaissements?.credit_client || 0)} F</span>
                 </div>
+                {n(ticketModal.depenses_valeur) > 0 && (
+                  <div className="flex justify-between text-rose-700 font-medium">
+                    <span>Dépenses Pompiste {ticketModal.depenses_motif ? `(${ticketModal.depenses_motif})` : ""} :</span>
+                    <span className="tabular font-bold">+{F(ticketModal.depenses_valeur)} F</span>
+                  </div>
+                )}
                 {n(ticketModal.encaissements?.autre) > 0 && (
                   <div className="flex justify-between">
                     <span>Autre :</span>
