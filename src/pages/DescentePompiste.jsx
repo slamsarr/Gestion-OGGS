@@ -10,7 +10,7 @@ import {
   savePistolet,
 } from "../lib/api";
 import { F, fmtDate, n, T, todayISO, prixDuJour, uuid } from "../lib/calcul";
-import { Section, Row, Num, Loading } from "../components/ui";
+import { Section, Row, Num, Loading, InputComptable } from "../components/ui";
 
 /** Normalisation défensive pour rétrocompatibilité avec les anciennes descentes mono-pompe */
 export function normalizeDescente(d) {
@@ -690,6 +690,23 @@ export default function DescentePompiste() {
     totalDepensesPompiste;
   const ecart = totalEncaisse - (totalCaissePompiste - totalRemiseCuve);
 
+  // ── ASSISTANCE COMPTABLE (Aide à la saisie sans erreur) ──
+  const handleAjusterSoldeEspeces = () => {
+    const autres =
+      n(wave) +
+      n(orangeMoney) +
+      n(carteBancaire) +
+      n(petrosen) +
+      n(codeElectronique) +
+      n(tickets) +
+      totalBons +
+      n(autrePaiement) +
+      totalDepensesPompiste;
+    const resteEspeces = Math.max(0, netTheoriqueAVerser - autres);
+    setEspeces(resteEspeces.toString());
+    flash(`Aide comptable : Solde de ${F(resteEspeces)} FCFA automatiquement affecté aux Espèces.`);
+  };
+
   // ── VALIDATION & ENREGISTREMENT ──
 
   const validerDescente = async (statut = "TERMINEE") => {
@@ -1153,32 +1170,29 @@ export default function DescentePompiste() {
 
                       {/* Index début et Index fin */}
                       <div className="grid grid-cols-2 gap-2 mb-2">
-                        <div>
-                          <label className="text-[10px] font-medium text-gray-600 block mb-0.5">Index Début (L)</label>
-                          <input
-                            type="number"
-                            value={p.index_debut}
-                            onChange={(e) => handleUpdatePompeField(p.id, "index_debut", e.target.value)}
-                            placeholder="0"
-                            className="w-full text-xs border rounded px-2 py-1.5 bg-white font-mono font-medium"
-                            style={{ borderColor: T.line }}
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-bold text-blue-900 block mb-0.5">Index Fin (L) *</label>
-                          <input
-                            type="number"
-                            value={p.index_fin}
-                            onChange={(e) => handleUpdatePompeField(p.id, "index_fin", e.target.value)}
-                            placeholder="Relevé actuel"
-                            className="w-full text-xs border rounded px-2 py-1.5 bg-white font-mono font-bold text-blue-900 focus:ring-1 focus:ring-blue-500"
-                            style={{ borderColor: hasAnomalie ? "#DC2626" : "#2563EB" }}
-                          />
-                        </div>
+                        <InputComptable
+                          label="Index Début (L)"
+                          value={p.index_debut}
+                          onChange={(v) => handleUpdatePompeField(p.id, "index_debut", v)}
+                          unit="L"
+                          placeholder="0"
+                          min={0}
+                          hint="Relevé compteur début de quart"
+                        />
+                        <InputComptable
+                          label="Index Fin (L) *"
+                          value={p.index_fin}
+                          onChange={(v) => handleUpdatePompeField(p.id, "index_fin", v)}
+                          unit="L"
+                          placeholder="Relevé actuel"
+                          required
+                          min={n(p.index_debut) || 0}
+                          hint={hasAnomalie ? undefined : "Fin ≥ Début"}
+                        />
                       </div>
 
                       {hasAnomalie && (
-                        <p className="text-[10px] text-red-600 font-semibold mb-2">
+                        <p className="text-[10px] text-red-600 font-semibold mb-2 flex items-center gap-1">
                           ⚠️ L'index fin doit être supérieur ou égal à l'index début
                         </p>
                       )}
@@ -1498,72 +1512,185 @@ export default function DescentePompiste() {
             </div>
           </div>
 
-          {/* ────────────────────────────────────────────────────────── */}
-          {/* SECTION 3 : ENCAISSEMENTS MULTI-MODES                      */}
-          {/* ────────────────────────────────────────────────────────── */}
-          <Section titre="3. Encaissements Reçus (Multi-modes)">
-            <Row>
-              <span className="text-xs font-medium">💵 Espèces (Cash)</span>
-              <Num value={especes} onChange={setEspeces} placeholder="0" w="w-36" />
-            </Row>
-            <Row>
-              <span className="text-xs font-medium text-blue-600">📲 Wave</span>
-              <Num value={wave} onChange={setWave} placeholder="0" w="w-36" />
-            </Row>
-            <Row>
-              <span className="text-xs font-medium text-orange-600">🍊 Orange Money</span>
-              <Num value={orangeMoney} onChange={setOrangeMoney} placeholder="0" w="w-36" />
-            </Row>
-            <Row>
-              <span className="text-xs font-medium text-purple-700 font-bold">⛽ Paiement Petrosen (Plateforme / Cartes)</span>
-              <Num value={petrosen} onChange={setPetrosen} placeholder="0" w="w-36" />
-            </Row>
-            <Row>
-              <span className="text-xs font-medium text-cyan-700 font-bold">🔢 Code Électronique (Voucher / SMS)</span>
-              <Num value={codeElectronique} onChange={setCodeElectronique} placeholder="0" w="w-36" />
-            </Row>
-            <Row>
-              <span className="text-xs font-medium text-emerald-700 font-bold">🎟️ Tickets Valeurs / Bons Carburant</span>
-              <Num value={tickets} onChange={setTickets} placeholder="0" w="w-36" />
-            </Row>
-            <Row>
-              <span className="text-xs font-medium">💳 Carte Bancaire / TPE</span>
-              <Num value={carteBancaire} onChange={setCarteBancaire} placeholder="0" w="w-36" />
-            </Row>
-            <Row>
+          <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: T.line }}>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 pb-2 border-b" style={{ borderColor: T.line }}>
+              <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                <span>💰</span> 3. Encaissements Reçus (Multi-modes)
+              </h2>
+              <span className="text-[11px] text-gray-500">
+                Saisie avec assistance comptable anti-erreur
+              </span>
+            </div>
+
+            {/* BANDEAU BALANCE COMPTABLE EN DIRECT */}
+            <div
+              className="p-3 mb-4 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-3 transition-colors shadow-xs"
+              style={{
+                background: ecart === 0 ? "#F0FDF4" : ecart < 0 ? "#FEF2F2" : "#FFFBEB",
+                borderColor: ecart === 0 ? "#86EFAC" : ecart < 0 ? "#FCA5A5" : "#FDE68A",
+              }}
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-9 h-9 rounded-xl flex items-center justify-center text-lg font-black shrink-0 shadow-xs"
+                  style={{
+                    background: ecart === 0 ? "#DCFCE7" : ecart < 0 ? "#FEE2E2" : "#FEF3C7",
+                    color: ecart === 0 ? "#15803D" : ecart < 0 ? "#DC2626" : "#D97706",
+                  }}
+                >
+                  {ecart === 0 ? "✓" : ecart < 0 ? "⚠️" : "⚡"}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-gray-700">
+                      Balance Comptable en Direct :
+                    </span>
+                    <span
+                      className="text-xs font-black px-2 py-0.5 rounded-full"
+                      style={{
+                        background: ecart === 0 ? "#BBF7D0" : ecart < 0 ? "#FECACA" : "#FDE68A",
+                        color: ecart === 0 ? "#14532D" : ecart < 0 ? "#991B1B" : "#78350F",
+                      }}
+                    >
+                      {ecart === 0
+                        ? "ÉQUILIBRÉE"
+                        : ecart < 0
+                        ? `MANQUANT : ${F(ecart)} FCFA`
+                        : `SURPLUS : +${F(ecart)} FCFA`}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-gray-600 mt-0.5 flex flex-wrap gap-x-3">
+                    <span>
+                      Théorique à verser : <strong>{F(netTheoriqueAVerser)} F</strong>
+                    </span>
+                    <span>•</span>
+                    <span>
+                      Total saisi : <strong>{F(totalEncaisse)} F</strong>
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bouton d'aide à la saisie du solde en espèces */}
+              {ecart < 0 && netTheoriqueAVerser > 0 && (
+                <button
+                  type="button"
+                  onClick={handleAjusterSoldeEspeces}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold text-white shadow-xs flex items-center justify-center gap-1.5 transition-transform active:scale-95 bg-emerald-700 hover:bg-emerald-800 shrink-0"
+                >
+                  <span>⚡</span> Affecter le reste ({F(Math.abs(ecart))} F) en Espèces
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <InputComptable
+                label="💵 Espèces (Cash)"
+                value={especes}
+                onChange={setEspeces}
+                unit="FCFA"
+                placeholder="0"
+                min={0}
+              />
+              <InputComptable
+                label="📲 Wave"
+                value={wave}
+                onChange={setWave}
+                unit="FCFA"
+                placeholder="0"
+                min={0}
+              />
+              <InputComptable
+                label="🍊 Orange Money"
+                value={orangeMoney}
+                onChange={setOrangeMoney}
+                unit="FCFA"
+                placeholder="0"
+                min={0}
+              />
+              <InputComptable
+                label="⛽ Petrosen (Cartes / Plateforme)"
+                value={petrosen}
+                onChange={setPetrosen}
+                unit="FCFA"
+                placeholder="0"
+                min={0}
+              />
+              <InputComptable
+                label="🔢 Code Électronique (Voucher)"
+                value={codeElectronique}
+                onChange={setCodeElectronique}
+                unit="FCFA"
+                placeholder="0"
+                min={0}
+              />
+              <InputComptable
+                label="🎟️ Tickets Valeurs / Bons Carburant"
+                value={tickets}
+                onChange={setTickets}
+                unit="FCFA"
+                placeholder="0"
+                min={0}
+              />
+              <InputComptable
+                label="💳 Carte Bancaire / TPE"
+                value={carteBancaire}
+                onChange={setCarteBancaire}
+                unit="FCFA"
+                placeholder="0"
+                min={0}
+              />
+              <InputComptable
+                label="🔄 Autre moyen de paiement"
+                value={autrePaiement}
+                onChange={setAutrePaiement}
+                unit="FCFA"
+                placeholder="0"
+                min={0}
+              />
+            </div>
+
+            {/* Bons Client Pro — calculé automatiquement */}
+            <div className="mt-3 flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5">
               <div>
                 <span className="text-xs font-bold text-amber-900 block">📝 Bons Client Pro (Total Bons)</span>
-                <span className="text-[10px] text-gray-500">Calculé automatiquement depuis la section des bons</span>
+                <span className="text-[10px] text-amber-700">Calculé automatiquement depuis la section des bons</span>
               </div>
-              <span className="text-xs font-bold text-amber-900 tabular bg-amber-50 px-3 py-1.5 rounded border border-amber-200">
-                {F(totalBons)} FCFA
+              <span className="text-sm font-black text-amber-950 tabular">{F(totalBons)} FCFA</span>
+            </div>
+
+            {/* Dépenses pompiste */}
+            <div className="mt-3 p-3 bg-rose-50 border border-rose-200 rounded-xl">
+              <span className="text-xs font-bold text-rose-700 flex items-center gap-1 mb-2">
+                <span>💸</span> Dépenses Pompiste (Justificatifs de sortie de caisse)
               </span>
-            </Row>
-            <Row>
-              <span className="text-xs font-medium">🔄 Autre moyen de paiement</span>
-              <Num value={autrePaiement} onChange={setAutrePaiement} placeholder="0" w="w-36" />
-            </Row>
-            <Row>
-              <div>
-                <span className="text-xs font-bold text-rose-700 flex items-center gap-1">
-                  <span>💸</span> Dépenses Pompiste (Justificatifs de sortie de caisse)
-                </span>
-                <span className="text-[10px] text-gray-500 block">
-                  Dépenses autorisées réglées avec la caisse du quart (fournitures, frais, petits achats avec reçu)
-                </span>
-              </div>
-              <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
-                <input
-                  type="text"
-                  placeholder="Motif de la dépense..."
-                  value={depensesMotif}
-                  onChange={(e) => setDepensesMotif(e.target.value)}
-                  className="text-xs border rounded px-2.5 py-1.5 w-44 bg-white"
-                  style={{ borderColor: T.line }}
+              <span className="text-[10px] text-rose-600 block mb-2">
+                Dépenses autorisées réglées avec la caisse du quart (fournitures, frais, petits achats avec reçu)
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="flex flex-col gap-0.5">
+                  <label className="text-[10px] font-bold text-gray-600 uppercase tracking-wide">Motif de la dépense</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: achat fournitures, nettoyage..."
+                    value={depensesMotif}
+                    onChange={(e) => setDepensesMotif(e.target.value)}
+                    className="text-xs border rounded-lg px-2.5 py-2 bg-white"
+                    style={{ borderColor: T.line }}
+                  />
+                </div>
+                <InputComptable
+                  label="Montant des dépenses"
+                  value={depensesValeur}
+                  onChange={setDepensesValeur}
+                  unit="FCFA"
+                  placeholder="0"
+                  min={0}
                 />
-                <Num value={depensesValeur} onChange={setDepensesValeur} placeholder="0" w="w-36" />
               </div>
-            </Row>
+            </div>
+
+            {/* Commentaire */}
             <Row>
               <span className="text-xs font-medium">Commentaire / Observation</span>
               <input
@@ -1575,7 +1702,8 @@ export default function DescentePompiste() {
                 style={{ borderColor: T.line }}
               />
             </Row>
-          </Section>
+          </div>
+
 
           {/* ────────────────────────────────────────────────────────── */}
           {/* SECTION 4 : SYNTHÈSE GLOBALE DU POMPISTE                   */}
@@ -1853,29 +1981,24 @@ export default function DescentePompiste() {
               </div>
 
               <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-gray-700 font-medium mb-1">Quantité (bidons) *</label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={lubQuantite}
-                    onChange={(e) => setLubQuantite(e.target.value)}
-                    className="w-full text-xs border rounded px-2.5 py-1.5 bg-white font-bold"
-                    style={{ borderColor: T.line }}
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-gray-700 font-medium mb-1">Prix Unitaire (FCFA) *</label>
-                  <input
-                    type="number"
-                    value={lubPrixUnitaire}
-                    onChange={(e) => setLubPrixUnitaire(e.target.value)}
-                    className="w-full text-xs border rounded px-2.5 py-1.5 bg-white font-bold"
-                    style={{ borderColor: T.line }}
-                    required
-                  />
-                </div>
+                <InputComptable
+                  label="Quantité (bidons) *"
+                  value={lubQuantite}
+                  onChange={setLubQuantite}
+                  unit="unité(s)"
+                  placeholder="0"
+                  min={1}
+                  required
+                />
+                <InputComptable
+                  label="Prix Unitaire *"
+                  value={lubPrixUnitaire}
+                  onChange={setLubPrixUnitaire}
+                  unit="FCFA"
+                  placeholder="0"
+                  min={1}
+                  required
+                />
               </div>
 
               <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 flex justify-between items-center text-xs">
@@ -1984,34 +2107,27 @@ export default function DescentePompiste() {
                     <option value="SUPER">SUPER (990 F/L)</option>
                   </select>
                 </div>
-                <div>
-                  <label className="block text-blue-900 font-bold mb-1">Litrage (Litres) *</label>
-                  <input
-                    type="number"
-                    placeholder="ex: 50"
-                    value={bonLitres}
-                    onChange={(e) => handleLitresChange(e.target.value)}
-                    className="w-full text-xs font-mono font-bold border rounded px-2.5 py-1.5 text-blue-900 bg-blue-50/50"
-                    style={{ borderColor: "#2563EB" }}
-                  />
-                </div>
+                <InputComptable
+                  label="Litrage *"
+                  value={bonLitres}
+                  onChange={handleLitresChange}
+                  unit="Litres"
+                  placeholder="ex: 50"
+                  min={1}
+                  hint="→ Montant calculé auto"
+                />
               </div>
 
-              <div>
-                <label className="block text-gray-700 font-bold mb-1">Montant du Bon (FCFA) *</label>
-                <input
-                  type="number"
-                  placeholder="0"
-                  value={bonMontant}
-                  onChange={(e) => setBonMontant(e.target.value)}
-                  className="w-full text-sm font-black border rounded px-2.5 py-2 text-amber-900"
-                  style={{ borderColor: "#D97706" }}
-                  required
-                />
-                <span className="text-[10px] text-gray-400 mt-0.5 block">
-                  Calculé automatiquement depuis le litrage, modifiable manuellement si besoin.
-                </span>
-              </div>
+              <InputComptable
+                label="Montant du Bon (FCFA) *"
+                value={bonMontant}
+                onChange={setBonMontant}
+                unit="FCFA"
+                placeholder="0"
+                min={1}
+                required
+                hint="Calculé depuis le litrage, modifiable si besoin."
+              />
 
               <div>
                 <label className="block text-gray-600 font-medium mb-1">Observation / Véhicule (optionnel)</label>

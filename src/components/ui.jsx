@@ -1,4 +1,5 @@
 import { T } from "../lib/calcul";
+import { useState, useRef, useCallback } from "react";
 
 export function Num({ value, onChange, disabled, placeholder = "0", w = "w-24", right = true, big }) {
   return (
@@ -12,6 +13,161 @@ export function Num({ value, onChange, disabled, placeholder = "0", w = "w-24", 
       className={`${w} ${right ? "text-right" : ""} ${big ? "text-base py-2 font-bold" : "py-1.5 text-xs"} px-2.5 rounded-lg border bg-white disabled:bg-slate-50/70 disabled:border-transparent disabled:text-slate-500 focus:outline-none focus:ring-2 transition-all`}
       style={{ borderColor: T.line, fontVariantNumeric: "tabular-nums", "--tw-ring-color": T.gold }}
     />
+  );
+}
+
+/**
+ * InputComptable — Champ de saisie "style comptable"
+ *
+ * Comportement :
+ * - Affiche la valeur formatée avec séparateurs de milliers (ex: 1 234 567)
+ * - En mode édition : affiche la valeur brute sans formatage pour corriger facilement
+ * - Accepte uniquement des chiffres et un éventuel point décimal
+ * - Affiche un badge coloré de validation (vert = OK, rouge = erreur, orange = vide)
+ *
+ * Props :
+ *   value        {string|number} — valeur brute contrôlée
+ *   onChange     {function}      — (rawString) => void  (renvoie la chaîne nettoyée)
+ *   label        {string}        — libellé affiché au-dessus
+ *   unit         {string}        — unité affichée à droite (ex: "FCFA", "L", "km")
+ *   placeholder  {string}        — texte quand vide
+ *   min          {number}        — valeur minimum pour validation (défaut 0)
+ *   max          {number}        — valeur maximum pour validation
+ *   required     {boolean}       — si true, valeur 0 est considérée invalide
+ *   disabled     {boolean}
+ *   className    {string}        — classes Tailwind supplémentaires
+ *   hint         {string}        — texte d'aide sous le champ
+ *   decimals     {number}        — nombre de décimales tolérées (défaut: 0 = entiers)
+ */
+export function InputComptable({
+  value,
+  onChange,
+  label,
+  unit = "FCFA",
+  placeholder = "0",
+  min = 0,
+  max,
+  required = false,
+  disabled = false,
+  className = "",
+  hint,
+  decimals = 0,
+}) {
+  const [isFocused, setIsFocused] = useState(false);
+  const inputRef = useRef(null);
+
+  // Valeur numérique brute
+  const numericValue = parseFloat(String(value).replace(/\s/g, "").replace(",", ".")) || 0;
+
+  // Validation
+  const isEmpty = value === "" || value === null || value === undefined;
+  const isInvalid = !isEmpty && (numericValue < min || (max !== undefined && numericValue > max) || (required && numericValue <= 0));
+  const isValid = !isEmpty && !isInvalid && (required ? numericValue > 0 : true);
+
+  // Formatage pour l'affichage en lecture (séparateurs de milliers)
+  const formatForDisplay = useCallback((v) => {
+    const num = parseFloat(String(v).replace(/\s/g, "").replace(",", "."));
+    if (isNaN(num)) return "";
+    return decimals > 0
+      ? num.toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: decimals })
+      : Math.round(num).toLocaleString("fr-FR");
+  }, [decimals]);
+
+  // Nettoyage de la saisie : garde uniquement chiffres + . ou ,
+  const handleChange = (e) => {
+    const raw = e.target.value;
+    // Autorise chiffres, virgule et point décimal, espaces (pour coller une valeur formatée)
+    const cleaned = raw.replace(/[^\d.,]/g, "").replace(",", ".");
+    // Si decimals=0, ne pas accepter le point
+    const final = decimals === 0 ? cleaned.replace(".", "") : cleaned;
+    onChange(final);
+  };
+
+  // Couleur du badge de validation
+  const badgeColor = isEmpty
+    ? "bg-amber-100 text-amber-700 border-amber-300"
+    : isInvalid
+    ? "bg-rose-100 text-rose-700 border-rose-300"
+    : isValid
+    ? "bg-emerald-100 text-emerald-700 border-emerald-300"
+    : "bg-gray-100 text-gray-500 border-gray-200";
+
+  const badgeIcon = isEmpty ? "—" : isInvalid ? "✕" : isValid ? "✓" : "·";
+
+  const borderColor = disabled
+    ? "#E5E7EB"
+    : isFocused
+    ? "#FA5200"
+    : isInvalid
+    ? "#FCA5A5"
+    : isValid
+    ? "#86EFAC"
+    : T.line;
+
+  return (
+    <div className={`flex flex-col gap-0.5 ${className}`}>
+      {label && (
+        <label className="text-[10px] font-bold text-gray-600 uppercase tracking-wide flex items-center gap-1">
+          {label}
+          {required && <span className="text-rose-500 font-black">*</span>}
+        </label>
+      )}
+
+      <div
+        className="relative flex items-center rounded-lg border transition-all overflow-hidden"
+        style={{ borderColor }}
+      >
+        {/* Badge de validation à gauche */}
+        <span
+          className={`shrink-0 w-7 text-center text-[10px] font-black border-r py-2 ${badgeColor} transition-colors`}
+        >
+          {badgeIcon}
+        </span>
+
+        {/* Champ de saisie */}
+        <input
+          ref={inputRef}
+          type={isFocused ? "text" : "text"}
+          inputMode={decimals > 0 ? "decimal" : "numeric"}
+          value={isFocused ? (value ?? "") : formatForDisplay(value)}
+          disabled={disabled}
+          placeholder={placeholder}
+          onFocus={() => {
+            setIsFocused(true);
+            // Sélectionner tout le texte au focus
+            setTimeout(() => inputRef.current?.select(), 0);
+          }}
+          onBlur={() => setIsFocused(false)}
+          onChange={handleChange}
+          className="flex-1 px-2 py-2 text-right text-sm font-mono font-bold bg-white disabled:bg-slate-50 disabled:text-slate-400 outline-none tabular-nums"
+          style={{
+            color: disabled ? "#94A3B8" : isInvalid ? "#DC2626" : "#111827",
+            fontVariantNumeric: "tabular-nums",
+          }}
+        />
+
+        {/* Unité à droite */}
+        {unit && (
+          <span className="shrink-0 px-2 py-2 text-[10px] font-bold text-gray-500 bg-gray-50 border-l" style={{ borderColor: T.line }}>
+            {unit}
+          </span>
+        )}
+      </div>
+
+      {/* Aide ou erreur de validation */}
+      {isInvalid && (
+        <p className="text-[10px] text-rose-600 font-semibold mt-0.5">
+          {numericValue < min
+            ? `Valeur minimum : ${min.toLocaleString("fr-FR")} ${unit}`
+            : max !== undefined && numericValue > max
+            ? `Valeur maximum : ${max.toLocaleString("fr-FR")} ${unit}`
+            : "Valeur invalide"}
+        </p>
+      )}
+      {hint && !isInvalid && (
+        <p className="text-[10px] text-gray-400 mt-0.5">{hint}</p>
+      )}
+    </div>
   );
 }
 

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Num, Row, Section, Alerte } from "../src/components/ui.jsx";
+import { Num, Row, Section, Alerte, InputComptable } from "../src/components/ui.jsx";
 
 describe("Composants UI", () => {
   it("Section rend son titre et son aside", () => {
@@ -33,6 +33,25 @@ describe("Composants UI", () => {
   it("Alerte rend son message", () => {
     const html = renderToStaticMarkup(<Alerte>Écart détecté</Alerte>);
     expect(html).toContain("Écart détecté");
+  });
+
+  it("InputComptable formate avec séparateurs de milliers et affiche l'unité", () => {
+    const html = renderToStaticMarkup(
+      <InputComptable label="Total Carburant" value="1500000" unit="FCFA" onChange={() => {}} />
+    );
+    expect(html).toContain("Total Carburant");
+    expect(html).toContain("FCFA");
+    // format fr-FR : 1 500 000 ou avec espace insécable
+    expect(html).toMatch(/1[\s\u202F]500[\s\u202F]000/);
+    expect(html).toContain("✓");
+  });
+
+  it("InputComptable détecte la non-conformité quand en dessous du minimum requis", () => {
+    const html = renderToStaticMarkup(
+      <InputComptable label="Litrage" value="0" min={1} required unit="L" onChange={() => {}} />
+    );
+    expect(html).toContain("✕");
+    expect(html).toContain("Valeur minimum");
   });
 });
 

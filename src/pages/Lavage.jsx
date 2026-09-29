@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { loadReferentiel, createPrestationLavage, listPrestationsLavage, deletePrestationLavage } from "../lib/api";
 import { F, fmtDate, n, T, todayISO } from "../lib/calcul";
-import { Section, Row, Num, Loading } from "../components/ui";
+import { Section, Row, Num, Loading, InputComptable } from "../components/ui";
 
 export default function Lavage() {
   const { profil } = useAuth();
@@ -207,17 +207,14 @@ export default function Lavage() {
               </div>
 
               <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Quantité</label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={quantite}
-                    onChange={(e) => setQuantite(Math.max(1, parseInt(e.target.value) || 1))}
-                    className="w-full text-xs border rounded p-2 text-center"
-                    style={{ borderColor: T.line }}
-                  />
-                </div>
+                <InputComptable
+                  label="Quantité"
+                  value={quantite}
+                  onChange={(v) => setQuantite(Math.max(1, parseInt(v) || 1))}
+                  unit="véh."
+                  placeholder="1"
+                  min={1}
+                />
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">Paiement</label>
                   <select

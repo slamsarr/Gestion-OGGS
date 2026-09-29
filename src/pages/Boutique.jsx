@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { listProduitsBoutique, createVenteBoutique, listVentesBoutique, updateProduitBoutique, deleteVenteBoutique } from "../lib/api";
 import { F, fmtDate, n, T, todayISO } from "../lib/calcul";
-import { Section, Row, Num, Loading } from "../components/ui";
+import { Section, Row, Num, Loading, InputComptable } from "../components/ui";
 
 export default function Boutique() {
   const { profil } = useAuth();
@@ -421,15 +421,31 @@ ${lignesStr}
                   Stock actuel : <strong>{selectedProd.stock}</strong>. Saisissez la quantité ajoutée (+ pour livraison) ou soustraite (- pour casse/perte).
                 </p>
                 <div className="mb-3">
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Quantité (+/-)</label>
-                  <input
-                    type="number"
-                    value={ajustQte}
-                    onChange={(e) => setAjustQte(e.target.value)}
-                    placeholder="ex: +24 ou -2"
-                    className="w-full text-sm border rounded p-2"
-                    style={{ borderColor: T.line }}
+                  <InputComptable
+                    label="Quantité (+/- pour perte/casse)"
+                    value={ajustQte.replace("-", "")}
+                    onChange={(v) => setAjustQte(ajustQte.startsWith("-") ? `-${v}` : v)}
+                    unit="unité(s)"
+                    placeholder="0"
+                    min={0}
+                    hint="Saisissez le nombre d'unités à ajouter (livraison)"
                   />
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      type="button"
+                      onClick={() => setAjustQte(v => (v.startsWith("-") ? v.slice(1) : v))}
+                      className="flex-1 text-[10px] py-1 rounded font-semibold border text-emerald-700 border-emerald-300 bg-emerald-50 hover:bg-emerald-100"
+                    >
+                      ▲ Entrée (+)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAjustQte(v => (v.startsWith("-") ? v : `-${v}`))}
+                      className="flex-1 text-[10px] py-1 rounded font-semibold border text-rose-700 border-rose-300 bg-rose-50 hover:bg-rose-100"
+                    >
+                      ▼ Sortie / Perte (-)
+                    </button>
+                  </div>
                 </div>
                 <div className="flex gap-2">
                   <button
