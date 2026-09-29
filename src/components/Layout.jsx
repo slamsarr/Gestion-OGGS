@@ -15,8 +15,8 @@ const NAV_POLES = [
       { to: "/gerant", label: "Poste de Commande", icon: "🏪", roles: ["gerant", "admin", "superviseur", "directeur"] },
       { to: "/", label: "Cockpit Réseau", icon: "📈", roles: ["superviseur", "directeur", "comptable", "admin"] },
       { to: "/bilan-site", label: "Bilan Journalier Site", icon: "📑", roles: ["gerant", "superviseur", "directeur", "comptable", "admin"] },
-      { to: "/rapport", label: "Rapport Journalier", icon: "📋", roles: ["gerant", "superviseur", "directeur", "admin"] },
-      { to: "/historique", label: "Historique Rapports", icon: "📁", roles: ["superviseur", "directeur", "comptable", "gerant", "admin"] },
+      { to: "/rapport", label: "Rapport Journalier", icon: "📋", roles: ["superviseur", "directeur", "admin"] },
+      { to: "/historique", label: "Historique Rapports", icon: "📁", roles: ["superviseur", "directeur", "comptable", "admin"] },
     ],
   },
   {

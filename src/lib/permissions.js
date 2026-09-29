@@ -127,8 +127,8 @@ export function peutValiderRapport(role) {
 // ── Accès aux routes UI selon le rôle ───────────────────────────────────────
 const ROUTES = {
   "/": ["admin", "gerant", "superviseur", "directeur", "comptable", "pompiste", "magasinier", "resp_stock", "stock", "resp_achats", "resp_maint", "maintenance", "commercial", "lavage", "boutique"],
-  "/historique": ["admin", "gerant", "superviseur", "directeur", "comptable"],
-  "/rapport": ["admin", "gerant", "superviseur", "directeur"],
+  "/historique": ["admin", "superviseur", "directeur", "comptable"],
+  "/rapport": ["admin", "superviseur", "directeur"],
   "/stocks": ["admin", "gerant", "superviseur", "directeur", "comptable", "magasinier", "resp_stock", "stock"],
   "/achats": ["admin", "gerant", "superviseur", "directeur", "resp_achats"],
   "/fournisseurs": ["admin", "gerant", "superviseur", "directeur", "resp_achats", "comptable"],

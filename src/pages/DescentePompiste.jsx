@@ -2062,9 +2062,10 @@ export default function DescentePompiste() {
               <button
                 type="button"
                 onClick={() => setTicketModal(null)}
-                className="text-gray-400 hover:text-white text-base px-2"
+                className="px-3 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center gap-1 transition"
+                title="Fermer cette fenêtre"
               >
-                ✕
+                ✕ Fermer
               </button>
             </div>
 
@@ -2260,6 +2261,14 @@ export default function DescentePompiste() {
 
             {/* Boutons d'action */}
             <div className="p-3 bg-gray-50 border-t flex flex-col sm:flex-row gap-2">
+              <button
+                type="button"
+                onClick={() => setTicketModal(null)}
+                className="py-2.5 px-4 rounded-xl bg-gray-800 hover:bg-gray-900 font-bold text-xs text-white flex items-center justify-center gap-1.5 shadow-sm transition order-last sm:order-first"
+                title="Fermer et revenir à la saisie"
+              >
+                ✕ Fermer le ticket
+              </button>
               {ticketModal.statut !== "TERMINEE" || isManager ? (
                 <button
                   type="button"

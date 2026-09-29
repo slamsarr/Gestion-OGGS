@@ -1650,8 +1650,23 @@ export default function CuvesCarburant() {
               </div>
             </div>
 
-            {/* Bouton de Partage Rapide WhatsApp */}
-            <div className="mt-4 flex gap-2">
+            {/* Boutons d'action en bas du PV */}
+            <div className="mt-4 flex flex-col sm:flex-row gap-2">
+              <button
+                type="button"
+                onClick={() => setPvModal(null)}
+                className="py-2.5 px-4 rounded-xl bg-gray-800 hover:bg-gray-900 font-bold text-xs text-white flex items-center justify-center gap-1.5 shadow-sm transition order-last sm:order-first"
+                title="Fermer cette fenêtre"
+              >
+                ✕ Fermer le PV
+              </button>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="py-2.5 px-4 rounded-xl border border-gray-300 bg-white font-bold text-xs text-gray-800 hover:bg-gray-100 flex items-center justify-center gap-1.5 shadow-sm"
+              >
+                🖨️ Imprimer le PV
+              </button>
               <a
                 href={`https://wa.me/?text=${encodeURIComponent(
                   `*RAPPORT DE DÉPOTAGE CARBURANT*\nStation: ${profil?.station_nom || "Hann Maristes"}\nDate: ${pvModal.date}\nN° BL Camion: ${pvModal.numero_bl || "--"}\n${
@@ -1662,9 +1677,9 @@ export default function CuvesCarburant() {
                 )}`}
                 target="_blank"
                 rel="noreferrer"
-                className="w-full py-2 rounded-lg bg-emerald-600 text-white text-xs font-bold text-center hover:bg-emerald-700 flex items-center justify-center gap-1.5"
+                className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-bold text-center hover:bg-emerald-700 flex items-center justify-center gap-1.5 shadow-sm"
               >
-                <span>📱 Partager le résumé du PV sur WhatsApp</span>
+                <span>📱 Partager sur WhatsApp</span>
               </a>
             </div>
           </div>

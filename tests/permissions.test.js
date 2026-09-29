@@ -52,7 +52,8 @@ describe("Permissions rôles", () => {
     expect(rolesRoute("gerant", "/parametres")).toBe(false);
     expect(rolesRoute("comptable", "/finance")).toBe(true);
     expect(rolesRoute("gerant", "/finance")).toBe(false);
-    expect(rolesRoute("gerant", "/rapport")).toBe(true);
+    expect(rolesRoute("gerant", "/rapport")).toBe(false);
+    expect(rolesRoute("gerant", "/historique")).toBe(false);
     expect(rolesRoute("admin", "/parametres")).toBe(true);
     expect(rolesRoute("admin", "/finance")).toBe(true);
     expect(rolesRoute("admin", "/rapport")).toBe(true);

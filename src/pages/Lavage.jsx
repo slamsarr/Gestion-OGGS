@@ -399,21 +399,31 @@ export default function Lavage() {
               </div>
             </div>
 
-            <div className="p-3 bg-gray-50 border-t flex gap-2">
+            <div className="p-3 bg-gray-50 border-t flex flex-col sm:flex-row gap-2">
               <button
                 type="button"
-                onClick={() => window.print()}
-                className="flex-1 py-2.5 rounded-xl border border-gray-300 bg-white font-bold text-xs text-gray-800 hover:bg-gray-100 flex items-center justify-center gap-1.5 shadow-sm"
+                onClick={() => setTicketModal(null)}
+                className="py-2.5 px-4 rounded-xl bg-gray-800 hover:bg-gray-900 font-bold text-xs text-white flex items-center justify-center gap-1.5 shadow-sm transition order-last sm:order-first"
+                title="Fermer cette fenêtre"
               >
-                🖨️ Imprimer
+                ✕ Fermer le reçu
               </button>
-              <button
-                type="button"
-                onClick={() => shareLavageWhatsApp(ticketModal)}
-                className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 font-bold text-xs text-white flex items-center justify-center gap-1.5 shadow-sm"
-              >
-                📲 WhatsApp
-              </button>
+              <div className="flex gap-2 flex-1">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="flex-1 py-2.5 rounded-xl border border-gray-300 bg-white font-bold text-xs text-gray-800 hover:bg-gray-100 flex items-center justify-center gap-1.5 shadow-sm"
+                >
+                  🖨️ Imprimer
+                </button>
+                <button
+                  type="button"
+                  onClick={() => shareLavageWhatsApp(ticketModal)}
+                  className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 font-bold text-xs text-white flex items-center justify-center gap-1.5 shadow-sm"
+                >
+                  📲 WhatsApp
+                </button>
+              </div>
             </div>
           </div>
         </div>

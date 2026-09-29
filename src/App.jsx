@@ -77,8 +77,8 @@ export default function App() {
         <Route path="/maintenance" element={<RequireRole roles={["admin", "gerant", "superviseur", "directeur", "maintenance"]}><Maintenance /></RequireRole>} />
 
         {/* Modules de gestion & pilotage */}
-        <Route path="/historique" element={<RequireRole roles={["admin", "gerant", "superviseur", "directeur", "comptable"]}><Historique /></RequireRole>} />
-        <Route path="/rapport" element={<RequireRole roles={["admin", "gerant", "superviseur", "directeur"]}><Rapport /></RequireRole>} />
+        <Route path="/historique" element={<RequireRole roles={["admin", "superviseur", "directeur", "comptable"]}><Historique /></RequireRole>} />
+        <Route path="/rapport" element={<RequireRole roles={["admin", "superviseur", "directeur"]}><Rapport /></RequireRole>} />
         <Route path="/bilan-site" element={<RequireRole roles={["admin", "gerant", "superviseur", "directeur", "comptable"]}><BilanJournalierSite /></RequireRole>} />
         <Route path="/stocks" element={<RequireRole roles={["admin", "gerant", "superviseur", "directeur", "comptable", "stock"]}><Stocks /></RequireRole>} />
         <Route path="/finance" element={<RequireRole roles={["admin", "superviseur", "directeur", "comptable"]}><Finance /></RequireRole>} />
