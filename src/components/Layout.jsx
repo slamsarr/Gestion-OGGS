@@ -9,12 +9,13 @@ import { ROLE_LABELS } from "../lib/permissions";
 const NAV_POLES = [
   {
     id: "pilotage",
-    label: "📊 Pilotage",
+    label: "📊 Pilotage & Cockpit",
     roles: ["superviseur", "directeur", "comptable", "gerant", "admin"],
     items: [
-      { to: "/", label: "Réseau / Dashboard", icon: "📈", roles: ["superviseur", "directeur", "comptable", "gerant", "admin"] },
-      { to: "/rapport", label: "Rapport Journalier", icon: "📋", roles: ["gerant", "superviseur", "directeur", "admin"] },
+      { to: "/gerant", label: "Poste de Commande", icon: "🏪", roles: ["gerant", "admin", "superviseur", "directeur"] },
+      { to: "/", label: "Cockpit Réseau", icon: "📈", roles: ["superviseur", "directeur", "comptable", "admin"] },
       { to: "/bilan-site", label: "Bilan Journalier Site", icon: "📑", roles: ["gerant", "superviseur", "directeur", "comptable", "admin"] },
+      { to: "/rapport", label: "Rapport Journalier", icon: "📋", roles: ["gerant", "superviseur", "directeur", "admin"] },
       { to: "/historique", label: "Historique Rapports", icon: "📁", roles: ["superviseur", "directeur", "comptable", "gerant", "admin"] },
     ],
   },
@@ -23,7 +24,7 @@ const NAV_POLES = [
     label: "⛽ Opérations Terrain",
     roles: ["pompiste", "gerant", "admin", "superviseur", "directeur", "stock", "lavage", "boutique", "maintenance"],
     items: [
-      { to: "/descente", label: "Ma Descente", icon: "⛽", roles: ["pompiste", "gerant", "admin", "superviseur", "directeur"] },
+      { to: "/descente", label: "Descentes Pompistes", icon: "⛽", roles: ["pompiste", "gerant", "admin", "superviseur", "directeur"] },
       { to: "/cuves", label: "Cuves & Dépotage", icon: "🛢️", roles: ["stock", "gerant", "admin", "superviseur", "directeur"] },
       { to: "/stocks", label: "Stocks Produits & Cuves", icon: "📦", roles: ["stock", "gerant", "admin", "superviseur", "directeur"] },
       { to: "/fidelite", label: "Fidélité Clients", icon: "🎁", roles: ["pompiste", "boutique", "lavage", "gerant", "admin", "superviseur", "directeur", "commercial"] },
@@ -37,9 +38,9 @@ const NAV_POLES = [
     label: "💼 Finance & Crédits",
     roles: ["superviseur", "directeur", "comptable", "gerant", "admin", "commercial"],
     items: [
-      { to: "/finance", label: "Finance & Caisse", icon: "💰", roles: ["superviseur", "directeur", "comptable", "admin"] },
+      { to: "/clients-pro", label: "Clients Pro & Bons", icon: "👥", roles: ["gerant", "superviseur", "directeur", "comptable", "admin", "commercial"] },
       { to: "/depenses", label: "Dépenses & Justifs", icon: "🧾", roles: ["gerant", "superviseur", "directeur", "comptable", "admin"] },
-      { to: "/clients-pro", label: "Clients Pro & Crédits", icon: "👥", roles: ["gerant", "superviseur", "directeur", "comptable", "admin", "commercial"] },
+      { to: "/finance", label: "Finance & Caisse", icon: "💰", roles: ["superviseur", "directeur", "comptable", "admin"] },
       { to: "/fournisseurs", label: "Fournisseurs & BL", icon: "🚚", roles: ["superviseur", "directeur", "comptable", "admin"] },
     ],
   },
@@ -50,7 +51,6 @@ const NAV_POLES = [
     items: [
       { to: "/pistolets", label: "Pistolets & Pompes", icon: "🔫", roles: ["superviseur", "directeur", "gerant", "admin"] },
       { to: "/pompistes", label: "Équipe Pompistes", icon: "👷", roles: ["superviseur", "directeur", "gerant", "admin"] },
-      { to: "/stocks", label: "Stocks Récapitulatifs", icon: "📦", roles: ["gerant", "superviseur", "directeur", "comptable", "admin", "stock"] },
       { to: "/parametres", label: "Paramètres Réseau", icon: "⚙️", roles: ["directeur", "admin"] },
     ],
   },

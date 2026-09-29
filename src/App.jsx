@@ -21,6 +21,7 @@ import Maintenance from "./pages/Maintenance";
 import Fidelite from "./pages/Fidelite";
 import BilanJournalierSite from "./pages/BilanJournalierSite";
 import EspaceClientFidelite from "./pages/EspaceClientFidelite";
+import TableauBordGerant from "./pages/TableauBordGerant";
 
 function RequireAuth({ children }) {
   const { session, loading } = useAuth();
@@ -40,6 +41,7 @@ function RequireRole({ roles, children }) {
 function HomeRouter() {
   const { profil } = useAuth();
   const role = profil?.role || "gerant";
+  if (role === "gerant") return <Navigate to="/gerant" replace />;
   if (role === "pompiste") return <Navigate to="/descente" replace />;
   if (role === "lavage") return <Navigate to="/lavage" replace />;
   if (role === "boutique") return <Navigate to="/boutique" replace />;
@@ -64,6 +66,8 @@ export default function App() {
         }
       >
         <Route path="/" element={<HomeRouter />} />
+        {/* Cockpit Gérant de Station */}
+        <Route path="/gerant" element={<RequireRole roles={["admin", "gerant", "superviseur", "directeur"]}><TableauBordGerant /></RequireRole>} />
         {/* Modules opérationnels terrain §37 */}
         <Route path="/descente" element={<RequireRole roles={["admin", "gerant", "superviseur", "directeur", "pompiste"]}><DescentePompiste /></RequireRole>} />
         <Route path="/cuves" element={<RequireRole roles={["admin", "gerant", "superviseur", "directeur", "stock"]}><CuvesCarburant /></RequireRole>} />

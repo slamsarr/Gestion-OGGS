@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import { listProduitsBoutique, createVenteBoutique, listVentesBoutique, updateProduitBoutique } from "../lib/api";
+import { listProduitsBoutique, createVenteBoutique, listVentesBoutique, updateProduitBoutique, deleteVenteBoutique } from "../lib/api";
 import { F, fmtDate, n, T, todayISO } from "../lib/calcul";
 import { Section, Row, Num, Loading } from "../components/ui";
 
 export default function Boutique() {
   const { profil } = useAuth();
   const stationId = profil?.station_id || "st-hann";
+  const isManager = ["gerant", "admin", "superviseur", "directeur"].includes(profil?.role);
   const [produits, setProduits] = useState([]);
   const [ventes, setVentes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -143,6 +144,16 @@ ${lignesStr}
     } else {
       flash("Erreur lors de l'encaissement de la vente");
     }
+  };
+
+  const handleSupprimerVente = async (id) => {
+    if (!isManager) {
+      return flash("Seul le gérant de la station peut annuler une vente soumise.", "error");
+    }
+    if (!confirm("Annuler cette vente et réintégrer les articles en stock ?")) return;
+    await deleteVenteBoutique(id);
+    flash("Vente annulée par le gérant et stock réintégré");
+    loadData();
   };
 
   const handleAjusterStock = async () => {
@@ -487,6 +498,16 @@ ${lignesStr}
                       >
                         📲 WhatsApp
                       </button>
+                      {isManager && (
+                        <button
+                          type="button"
+                          onClick={() => handleSupprimerVente(v.id)}
+                          className="px-2 py-0.5 rounded text-[11px] font-bold bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 shadow-xs"
+                          title="Annuler cette vente et restituer les stocks (Droits Gérant)"
+                        >
+                          ✕ Annuler
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>

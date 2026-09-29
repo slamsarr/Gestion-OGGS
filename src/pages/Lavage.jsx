@@ -7,6 +7,7 @@ import { Section, Row, Num, Loading } from "../components/ui";
 export default function Lavage() {
   const { profil } = useAuth();
   const stationId = profil?.station_id || "st-hann";
+  const isManager = ["gerant", "admin", "superviseur", "directeur"].includes(profil?.role);
   const [tarifs, setTarifs] = useState([]);
   const [prestations, setPrestations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -100,9 +101,12 @@ export default function Lavage() {
   };
 
   const handleSupprimer = async (id) => {
+    if (!isManager) {
+      return flash("Seul le gérant de la station peut annuler une prestation enregistrée.", "error");
+    }
     if (!confirm("Annuler cette prestation ?")) return;
     await deletePrestationLavage(id);
-    flash("Prestation supprimée");
+    flash("Prestation supprimée par le gérant");
     loadData();
   };
 
@@ -306,15 +310,22 @@ export default function Lavage() {
                             </button>
                           </div>
                         </td>
-                        <td className="py-2.5 text-center">
-                          <button
-                            type="button"
-                            onClick={() => handleSupprimer(p.id)}
-                            className="text-red-500 hover:text-red-700 font-bold px-1.5 py-0.5 rounded"
-                          >
-                            ✕
-                          </button>
-                        </td>
+                        {isManager ? (
+                          <td className="py-2.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleSupprimer(p.id)}
+                              className="text-red-500 hover:text-red-700 font-bold px-1.5 py-0.5 rounded hover:bg-red-50 transition-colors"
+                              title="Annuler cette prestation (Droits Gérant)"
+                            >
+                              ✕
+                            </button>
+                          </td>
+                        ) : (
+                          <td className="py-2.5 text-center text-gray-400 text-xs">
+                            ✓
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>

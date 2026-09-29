@@ -60,7 +60,7 @@ export default function CuvesCarburant() {
     observations: "",
   });
 
-  // ── Compartiments Camion Citerne (Multi-cuves & BLs spécifiques) ──
+  // ── Compartiments Camion Citerne (Héritent du BL camion, scellés spécifiques) ──
   const [compartiments, setCompartiments] = useState([
     {
       id: "comp-1",
@@ -68,6 +68,7 @@ export default function CuvesCarburant() {
       produit: "GASOIL",
       cuve_station_id: "cuve-gasoil-1",
       numero_bl: "",
+      numero_scelle: "",
       volume_bl: "15000",
       jauge_camion_avant: "Repère flèche conforme",
       reste_camion_litres: "0",
@@ -82,6 +83,7 @@ export default function CuvesCarburant() {
       produit: "SUPER",
       cuve_station_id: "cuve-super-1",
       numero_bl: "",
+      numero_scelle: "",
       volume_bl: "10000",
       jauge_camion_avant: "Repère flèche conforme",
       reste_camion_litres: "0",
@@ -196,6 +198,16 @@ export default function CuvesCarburant() {
   const totalManquantCamionFcfa = compartimentsCalcules.reduce((s, c) => s + c.valeur_manquant_fcfa, 0);
   const camionConformeGlobal = compartimentsCalcules.every((c) => c.tolerance_ok || c.statut === "EN_ATTENTE");
 
+  const handleUpdateTruckBl = (bl) => {
+    setDepotageForm((prev) => ({ ...prev, numero_bl: bl }));
+    setCompartiments((prev) =>
+      prev.map((c) => ({
+        ...c,
+        numero_bl: bl,
+      }))
+    );
+  };
+
   const handleAddCompartiment = () => {
     const nextNum = compartiments.length + 1;
     const isOdd = nextNum % 2 === 1;
@@ -206,7 +218,8 @@ export default function CuvesCarburant() {
         numero_compartiment: `C${nextNum}`,
         produit: isOdd ? "GASOIL" : "SUPER",
         cuve_station_id: isOdd ? "cuve-gasoil-1" : "cuve-super-1",
-        numero_bl: "",
+        numero_bl: depotageForm.numero_bl || "",
+        numero_scelle: "",
         volume_bl: "5000",
         jauge_camion_avant: "Repère flèche conforme",
         reste_camion_litres: "0",
@@ -276,10 +289,14 @@ export default function CuvesCarburant() {
   const handleValiderDepotage = async (e) => {
     e.preventDefault();
 
-    // Validation des compartiments
+    if (!depotageForm.numero_bl?.trim()) {
+      return flash("Le numéro de BL du camion est obligatoire", "err");
+    }
+
+    // Validation des compartiments (héritage BL camion et scellés spécifiques)
     for (const c of compartimentsCalcules) {
-      if (!c.numero_bl.trim()) {
-        return flash(`Compartiment ${c.numero_compartiment} : Le numéro de BL est obligatoire`, "err");
+      if (!c.numero_scelle?.trim()) {
+        return flash(`Compartiment ${c.numero_compartiment} : Veuillez saisir le numéro de scellé / plomb de sécurité`, "err");
       }
       if (c.volume_bl_num <= 0) {
         return flash(`Compartiment ${c.numero_compartiment} : Le volume BL doit être > 0`, "err");
@@ -293,7 +310,7 @@ export default function CuvesCarburant() {
       ...depotageForm,
       station_id: stationId,
       produit: Array.from(new Set(compartimentsCalcules.map((c) => c.produit))).join(" / "),
-      numero_bl: compartimentsCalcules.map((c) => c.numero_bl).filter(Boolean).join(", "),
+      numero_bl: depotageForm.numero_bl.trim(),
       volume_bl: totalVolumeBlCamion,
       volume_decharge_reel: totalVolumeRecuCamion,
       ecart_litres: totalEcartCamionL,
@@ -603,7 +620,24 @@ export default function CuvesCarburant() {
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-blue-900 mb-1">
+                  N° BL Camion Citerne *
+                </label>
+                <input
+                  type="text"
+                  placeholder="ex: BL-TOT-99201"
+                  value={depotageForm.numero_bl}
+                  onChange={(e) => handleUpdateTruckBl(e.target.value)}
+                  className="w-full text-xs border rounded p-2 uppercase font-mono font-bold text-blue-950 bg-blue-50/50"
+                  style={{ borderColor: "#2563EB" }}
+                  required
+                />
+                <span className="text-[10px] text-blue-700 block mt-0.5">
+                  Hérité par toutes les cuves du camion
+                </span>
+              </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">Date de dépotage *</label>
                 <input
@@ -869,9 +903,12 @@ export default function CuvesCarburant() {
                         >
                           {c.produit}
                         </span>
-                        {c.numero_bl && (
-                          <span className="text-[11px] font-mono text-gray-600 bg-white px-2 py-0.5 rounded border">
-                            BL: {c.numero_bl}
+                        <span className="text-[11px] font-mono text-blue-900 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                          BL: {c.numero_bl || depotageForm.numero_bl || "--"}
+                        </span>
+                        {c.numero_scelle && (
+                          <span className="text-[11px] font-mono text-amber-900 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                            Scellé: {c.numero_scelle}
                           </span>
                         )}
                       </div>
@@ -910,11 +947,11 @@ export default function CuvesCarburant() {
 
                     {/* Formulaire interne du compartiment */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      {/* Sous-bloc 1 : Document BL & Affectation Cuve */}
+                      {/* Sous-bloc 1 : Document BL (Hérité) & Scellé Compartiment */}
                       <div className="bg-white p-3 rounded-lg border space-y-2 shadow-xs" style={{ borderColor: T.line }}>
-                        <div className="text-[11px] font-bold text-gray-700 uppercase flex items-center gap-1">
-                          <span>📋</span>
-                          <span>Bon de Livraison (BL)</span>
+                        <div className="text-[11px] font-bold text-gray-700 uppercase flex items-center justify-between">
+                          <span className="flex items-center gap-1">📋 Bon de Livraison & Scellé</span>
+                          <span className="text-[10px] text-blue-700 font-semibold bg-blue-50 px-1.5 py-0.2 rounded">BL Hérité</span>
                         </div>
                         <div>
                           <label className="block text-[11px] text-gray-600 mb-0.5">Produit *</label>
@@ -928,17 +965,28 @@ export default function CuvesCarburant() {
                             <option value="SUPER">SUPER (Cuve 2 - 20 000 L)</option>
                           </select>
                         </div>
+                        <div className="p-2 rounded bg-blue-50/50 border border-blue-200">
+                          <div className="text-[10px] text-blue-800 font-bold uppercase">N° BL Camion (Hérité)</div>
+                          <div className="text-xs font-mono font-black text-blue-950">
+                            {c.numero_bl || depotageForm.numero_bl || "(Saisir le BL camion ci-dessus)"}
+                          </div>
+                        </div>
                         <div>
-                          <label className="block text-[11px] text-gray-600 mb-0.5">N° BL Spécifique *</label>
+                          <label className="block text-[11px] font-bold text-amber-950 mb-0.5">
+                            🔐 N° Scellé(s) / Plombs du Compartiment *
+                          </label>
                           <input
                             type="text"
-                            placeholder="ex: BL-8891-C1"
-                            value={c.numero_bl}
-                            onChange={(e) => handleUpdateCompartiment(c.id, "numero_bl", e.target.value)}
-                            className="w-full text-xs border rounded p-1.5 uppercase font-mono font-semibold"
-                            style={{ borderColor: T.line }}
+                            placeholder="ex: SC-10291 (Dôme) / SC-10292 (Vanne)"
+                            value={c.numero_scelle || ""}
+                            onChange={(e) => handleUpdateCompartiment(c.id, "numero_scelle", e.target.value)}
+                            className="w-full text-xs border rounded p-1.5 uppercase font-mono font-bold text-amber-950 bg-amber-50/40 focus:ring-1 focus:ring-amber-500"
+                            style={{ borderColor: "#D97706" }}
                             required
                           />
+                          <span className="text-[10px] text-gray-500 mt-0.5 block">
+                            Scellé(s) unique(s) à ce compartiment citerne
+                          </span>
                         </div>
                         <div>
                           <label className="block text-[11px] text-gray-600 mb-0.5">Volume déclaré BL (Litres) *</label>
@@ -1444,6 +1492,7 @@ export default function CuvesCarburant() {
                         <th className="p-1.5 text-left">Comp.</th>
                         <th className="p-1.5 text-left">Produit</th>
                         <th className="p-1.5 text-left">N° BL</th>
+                        <th className="p-1.5 text-left">N° Scellé(s)</th>
                         <th className="p-1.5 text-right">Volume BL (L)</th>
                         <th className="p-1.5 text-right">Reçu (L)</th>
                         <th className="p-1.5 text-right">Écart (L / %)</th>
@@ -1469,7 +1518,8 @@ export default function CuvesCarburant() {
                                 {c.produit}
                               </span>
                             </td>
-                            <td className="p-1.5 font-mono text-gray-700">{c.numero_bl || "--"}</td>
+                            <td className="p-1.5 font-mono text-gray-700">{c.numero_bl || pvModal.numero_bl || "--"}</td>
+                            <td className="p-1.5 font-mono text-amber-900 font-semibold">{c.numero_scelle || "--"}</td>
                             <td className="p-1.5 text-right tabular font-semibold">{F(volBl)}</td>
                             <td className="p-1.5 text-right tabular font-bold text-blue-900">{F(volRecu)}</td>
                             <td className={`p-1.5 text-right tabular font-bold ${ecartL >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
@@ -1496,7 +1546,7 @@ export default function CuvesCarburant() {
                     </tbody>
                     <tfoot className="bg-slate-50 border-t-2 border-slate-300">
                       <tr>
-                        <td colSpan={3} className="p-2 font-black text-gray-900 text-xs uppercase">TOTAL CONVOI CITERNE</td>
+                        <td colSpan={4} className="p-2 font-black text-gray-900 text-xs uppercase">TOTAL CONVOI CITERNE</td>
                         <td className="p-2 text-right font-black tabular text-sm">{F(pvModal.volume_bl)}</td>
                         <td className="p-2 text-right font-black tabular text-sm text-blue-900">{F(pvModal.volume_decharge_reel)}</td>
                         <td className={`p-2 text-right font-black tabular text-sm ${pvModal.ecart_litres >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
@@ -1604,7 +1654,11 @@ export default function CuvesCarburant() {
             <div className="mt-4 flex gap-2">
               <a
                 href={`https://wa.me/?text=${encodeURIComponent(
-                  `*RAPPORT DE DÉPOTAGE CARBURANT*\nStation: ${profil?.station_nom || "Hann Maristes"}\nDate: ${pvModal.date}\nN° BL: ${pvModal.numero_bl}\nProduit: ${pvModal.produit}\nVolume BL: ${F(pvModal.volume_bl)} L\nVolume Reçu: ${F(pvModal.volume_decharge_reel)} L\nÉcart: ${pvModal.ecart_litres > 0 ? "+" : ""}${F(pvModal.ecart_litres)} L (${pvModal.ecart_pourcentage}%)\nStatut: ${pvModal.statut}\nVisa: ${pvModal.responsable_reception}`
+                  `*RAPPORT DE DÉPOTAGE CARBURANT*\nStation: ${profil?.station_nom || "Hann Maristes"}\nDate: ${pvModal.date}\nN° BL Camion: ${pvModal.numero_bl || "--"}\n${
+                    Array.isArray(pvModal.compartiments) && pvModal.compartiments.length > 0
+                      ? `Compartiments: ${pvModal.compartiments.map((c) => `C${c.numero_compartiment} [${c.produit}] (Scellé: ${c.numero_scelle || "--"}): ${F(c.volume_decharge_cuve || 0)}L`).join(", ")}\n`
+                      : `Produit: ${pvModal.produit}\n`
+                  }Volume BL: ${F(pvModal.volume_bl)} L\nVolume Reçu: ${F(pvModal.volume_decharge_reel)} L\nÉcart: ${pvModal.ecart_litres > 0 ? "+" : ""}${F(pvModal.ecart_litres)} L (${pvModal.ecart_pourcentage}%)\nStatut: ${pvModal.statut}\nVisa: ${pvModal.responsable_reception || "Le Gérant"}`
                 )}`}
                 target="_blank"
                 rel="noreferrer"

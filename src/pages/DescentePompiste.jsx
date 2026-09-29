@@ -36,7 +36,11 @@ export function normalizeDescente(d) {
       : [];
 
   const bons = Array.isArray(d.bons)
-    ? d.bons
+    ? d.bons.map((b) => ({
+        ...b,
+        volume_litres: n(b.volume_litres ?? b.litres ?? b.volume ?? 0),
+        montant: n(b.montant),
+      }))
     : d.encaissements?.credit_client > 0
     ? [
         {
@@ -45,6 +49,7 @@ export function normalizeDescente(d) {
           client_nom: d.client_nom || d.client_credit || "Client Professionnel",
           numero_bon: "BON-01",
           date: d.date,
+          volume_litres: 0,
           montant: d.encaissements.credit_client,
           observation: d.commentaire || "",
         },
@@ -57,6 +62,7 @@ export function normalizeDescente(d) {
   const totalLubrifiants = d.total_lubrifiants ?? lubrifiants.reduce((acc, l) => acc + n(l.montant), 0);
   const totalCaisse = d.total_caisse ?? (totalCarburant + totalLubrifiants);
   const totalBons = d.total_bons ?? bons.reduce((acc, b) => acc + n(b.montant), 0);
+  const totalBonsLitres = d.total_bons_litres ?? bons.reduce((acc, b) => acc + n(b.volume_litres), 0);
   const remiseCuveValeur = n(d.remise_cuve_valeur ?? d.remise_en_cuve);
   const remiseCuveLitres = n(d.remise_cuve_litres);
   const depensesValeur = n(d.depenses_valeur ?? d.depenses_montant ?? d.depense ?? d.depenses);
@@ -72,6 +78,7 @@ export function normalizeDescente(d) {
     total_lubrifiants: totalLubrifiants,
     total_caisse: totalCaisse,
     total_bons: totalBons,
+    total_bons_litres: totalBonsLitres,
     remise_cuve_valeur: remiseCuveValeur,
     remise_cuve_litres: remiseCuveLitres,
     remise_cuve_motif: d.remise_cuve_motif || "",
@@ -97,6 +104,7 @@ export default function DescentePompiste() {
   const { profil } = useAuth();
   const stationId = profil?.station_id || "st-hann";
   const stationCode = profil?.stations?.code || stationId.replace("st-", "").toUpperCase();
+  const isManager = ["gerant", "admin", "superviseur", "directeur"].includes(profil?.role);
   const [ref, setRef] = useState(null);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState("");
@@ -137,6 +145,8 @@ export default function DescentePompiste() {
   const [bonClientCode, setBonClientCode] = useState("");
   const [bonNumero, setBonNumero] = useState("");
   const [bonDate, setBonDate] = useState(todayISO());
+  const [bonProduit, setBonProduit] = useState("GASOIL");
+  const [bonLitres, setBonLitres] = useState("");
   const [bonMontant, setBonMontant] = useState("");
   const [bonObservation, setBonObservation] = useState("");
 
@@ -435,6 +445,8 @@ export default function DescentePompiste() {
     setBonClientCode(clientsList[0]?.code || "");
     setBonNumero("");
     setBonDate(date);
+    setBonProduit("GASOIL");
+    setBonLitres("");
     setBonMontant("");
     setBonObservation("");
     setShowBonModal(true);
@@ -445,9 +457,29 @@ export default function DescentePompiste() {
     setBonClientCode(bon.client_code);
     setBonNumero(bon.numero_bon);
     setBonDate(bon.date || date);
+    setBonProduit(bon.produit || "GASOIL");
+    setBonLitres(bon.volume_litres != null && bon.volume_litres > 0 ? bon.volume_litres.toString() : "");
     setBonMontant(bon.montant?.toString() || "");
     setBonObservation(bon.observation || "");
     setShowBonModal(true);
+  };
+
+  const handleLitresChange = (litVal) => {
+    setBonLitres(litVal);
+    const lit = n(litVal);
+    if (lit > 0) {
+      const prix = prixDuJour(ref?.prix || [], bonProduit, bonDate || date) || 755;
+      setBonMontant(Math.round(lit * prix).toString());
+    }
+  };
+
+  const handleProduitChange = (prodVal) => {
+    setBonProduit(prodVal);
+    const lit = n(bonLitres);
+    if (lit > 0) {
+      const prix = prixDuJour(ref?.prix || [], prodVal, bonDate || date) || 755;
+      setBonMontant(Math.round(lit * prix).toString());
+    }
   };
 
   const handleSaveBon = (e) => {
@@ -455,9 +487,12 @@ export default function DescentePompiste() {
     if (!bonClientCode) return flash("Veuillez sélectionner un client", "error");
     if (!bonNumero.trim()) return flash("Le numéro ou référence du bon est obligatoire", "error");
     const m = n(bonMontant);
-    if (m <= 0) return flash("Le montant du bon doit être supérieur à 0 FCFA", "error");
+    const lit = n(bonLitres);
+    if (m <= 0 && lit <= 0) return flash("Veuillez renseigner le litrage ou le montant du bon", "error");
 
     const clientObj = clientsList.find((c) => c.code === bonClientCode) || { nom: bonClientCode };
+    const prix = prixDuJour(ref?.prix || [], bonProduit, bonDate || date) || 755;
+    const finalMontant = m > 0 ? m : Math.round(lit * prix);
 
     if (editingBonId) {
       setBons((prev) =>
@@ -469,7 +504,9 @@ export default function DescentePompiste() {
                 client_nom: clientObj.nom,
                 numero_bon: bonNumero.trim().toUpperCase(),
                 date: bonDate || date,
-                montant: m,
+                produit: bonProduit,
+                volume_litres: lit,
+                montant: finalMontant,
                 observation: bonObservation.trim(),
               }
             : b
@@ -483,7 +520,9 @@ export default function DescentePompiste() {
         client_nom: clientObj.nom,
         numero_bon: bonNumero.trim().toUpperCase(),
         date: bonDate || date,
-        montant: m,
+        produit: bonProduit,
+        volume_litres: lit,
+        montant: finalMontant,
         observation: bonObservation.trim(),
       };
       setBons([...bons, nouveauBon]);
@@ -503,6 +542,10 @@ export default function DescentePompiste() {
   const handleEditerDescente = (d) => {
     const norm = normalizeDescente(d);
     if (!norm) return;
+
+    if (norm.statut === "TERMINEE" && !isManager) {
+      return flash("Cette descente a déjà été clôturée et soumise. Les modifications sont verrouillées pour le pompiste.", "error");
+    }
 
     setEditingDescenteId(norm.id);
     setDate(norm.date || todayISO());
@@ -532,6 +575,8 @@ export default function DescentePompiste() {
         client_nom: b.client_nom,
         numero_bon: b.numero_bon,
         date: b.date || norm.date,
+        produit: b.produit || "GASOIL",
+        volume_litres: n(b.volume_litres || b.litres || 0),
         montant: n(b.montant),
         observation: b.observation || "",
       }))
@@ -579,6 +624,8 @@ export default function DescentePompiste() {
     setEditingDescenteId(null);
     setDate(todayISO());
     setBons([]);
+    setBonLitres("");
+    setBonProduit("GASOIL");
     setLubrifiants([]);
     setRemiseCuveValeur("");
     setRemiseCuveLitres("");
@@ -626,6 +673,7 @@ export default function DescentePompiste() {
   const totalLubrifiants = lubrifiants.reduce((acc, l) => acc + n(l.montant), 0);
   const totalCaissePompiste = totalCarburant + totalLubrifiants;
   const totalBons = bons.reduce((acc, b) => acc + n(b.montant), 0);
+  const totalBonsLitres = bons.reduce((acc, b) => acc + n(b.volume_litres), 0);
   const totalRemiseCuve = n(remiseCuveValeur);
   const totalDepensesPompiste = n(depensesValeur);
   const netTheoriqueAVerser = Math.max(0, totalCaissePompiste - totalRemiseCuve);
@@ -698,9 +746,12 @@ export default function DescentePompiste() {
       // Multi-bons
       bons: bons.map((b) => ({
         ...b,
+        produit: b.produit || "GASOIL",
+        volume_litres: n(b.volume_litres),
         montant: n(b.montant),
       })),
       total_bons: totalBons,
+      total_bons_litres: totalBonsLitres,
       // Encaissements
       encaissements: {
         especes: n(especes),
@@ -743,12 +794,14 @@ export default function DescentePompiste() {
         for (const b of bons) {
           if (n(b.montant) > 0 && b.client_code) {
             try {
+              const litStr = n(b.volume_litres) > 0 ? ` (${F(b.volume_litres)} L)` : "";
+              const obsStr = b.observation ? " - " + b.observation : "";
               await saveOperationCredit({
                 client_code: b.client_code,
                 station_id: stationId,
                 date_op: b.date || date,
-                matricule: `Bon ${b.numero_bon}${b.observation ? " - " + b.observation : ""}`,
-                volume_l: 0,
+                matricule: `Bon ${b.numero_bon}${litStr}${obsStr}`,
+                volume_l: n(b.volume_litres),
                 valeur_cons: n(b.montant),
                 depot: 0,
               });
@@ -807,9 +860,11 @@ export default function DescentePompiste() {
     if (data.bons && data.bons.length > 0) {
       bonsLines = "\n\n📝 *BONS D'ENCAISSEMENT CLIENTS :*";
       data.bons.forEach((b) => {
-        bonsLines += `\n  • ${b.client_nom || b.client_code} (N° ${b.numero_bon}) : *${F(b.montant)} FCFA*`;
+        const litText = n(b.volume_litres) > 0 ? ` (${F(b.volume_litres)} L)` : "";
+        bonsLines += `\n  • ${b.client_nom || b.client_code} (N° ${b.numero_bon})${litText} : *${F(b.montant)} FCFA*`;
       });
-      bonsLines += `\n👉 *TOTAL BONS :* *${F(data.total_bons || data.encaissements?.credit_client || 0)} FCFA*`;
+      const totLitText = n(data.total_bons_litres) > 0 ? ` (${F(data.total_bons_litres)} L)` : "";
+      bonsLines += `\n👉 *TOTAL BONS :* *${F(data.total_bons || data.encaissements?.credit_client || 0)} FCFA*${totLitText}`;
     }
 
     let depensesLines = "";
@@ -982,14 +1037,27 @@ export default function DescentePompiste() {
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => handleEditerDescente(d)}
-                        className="px-2.5 py-1 rounded text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white shadow-xs flex items-center gap-1 transition-colors"
-                        title="Corriger ou modifier cette descente"
-                      >
-                        ✏️ Modifier
-                      </button>
+                      {d.statut !== "TERMINEE" || isManager ? (
+                        <button
+                          type="button"
+                          onClick={() => handleEditerDescente(d)}
+                          className={`px-2.5 py-1 rounded text-xs font-bold shadow-xs flex items-center gap-1 transition-colors ${
+                            d.statut === "TERMINEE"
+                              ? "bg-purple-700 hover:bg-purple-800 text-white"
+                              : "bg-amber-500 hover:bg-amber-600 text-white"
+                          }`}
+                          title={d.statut === "TERMINEE" ? "Corriger cette descente (Droits Gérant)" : "Reprendre et modifier ce quart en cours"}
+                        >
+                          {d.statut === "TERMINEE" ? "✏️ Corriger (Gérant)" : "✏️ Modifier"}
+                        </button>
+                      ) : (
+                        <span
+                          className="px-2 py-1 rounded text-[11px] font-semibold bg-gray-100 text-gray-500 border border-gray-200 flex items-center gap-1 cursor-default"
+                          title="Cette descente est validée et verrouillée pour le pompiste"
+                        >
+                          🔒 Clôturée
+                        </span>
+                      )}
                       <button
                         type="button"
                         onClick={() => setTicketModal(d)}
@@ -1132,12 +1200,12 @@ export default function DescentePompiste() {
               })}
             </div>
 
-            {/* Synthèse TOTAL CAISSE POMPISTE */}
+            {/* Synthèse TOTAL VENTES POMPES (CARBURANT) */}
             <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
                   <div className="text-xs font-bold text-blue-950 uppercase tracking-wide">
-                    TOTAL CAISSE POMPISTE
+                    TOTAL VENTES POMPES (CARBURANT)
                   </div>
                   <div className="text-[11px] text-blue-800 flex flex-wrap gap-2 mt-0.5">
                     {pompes.map((p) => (
@@ -1148,8 +1216,8 @@ export default function DescentePompiste() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <span className="text-[10px] text-blue-700 block font-medium">Cumul {F(totalVolumeVendu)} Litres</span>
-                  <span className="text-lg font-black text-blue-950 tabular">{F(totalCaissePompiste)} FCFA</span>
+                  <span className="text-[10px] text-blue-700 block font-medium">Cumul {F(totalVolumeVendu)} Litres Carburant</span>
+                  <span className="text-lg font-black text-blue-950 tabular">{F(totalCarburant)} FCFA</span>
                 </div>
               </div>
             </div>
@@ -1368,8 +1436,9 @@ export default function DescentePompiste() {
                       <th className="py-2 px-3">Client</th>
                       <th className="py-2 px-3">N° Bon</th>
                       <th className="py-2 px-3">Date</th>
-                      <th className="py-2 px-3">Observation</th>
+                      <th className="py-2 px-3 text-right">Litrage</th>
                       <th className="py-2 px-3 text-right">Montant</th>
+                      <th className="py-2 px-3">Observation</th>
                       <th className="py-2 px-3 text-center">Action</th>
                     </tr>
                   </thead>
@@ -1382,10 +1451,13 @@ export default function DescentePompiste() {
                         </td>
                         <td className="py-2 px-3 font-mono font-bold text-amber-900">{b.numero_bon}</td>
                         <td className="py-2 px-3 text-gray-600">{fmtDate(b.date)}</td>
-                        <td className="py-2 px-3 text-gray-500">{b.observation || "-"}</td>
+                        <td className="py-2 px-3 text-right font-black text-blue-900 tabular">
+                          {n(b.volume_litres) > 0 ? `${F(b.volume_litres)} L` : "—"}
+                        </td>
                         <td className="py-2 px-3 text-right font-extrabold text-gray-900 tabular">
                           {F(b.montant)} FCFA
                         </td>
+                        <td className="py-2 px-3 text-gray-500">{b.observation || "-"}</td>
                         <td className="py-2 px-3 text-center">
                           <div className="flex items-center justify-center gap-1.5">
                             <button
@@ -1419,7 +1491,7 @@ export default function DescentePompiste() {
                   TOTAL BONS D'ENCAISSEMENT
                 </span>
                 <span className="text-[11px] text-amber-800 block">
-                  {bons.length} bon(s) enregistré(s)
+                  {bons.length} bon(s) enregistré(s) · <strong>{F(totalBonsLitres)} Litres Carburant</strong>
                 </span>
               </div>
               <span className="text-base font-black text-amber-950 tabular">{F(totalBons)} FCFA</span>
@@ -1899,6 +1971,32 @@ export default function DescentePompiste() {
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-gray-700 font-semibold mb-1">Carburant</label>
+                  <select
+                    value={bonProduit}
+                    onChange={(e) => handleProduitChange(e.target.value)}
+                    className="w-full text-xs border rounded px-2.5 py-1.5 bg-white font-bold"
+                    style={{ borderColor: T.line }}
+                  >
+                    <option value="GASOIL">GASOIL (755 F/L)</option>
+                    <option value="SUPER">SUPER (990 F/L)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-blue-900 font-bold mb-1">Litrage (Litres) *</label>
+                  <input
+                    type="number"
+                    placeholder="ex: 50"
+                    value={bonLitres}
+                    onChange={(e) => handleLitresChange(e.target.value)}
+                    className="w-full text-xs font-mono font-bold border rounded px-2.5 py-1.5 text-blue-900 bg-blue-50/50"
+                    style={{ borderColor: "#2563EB" }}
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="block text-gray-700 font-bold mb-1">Montant du Bon (FCFA) *</label>
                 <input
@@ -1910,6 +2008,9 @@ export default function DescentePompiste() {
                   style={{ borderColor: "#D97706" }}
                   required
                 />
+                <span className="text-[10px] text-gray-400 mt-0.5 block">
+                  Calculé automatiquement depuis le litrage, modifiable manuellement si besoin.
+                </span>
               </div>
 
               <div>
@@ -2107,7 +2208,10 @@ export default function DescentePompiste() {
                     <div className="font-semibold text-gray-700">Détail des bons :</div>
                     {ticketModal.bons.map((b) => (
                       <div key={b.id || b.numero_bon} className="flex justify-between pl-1">
-                        <span>• {b.client_nom || b.client_code} ({b.numero_bon})</span>
+                        <span>
+                          • {b.client_nom || b.client_code} ({b.numero_bon})
+                          {n(b.volume_litres) > 0 ? ` [${F(b.volume_litres)} L]` : ""}
+                        </span>
                         <span className="tabular font-medium">{F(b.montant)} F</span>
                       </div>
                     ))}
@@ -2156,13 +2260,23 @@ export default function DescentePompiste() {
 
             {/* Boutons d'action */}
             <div className="p-3 bg-gray-50 border-t flex flex-col sm:flex-row gap-2">
-              <button
-                type="button"
-                onClick={() => handleEditerDescente(ticketModal)}
-                className="py-2.5 px-3 rounded-xl bg-amber-500 hover:bg-amber-600 font-bold text-xs text-white flex items-center justify-center gap-1.5 shadow-sm"
-              >
-                ✏️ Corriger cette descente
-              </button>
+              {ticketModal.statut !== "TERMINEE" || isManager ? (
+                <button
+                  type="button"
+                  onClick={() => handleEditerDescente(ticketModal)}
+                  className={`py-2.5 px-3 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-1.5 shadow-sm ${
+                    ticketModal.statut === "TERMINEE"
+                      ? "bg-purple-700 hover:bg-purple-800"
+                      : "bg-amber-500 hover:bg-amber-600"
+                  }`}
+                >
+                  {ticketModal.statut === "TERMINEE" ? "✏️ Corriger cette descente (Gérant)" : "✏️ Corriger ce brouillon"}
+                </button>
+              ) : (
+                <div className="py-2 px-3 rounded-xl bg-gray-100 border border-gray-200 text-xs font-semibold text-gray-600 flex items-center justify-center gap-1.5">
+                  🔒 Descente Clôturée (Verrouillée)
+                </div>
+              )}
               <div className="flex gap-2 flex-1">
                 <button
                   type="button"

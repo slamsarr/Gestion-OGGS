@@ -1,6 +1,6 @@
 import { db, ensureLocalSeed, getLocalRef, isCloudConfigured, setLocalRef } from "./db";
 import { getSupabase } from "./supabase";
-import { calculer, n, todayISO, uuid } from "./calcul";
+import { calculer, n, todayISO, uuid, F } from "./calcul";
 import { referentielFromSeed } from "./seed";
 import {
   TABLES_CLOUD_METIER,
@@ -1169,15 +1169,102 @@ export { referentielFromSeed };
 
 export const saveDepense = createDepense;
 
+export async function syncBonsFromDescente(descenteRow) {
+  if (!descenteRow || !Array.isArray(descenteRow.bons) || descenteRow.bons.length === 0) return;
+  try {
+    for (const b of descenteRow.bons) {
+      // Ne plus sauter les bons sans client — on les garde avec code DIVERS
+      const clientCode = b.client_code || "DIVERS";
+      const numeroBon = b.numero_bon || `BON-${(descenteRow.id || "x").slice(0, 6)}-${Date.now()}`;
+      const bonId = b.id || `bon-${clientCode}-${numeroBon}`;
+      const existing = await db.bons_carburant.get(bonId);
+      const mt = n(b.montant);
+      // Ignorer les vrais bons vides (montant 0 ET pas de numéro bon)
+      if (mt <= 0 && !b.numero_bon) continue;
+      const regle = n(existing?.montant_regle ?? b.montant_regle ?? 0);
+      const reste = Math.max(0, mt - regle);
+      const statut = regle >= mt && mt > 0 ? "REGLE" : regle > 0 ? "PARTIELLEMENT_REGLE" : "NON_REGLE";
+
+      const row = {
+        id: bonId,
+        station_id: descenteRow.station_id || "st-hann",
+        client_code: clientCode,
+        client_nom: b.client_nom || b.client_code || "Client divers",
+        numero_bon: numeroBon,
+        immatriculation: b.immatriculation || b.vehicule || "",
+        observations: b.observation || b.observations || "",
+        date: b.date || descenteRow.date || todayISO(),
+        produit: b.produit || "GASOIL",
+        volume_litres: n(b.volume_litres || b.litres || 0),
+        prix_unitaire: n(b.prix_unitaire || 0),
+        montant: mt,
+        montant_regle: regle,
+        reste_a_payer: reste,
+        statut_paiement: existing?.statut_paiement || statut,
+        historique_reglements: existing?.historique_reglements || [],
+        pompiste_id: descenteRow.pompiste_id || "",
+        pompiste_nom: descenteRow.pompiste_nom || "Pompiste",
+        descente_id: descenteRow.id,
+        descente_numero: descenteRow.numero || "",
+        created_at: b.created_at || descenteRow.created_at || new Date().toISOString(),
+      };
+      await db.bons_carburant.put(row);
+    }
+  } catch (err) {
+    console.warn("Notice: syncBonsFromDescente", err);
+  }
+}
+
+/** Vue gérant : liste TOUS les bons de la station (toutes descentes confondues) */
+export async function listTousBonsStation(stationId) {
+  await ensureLocalSeed();
+  // Re-synchroniser depuis toutes les descentes pour s'assurer d'avoir les bons à jour
+  const allDescentes = await db.descentes.toArray();
+  for (const d of allDescentes) {
+    if (!stationId || d.station_id === stationId) {
+      if (Array.isArray(d.bons) && d.bons.length > 0) {
+        await syncBonsFromDescente(d);
+      }
+    }
+  }
+  let rows = await db.bons_carburant.toArray();
+  if (stationId) rows = rows.filter((b) => !b.station_id || b.station_id === stationId);
+  return rows.sort(
+    (a, b) => (b.date || "").localeCompare(a.date || "") || (b.created_at || "").localeCompare(a.created_at || "")
+  );
+}
+
+/** Gérant : attribuer un bon DIVERS à un client identifié */
+export async function attribuerBonClient(bonId, clientCode, clientNom) {
+  await ensureLocalSeed();
+  const bon = await db.bons_carburant.get(bonId);
+  if (!bon) return { error: "Bon introuvable" };
+  const updated = {
+    ...bon,
+    client_code: clientCode,
+    client_nom: clientNom || clientCode,
+    attribue_par: "gerant",
+    maj_le: new Date().toISOString(),
+  };
+  await db.bons_carburant.put(updated);
+  return { ok: true };
+}
+
 // ── VAGUE 2 : CRUD Descentes pompistes (§2 & §37) ──
 export async function createDescente(d) {
   const res = await saveOpRow("descentes", { ...d, statut: d.statut || "EN_COURS" });
+  if (res.row) {
+    await syncBonsFromDescente(res.row);
+  }
   return { ok: true, descente: res.row, pending: res.pending };
 }
 
 export async function updateDescente(id, patch) {
   const existing = (await db.descentes.get(id)) || {};
   const res = await saveOpRow("descentes", { ...existing, ...patch, id });
+  if (res.row) {
+    await syncBonsFromDescente(res.row);
+  }
   return { ok: true, descente: res.row, pending: res.pending };
 }
 
@@ -1191,6 +1278,137 @@ export async function listDescentes(stationId, date) {
 
 export async function getDescente(id) {
   return db.descentes.get(id);
+}
+
+// ── VAGUE 2++ : Suivi & Règlements des Bons de Carburant (Gérant) ──
+
+export async function listBonsClient(clientCode, stationId) {
+  await ensureLocalSeed();
+  if (!clientCode) return [];
+
+  // Récupérer les bons enregistrés dans bons_carburant
+  let rows = await db.bons_carburant.where("client_code").equals(clientCode).toArray();
+
+  // Rétrocompatibilité et synchronisation automatique depuis les descentes existantes
+  if (rows.length === 0) {
+    const allDescentes = await db.descentes.toArray();
+    for (const d of allDescentes) {
+      if (Array.isArray(d.bons) && d.bons.some((b) => b.client_code === clientCode)) {
+        await syncBonsFromDescente(d);
+      }
+    }
+    rows = await db.bons_carburant.where("client_code").equals(clientCode).toArray();
+  }
+
+  // Filtrer par station si demandé
+  if (stationId) {
+    rows = rows.filter((b) => !b.station_id || b.station_id === stationId);
+  }
+
+  return rows.sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.created_at || "").localeCompare(a.created_at || ""));
+}
+
+export async function saveBonCarburant(bon) {
+  await ensureLocalSeed();
+  const id = bon.id || uuid();
+  const mt = n(bon.montant);
+  const regle = n(bon.montant_regle || 0);
+  const reste = Math.max(0, mt - regle);
+  const statut = regle >= mt && mt > 0 ? "REGLE" : regle > 0 ? "PARTIELLEMENT_REGLE" : "NON_REGLE";
+
+  const row = {
+    ...bon,
+    id,
+    montant: mt,
+    montant_regle: regle,
+    reste_a_payer: reste,
+    statut_paiement: bon.statut_paiement || statut,
+    created_at: bon.created_at || new Date().toISOString(),
+  };
+
+  await db.bons_carburant.put(row);
+  return { ok: true, bon: row };
+}
+
+export async function reglerBonsClient({
+  client_code,
+  station_id,
+  date,
+  montant_total_recu,
+  mode_paiement,
+  reference,
+  allocations = [],
+  operateur,
+}) {
+  await ensureLocalSeed();
+  const mtRecu = n(montant_total_recu);
+  if (mtRecu <= 0) return { error: "Le montant reçu doit être supérieur à zéro" };
+  if (!client_code) return { error: "Code client requis" };
+
+  const bonsModifies = [];
+  const recapNomsBons = [];
+
+  for (const alloc of allocations) {
+    const bonId = alloc.bon_id;
+    const aVerser = n(alloc.montant_alloue);
+    if (aVerser <= 0) continue;
+
+    const bon = await db.bons_carburant.get(bonId);
+    if (!bon) continue;
+
+    const ancienRegle = n(bon.montant_regle || 0);
+    const nouveauRegle = ancienRegle + aVerser;
+    const reste = Math.max(0, n(bon.montant) - nouveauRegle);
+    const nouveauStatut = reste <= 0 ? "REGLE" : "PARTIELLEMENT_REGLE";
+
+    const reglementHistorique = {
+      date: date || todayISO(),
+      montant: aVerser,
+      mode: mode_paiement || "ESPECES",
+      reference: reference || "",
+      operateur: operateur || "Gérant",
+      created_at: new Date().toISOString(),
+    };
+
+    const historique = Array.isArray(bon.historique_reglements)
+      ? [...bon.historique_reglements, reglementHistorique]
+      : [reglementHistorique];
+
+    const updated = {
+      ...bon,
+      montant_regle: nouveauRegle,
+      reste_a_payer: reste,
+      statut_paiement: nouveauStatut,
+      historique_reglements: historique,
+      maj_le: new Date().toISOString(),
+    };
+
+    await db.bons_carburant.put(updated);
+    bonsModifies.push(updated);
+    recapNomsBons.push(`${bon.numero_bon || bonId} (${F(aVerser)} F)`);
+  }
+
+  // Enregistrer l'opération de crédit (dépôt qui compense la consommation)
+  const detailBons = recapNomsBons.length > 0 ? ` [Bons: ${recapNomsBons.join(", ")}]` : "";
+  const refText = reference ? ` - Réf: ${reference}` : "";
+  const matricule = `Règlement ${mode_paiement || "ESPECES"}${refText}${detailBons}`;
+
+  await saveOperationCredit({
+    client_code,
+    station_id: station_id || "st-hann",
+    date_op: date || todayISO(),
+    matricule,
+    volume_l: 0,
+    valeur_cons: 0,
+    depot: mtRecu,
+  });
+
+  return {
+    ok: true,
+    montant_recu: mtRecu,
+    bons_modifies: bonsModifies,
+    message: `Règlement de ${F(mtRecu)} FCFA enregistré avec succès pour ${bonsModifies.length} bon(s).`,
+  };
 }
 
 // ── VAGUE 2 : CRUD Lavage (§2 & §37) ──
@@ -1260,6 +1478,26 @@ export async function listVentesBoutique(stationId, date) {
   if (stationId) rows = rows.filter((v) => v.station_id === stationId);
   if (date) rows = rows.filter((v) => v.date === date);
   return rows.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+}
+
+export async function deleteVenteBoutique(id) {
+  await ensureLocalSeed();
+  const v = await db.ventes_boutique.get(id);
+  if (v && Array.isArray(v.lignes)) {
+    // Restituer les stocks des articles annulés
+    for (const item of v.lignes) {
+      const prodId = item.id || item.code;
+      if (prodId) {
+        const p = await db.produits_boutique.get(prodId);
+        if (p) {
+          const newStock = (n(p.stock) || 0) + (n(item.quantite) || 1);
+          await db.produits_boutique.update(prodId, { stock: newStock });
+        }
+      }
+    }
+  }
+  await db.ventes_boutique.delete(id);
+  return { ok: true };
 }
 
 // ── VAGUE 2 : Rapprochement Cuves & Jauges physiques (§2 & §37) ──
