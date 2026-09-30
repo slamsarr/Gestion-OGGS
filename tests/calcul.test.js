@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { n, F, fmtDate, todayISO, uuid, prixDuJour, rapportVide, calculer, controler, ecrireSyscohada, COUPURES } from "../src/lib/calcul.js";
-import { referentielFromSeed } from "../src/lib/seed.js";
+import { referentielFromSeed, codeClientCanonique, listeClientsCredit } from "../src/lib/seed.js";
 
 describe("Helpers", () => {
   it("n() coerce les valeurs numériques", () => {
@@ -94,6 +94,15 @@ describe("Référentiel", () => {
     expect(ref.clients.length).toBeGreaterThan(0);
     expect(ref.clients[0]).toHaveProperty("code");
     expect(ref.clients[0]).toHaveProperty("nom");
+  });
+
+  it("aligne clients crédit et clients_pro sur les codes CP-*", () => {
+    expect(codeClientCanonique("ITS")).toBe("CP-ITS");
+    expect(codeClientCanonique("JOUKADAR")).toBe("CP-JOUKADAR");
+    const uniques = listeClientsCredit(ref);
+    expect(uniques.every((c) => String(c.code).startsWith("CP-"))).toBe(true);
+    expect(uniques.find((c) => c.code === "CP-ITS")?.plafond).toBe(3500000);
+    expect(uniques.find((c) => c.code === "ITS")).toBeUndefined();
   });
 
   it("contient des cuves avec capacité", () => {

@@ -1,5 +1,15 @@
 import { describe, it, expect } from "vitest";
-import { peutSupprimerRapport, peutSoumettreRapport, peutValiderRapport, rolesRoute, ROLE_LABELS } from "../src/lib/permissions.js";
+import {
+  peutSupprimerRapport,
+  peutSoumettreRapport,
+  peutValiderRapport,
+  rolesRoute,
+  ROLE_LABELS,
+  peutCorrigerDescente,
+  peutVoirNav,
+  peutAgir,
+  peutAgirProfil,
+} from "../src/lib/permissions.js";
 
 describe("Permissions rôles", () => {
   it("expose un libellé pour chaque rôle", () => {
@@ -52,10 +62,42 @@ describe("Permissions rôles", () => {
     expect(rolesRoute("gerant", "/parametres")).toBe(false);
     expect(rolesRoute("comptable", "/finance")).toBe(true);
     expect(rolesRoute("gerant", "/finance")).toBe(false);
-    expect(rolesRoute("gerant", "/rapport")).toBe(false);
-    expect(rolesRoute("gerant", "/historique")).toBe(false);
+    expect(rolesRoute("gerant", "/rapport")).toBe(true);
+    expect(rolesRoute("gerant", "/historique")).toBe(true);
+    expect(rolesRoute("gerant", "/gerant")).toBe(true);
     expect(rolesRoute("admin", "/parametres")).toBe(true);
     expect(rolesRoute("admin", "/finance")).toBe(true);
     expect(rolesRoute("admin", "/rapport")).toBe(true);
+  });
+
+  it("verrouille la descente clôturée pour le pompiste, pas pour le gérant", () => {
+    expect(peutCorrigerDescente("pompiste", "TERMINEE")).toBe(false);
+    expect(peutCorrigerDescente("lavage", "TERMINEE")).toBe(false);
+    expect(peutCorrigerDescente("gerant", "TERMINEE")).toBe(true);
+    expect(peutCorrigerDescente("admin", "TERMINEE")).toBe(true);
+    expect(peutCorrigerDescente("pompiste", "BROUILLON")).toBe(true);
+  });
+
+  it("masque le cockpit réseau aux métiers terrain", () => {
+    expect(peutVoirNav("comptable", "/")).toBe(true);
+    expect(peutVoirNav("gerant", "/")).toBe(false);
+    expect(peutVoirNav("pompiste", "/")).toBe(false);
+    expect(peutVoirNav("gerant", "/gerant")).toBe(true);
+    expect(peutVoirNav("pompiste", "/descente")).toBe(true);
+    expect(peutVoirNav("gerant", "/incidents")).toBe(false);
+  });
+
+  it("peutAgirProfil refuse un pompiste au débit fidélité et un gérant sur une autre station", () => {
+    expect(peutAgir("pompiste", "fidelite", "crediter")).toBe(true);
+    expect(peutAgir("pompiste", "fidelite", "debiter")).toBe(false);
+    expect(peutAgirProfil({ role: "gerant", station_id: "st-hann" }, "depotage", "creer", "st-ndia")).toBe(false);
+    expect(peutAgirProfil({ role: "gerant", station_id: "st-hann" }, "depotage", "creer", "st-hann")).toBe(true);
+    expect(peutAgirProfil({ role: "stock", station_id: "st-hann" }, "stock", "ajuster")).toBe(true);
+  });
+
+  it("un rôle vide n'ouvre aucune route métier", () => {
+    expect(rolesRoute("", "/gerant")).toBe(false);
+    expect(rolesRoute(undefined, "/rapport")).toBe(false);
+    expect(peutVoirNav("", "/")).toBe(false);
   });
 });

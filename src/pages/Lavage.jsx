@@ -3,11 +3,13 @@ import { useAuth } from "../context/AuthContext";
 import { loadReferentiel, createPrestationLavage, listPrestationsLavage, deletePrestationLavage } from "../lib/api";
 import { F, fmtDate, n, T, todayISO } from "../lib/calcul";
 import { Section, Row, Num, Loading, InputComptable } from "../components/ui";
+import { peutAgirProfil } from "../lib/permissions";
 
 export default function Lavage() {
   const { profil } = useAuth();
   const stationId = profil?.station_id || "st-hann";
-  const isManager = ["gerant", "admin", "superviseur", "directeur"].includes(profil?.role);
+  const isManager = peutAgirProfil(profil, "lavage", "annuler");
+  const peutEncaisser = peutAgirProfil(profil, "lavage", "creer");
   const [tarifs, setTarifs] = useState([]);
   const [prestations, setPrestations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -74,6 +76,7 @@ export default function Lavage() {
 
   const handleEnregistrer = async (e) => {
     e.preventDefault();
+    if (!peutEncaisser) return flash("Tu n'as pas le droit d'encaisser un lavage.");
     const qte = n(quantite) || 1;
     const payload = {
       station_id: stationId,
@@ -90,10 +93,14 @@ export default function Lavage() {
 
     const res = await createPrestationLavage(payload);
     if (res.ok) {
-      flash("Prestation de lavage enregistrée ! Reçu généré.");
+      flash("Prestation de lavage enregistrée ! Reçu généré — formulaire vidé pour le prochain véhicule.");
       setTicketModal(payload);
       setImmatriculation("");
       setQuantite(1);
+      setModePaiement("ESPECES");
+      setTypeVehicule(tarifs[0]?.code || "BERLINE");
+      setAgent(profil?.nom_complet || "Agent Lavage");
+      if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
       loadData();
     } else {
       flash("Erreur lors de l'enregistrement");

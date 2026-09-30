@@ -3,11 +3,14 @@ import { useAuth } from "../context/AuthContext";
 import { listProduitsBoutique, createVenteBoutique, listVentesBoutique, updateProduitBoutique, deleteVenteBoutique } from "../lib/api";
 import { F, fmtDate, n, T, todayISO } from "../lib/calcul";
 import { Section, Row, Num, Loading, InputComptable } from "../components/ui";
+import { peutAgirProfil } from "../lib/permissions";
 
 export default function Boutique() {
   const { profil } = useAuth();
   const stationId = profil?.station_id || "st-hann";
-  const isManager = ["gerant", "admin", "superviseur", "directeur"].includes(profil?.role);
+  const isManager = peutAgirProfil(profil, "vente", "annuler");
+  const peutVendre = peutAgirProfil(profil, "vente", "creer");
+  const peutAjusterStock = peutAgirProfil(profil, "stock", "ajuster");
   const [produits, setProduits] = useState([]);
   const [ventes, setVentes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -109,6 +112,7 @@ ${lignesStr}
   const totalPanier = panier.reduce((sum, item) => sum + item.quantite * item.prix_vente, 0);
 
   const validerVente = async () => {
+    if (!peutVendre) return flash("Tu n'as pas le droit d'encaisser une vente boutique.");
     if (panier.length === 0) return flash("Le panier est vide");
 
     // Vérifier les stocks
@@ -137,9 +141,13 @@ ${lignesStr}
 
     const res = await createVenteBoutique(payload);
     if (res.ok) {
-      flash("Vente encaissée avec succès ! Ticket généré.");
+      flash("Vente encaissée avec succès ! Ticket généré — panier vidé.");
       setTicketModal(payload);
       setPanier([]);
+      setRecherche("");
+      setModePaiement("ESPECES");
+      setTab("pos");
+      if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
       loadData();
     } else {
       flash("Erreur lors de l'encaissement de la vente");
@@ -157,6 +165,7 @@ ${lignesStr}
   };
 
   const handleAjusterStock = async () => {
+    if (!peutAjusterStock) return flash("Tu n'as pas le droit d'ajuster le stock.");
     if (!selectedProd || !ajustQte) return;
     const delta = parseInt(ajustQte, 10);
     if (isNaN(delta)) return flash("Quantité invalide");

@@ -10,7 +10,7 @@ Version 1.0 — pour les gérants, superviseurs, comptables et responsables du r
 2. Saisis ton **email** et ton **mot de passe** (créés par le réseau).
 3. Clique **Se connecter**.
 
-> Sans connexion, tu peux naviguer en mode **démonstration** mais **aucune donnée n'est enregistrée**. Pense toujours à te connecter avant de travailler.
+> En mode **démonstration** (sans serveur cloud), connecte-toi avec un compte démo : tes saisies sont **enregistrées sur cet appareil** (navigateur), mais **ne sont pas partagées** avec les autres stations. Pour le travail réel du réseau, utilise ton compte cloud lorsque le bandeau affiche **Cloud**.
 
 ---
 
@@ -21,21 +21,15 @@ En haut de l'écran, en permanence :
 - **« En ligne / Hors ligne »** : indique si tu as une connexion internet. Hors ligne, l'application continue de fonctionner : tes saisies sont **gardées localement** puis synchronisées automatiquement dès que la connexion revient.
 - **« Cloud / Démo locale »** : 
   - **Cloud** = l'application est connectée au serveur réseau : toutes les stations voient les mêmes données.
-  - **Démo locale** = mode de démonstration (aucune donnée partagée). Ne travaille pas en mode démo.
+  - **Démo locale** = données sur **cet appareil uniquement** (formation / test). En production, le réseau doit afficher **Cloud**.
 
 ---
 
-## 3. Première utilisation — le tableau de bord
+## 3. Première utilisation — où commencer ?
 
-Le **Tableau de bord** (« Réseau ») affiche :
+**Gérant de station** : à la connexion, tu arrives sur le **Poste de commande** (`Poste de Commande`). Tu y supervises descentes pompistes, bons, lavage et boutique. Le bouton **Rapport du jour** ouvre le rapport journalier pré-rempli depuis ces saisies terrain.
 
-- le chiffre d'affaires du jour, des 7 et des 30 derniers jours ;
-- les rapports **en attente de validation** ;
-- les stations **sans rapport** (⚠️) ;
-- les **écarts de caisse** détectés (⚠️) ;
-- les **stocks bas** (📦).
-
-Clique sur un rapport dans la liste pour **l'ouvrir** en mode lecture.
+**Superviseur / directeur / comptable** : le **Cockpit réseau** affiche le CA (jour, 7 j, 30 j), les rapports en attente, les stations sans rapport, les écarts de caisse et les stocks bas. Clique sur un rapport pour l'ouvrir.
 
 ---
 
@@ -43,8 +37,8 @@ Clique sur un rapport dans la liste pour **l'ouvrir** en mode lecture.
 
 C'est le cœur de l'application. Chaque jour, chaque station **doit** transmettre son rapport.
 
-1. Va dans **Rapport**.
-2. Renseigne :
+1. Depuis le **Poste de commande**, clique **Rapport du jour**, ou va dans **Rapport journalier** (menu Pilotage).
+2. Si les pompistes ont déjà clôturé leurs descentes, les **index de fin**, les **bons / tickets**, le **lavage**, la **boutique** et les **dépenses** du jour sont pré-remplis. Vérifie puis complète le reste :
    - les **index des pistolets** (départ / fin) : les volumes GO et SUPER sont calculés automatiquement ;
    - le **carburant livré** ;
    - les **lubrifiants** (stock initial, réception, vendu) ;
@@ -73,12 +67,20 @@ Utilise les filtres (station, statut) et la pagination pour retrouver un rapport
 
 ---
 
-## 6. Stocks et stock théorique
+## 6. Stocks, cuves et jauges
 
-La page **Stocks** affiche pour chaque station le **stock théorique** (déduit des rapports) de chaque produit (GO, SUPER, lubrifiants, gaz), avec une alerte quand le stock passe sous le **seuil** de la station.
+La page **Stocks** affiche le stock théorique (déduit des rapports) des lubrifiants et du gaz.
 
-- Mets à jour les **jauges** et **livraisons** de carburant depuis la page **Pistolets**.
-- Les stocks se recalculent automatiquement.
+Les **jauges physiques** carburant se saisissent dans **Cuves & Dépotage** (ou l’onglet Jauges de **Pistolets & Pompes**) : c’est le **même registre**. Les livraisons camion (BL, scellés) se font depuis Cuves.
+
+---
+
+## 6bis. Terrain quotidien (pompiste, lavage, boutique)
+
+- **Descentes pompistes** : le pompiste **choisit lui-même ses pompes** (aucune pompe n’est pré-assignée). Index, caisse pompe, bons carburant (code client `CP-…`). Après **clôture / validation**, le formulaire est vidé pour le quart suivant. Une descente **TERMINEE** n’est plus modifiable par le pompiste ; le gérant peut corriger.
+- **Lavage / Boutique / Dépenses / Maintenance / Dépotage / Fidélité** : après enregistrement réussi, la saisie en cours est vidée (le ticket ou le reçu reste affiché).
+- **Poste de commande** (gérant) : vue du jour, attribution des bons, lancement du **Rapport du jour**.
+- **Fidélité** : cartes et points. Le client scanne un QR vers `/espace-fidelite` sans mot de passe.
 
 ---
 
@@ -114,15 +116,19 @@ Utilise les exports pour remettre au comptable du réseau les données conformes
 
 ## 10. Rôles et droits
 
-| Rôle | Droits principaux |
-|---|---|
-| **Gérant** | Saisie et soumission de son rapport de station |
-| **Superviseur** | Validation, vue réseau, finance |
-| **Comptable** | Vue réseau, finance |
-| **Directeur** | Tout, y compris paramètres |
-| **Admin** | Tout, gestion des comptes |
+| Rôle | Accueil | Droits principaux |
+|---|---|---|
+| **Admin** | Cockpit réseau | Tout, y compris paramètres |
+| **Directeur** | Cockpit réseau | Tout, y compris paramètres |
+| **Superviseur** | Cockpit réseau | Validation des rapports, vue réseau, finance |
+| **Comptable** | Cockpit réseau | Vue réseau, finance, pas de saisie de rapport |
+| **Gérant** | Poste de commande | Station uniquement : descentes, rapport, soumission |
+| **Pompiste** | Descentes | Index et bons ; pas de rapport réseau |
+| **Lavage / Boutique / Stock / Maintenance** | Leur module | Saisie métier ; stock voit aussi cuves et boutique |
+| **Commercial** | Clients pro | Comptes `CP-*`, fidélité |
+| **Client professionnel** | Clients pro | Son compte seulement (ex. CP-ITS) |
 
-Les droits dépendent de la station d'appartenance : un gérant ne voit **que sa station**.
+Un compte **sans rôle** n’obtient aucun droit (pas de gérant par défaut). Les codes clients du journal Excel (`ITS`) sont les mêmes que `CP-ITS`.
 
 ---
 

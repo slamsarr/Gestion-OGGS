@@ -62,6 +62,8 @@ export const SEED_CLIENTS_PRO = [
   ["CP-RETBA", "Retba / Team Dir CTT / Provale"],
   ["CP-ICONS", "Icons SA / FADSR"],
   ["CP-TAXI-SN", "Taxi / Artisans (parking)"],
+  ["CP-MBEYE", "Mamour Beye"],
+  ["CP-ONDIAYE", "O. Ndiaye — Sté de transport"],
 ];
 
 export const SEED_VEHICULES = {
@@ -94,6 +96,7 @@ export const SEED_CATEGORIES_DEPENSES = [
   ["SALAIRE_AVANCE", "Avance salaire", "FIXE", "4211"],
   ["LOCATION", "Location", "FIXE", "6135"],
   ["UTILITE_ELECTRICITE", "Électricité", "FIXE", "6063"],
+  ["BON_CLIENT", "Bon client (crédit)", "AVANCE_CLIENT", "4111"],
   ["AUTRE", "Autre", "VARIABLE", "6588"],
 ];
 
@@ -119,6 +122,19 @@ export const SEED_INCIDENT_MOTIFS = [
   ["ACCIDENT", "Accident", "CRITIQUE"],
 ];
 
+/** Codes historiques du journal Excel → code canonique clients_pro. */
+export const CLIENT_CODE_ALIASES = {
+  ITS: "CP-ITS",
+  JOUKADAR: "CP-JOUKADAR",
+  DMJ: "CP-JOUKADAR",
+  MBEYE: "CP-MBEYE",
+  "M.BEYE": "CP-MBEYE",
+  ONDIAYE: "CP-ONDIAYE",
+  "O.NDIAYE": "CP-ONDIAYE",
+  ICONS: "CP-ICONS",
+  RETBA: "CP-RETBA",
+};
+
 export const SEED_CLIENTS = [
   ["ITS", "ITS (transport)"],
   ["JOUKADAR", "Joukadar / DMJ"],
@@ -127,6 +143,41 @@ export const SEED_CLIENTS = [
   ["ICONS", "Icons SA / FADSR"],
   ["RETBA", "Retba / Team Dir CTT / Provale"],
 ];
+
+export function codeClientCanonique(code) {
+  if (code == null || code === "") return "";
+  const up = String(code).trim().toUpperCase();
+  if (CLIENT_CODE_ALIASES[up]) return CLIENT_CODE_ALIASES[up];
+  return up;
+}
+
+export function codesClientEquivalents(code) {
+  const canon = codeClientCanonique(code);
+  const aliases = Object.entries(CLIENT_CODE_ALIASES)
+    .filter(([, v]) => v === canon)
+    .map(([k]) => k);
+  return [...new Set([canon, String(code || "").trim().toUpperCase(), ...aliases].filter(Boolean))];
+}
+
+/** Vue unique crédit : clients_pro (CP-*) + anciens codes Excel, dédupliqués. */
+export function listeClientsCredit(ref) {
+  const byCode = new Map();
+  const add = (raw) => {
+    const code = codeClientCanonique(raw.code || raw.id);
+    if (!code || byCode.has(code)) return;
+    byCode.set(code, {
+      id: raw.id || code,
+      code,
+      nom: raw.nom_entreprise || raw.nom || code,
+      plafond: Number(raw.plafond_credit ?? raw.plafond) || 0,
+      actif: raw.actif !== false,
+      aliases: codesClientEquivalents(code).filter((c) => c !== code),
+    });
+  };
+  for (const cp of ref?.clients_pro || []) add(cp);
+  for (const c of ref?.clients || []) add(c);
+  return [...byCode.values()];
+}
 
 export const SEED_CUVES = [
   ["GASOIL", 30000],
@@ -165,6 +216,7 @@ export const DEMO_USERS = [
   { id: "u-stock-hann", email: "stock@ogss.demo", password: "Stock2026!", nom_complet: "Ibrahima Sarr (Resp. Stock)", role: "stock", station_id: "st-hann" },
   { id: "u-maint-hann", email: "maintenance@ogss.demo", password: "Maint2026!", nom_complet: "Cheikh Bâ (Technicien Maint.)", role: "maintenance", station_id: "st-hann" },
   { id: "u-comm-hann", email: "commercial@ogss.demo", password: "Comm2026!", nom_complet: "Aïssatou Diallo (Commerciale)", role: "commercial", station_id: "st-hann" },
+  { id: "u-client-pro", email: "client.pro@ogss.demo", password: "Client2026!", nom_complet: "ITS Transport (Client Pro)", role: "client_pro", station_id: "st-hann", client_code: "CP-ITS" },
   { id: "u-super", email: "superviseur@ogss.demo", password: "Super2026!", nom_complet: "Superviseur Réseau", role: "superviseur", station_id: null },
 ];
 
@@ -178,7 +230,12 @@ export function referentielFromSeed() {
   const produits = SEED_PRODUITS.map(([code, designation, famille, unite, prix_vente, cout_achat, ordre]) => ({
     id: code, code, designation, famille, unite, prix_vente, cout_achat, seuil_alerte: 5, ordre, actif: true,
   }));
-  const plafondsMap = { "CP-ITS": 3500000, "CP-JOUKADAR": 2000000, "CP-RETBA": 1500000, "CP-ICONS": 1000000, "CP-TAXI-SN": 500000 };
+  const plafondsMap = { "CP-ITS": 3500000, "CP-JOUKADAR": 2000000, "CP-RETBA": 1500000, "CP-ICONS": 1000000, "CP-TAXI-SN": 500000, "CP-MBEYE": 800000, "CP-ONDIAYE": 800000 };
+  const clients_pro = SEED_STATIONS.flatMap((st) =>
+    SEED_CLIENTS_PRO.map(([code, societe, contact, tel, email_]) => ({
+      code, nom_entreprise: societe, contact, telephone: tel, email: email_, station_id: st.id, plafond_credit: plafondsMap[code] || 1000000, actif: true,
+    }))
+  );
   return {
     stations: SEED_STATIONS,
     prix: SEED_PRIX,
@@ -187,16 +244,12 @@ export function referentielFromSeed() {
     lubrifiants: produits.filter((p) => p.famille === "LUBRIFIANT" || p.famille === "ACCESSOIRE"),
     gaz: produits.filter((p) => p.famille === "GAZ"),
     categories: SEED_CATEGORIES.map(([code, libelle, nature, compte_syscohada]) => ({ code, libelle, nature, compte_syscohada })),
-    clients: SEED_CLIENTS.map(([code, nom]) => ({ code, nom, plafond: plafondsMap[code] || 0, actif: true })),
+    clients: listeClientsCredit({ clients_pro }),
     cuves: SEED_STATIONS.flatMap((st) =>
       SEED_CUVES.map(([produit, capacite_l]) => ({ id: `${st.id}-cuve-${produit.toLowerCase()}`, station_id: st.id, produit, capacite_l }))
     ),
     // ── §33 / §38 : nouveaux référentiels ──────────────────────────────────
-    clients_pro: SEED_STATIONS.flatMap((st) =>
-      SEED_CLIENTS_PRO.map(([code, societe, contact, tel, email_]) => ({
-        code, nom_entreprise: societe, contact, telephone: tel, email: email_, station_id: st.id, plafond_credit: plafondsMap[code] || 1000000, actif: true,
-      }))
-    ),
+    clients_pro,
     vehicules: SEED_CLIENTS_PRO.flatMap(([code, societe]) =>
       SEED_VEHICULES[code]?.map(([immat, marque, modele, type_, carburant]) => ({
         immatriculation: immat, client_code: code, marque, modele, type: type_, carburant, actif: true,

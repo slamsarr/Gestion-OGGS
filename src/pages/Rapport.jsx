@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { loadReferentiel, getRapport, saveRapport, indexVeille, listDescentes, listPrestationsLavage, listVentesBoutique, listDepenses } from "../lib/api";
+import { loadReferentiel, getRapport, saveRapport, indexVeille, listDescentes, listPrestationsLavage, listVentesBoutique, listDepenses, indexesMaxParPistolet } from "../lib/api";
 import { calculer, controler, ecrireSyscohada, rapportVide, COUPURES, SEUIL_ECART, F, n, fmtDate, todayISO, T } from "../lib/calcul";
 import { exporterExcel, exporterCsv } from "../lib/exportExcel";
 import { Num, Row, Section, Alerte } from "../components/ui";
+import { listeClientsCredit, referentielFromSeed } from "../lib/seed";
+import { peutSoumettreRapport, peutValiderRapport } from "../lib/permissions";
 
 const STATUTS = {
   BROUILLON: ["Brouillon", T.muted],
@@ -25,7 +27,7 @@ const MODES_REGLEMENT = [
 
 export default function Rapport() {
   const { profil, cloud } = useAuth();
-  const role = profil?.role || "gerant";
+  const role = profil?.role || "";
   const stationFromProfile = profil?.stations?.code || profil?.station_id?.replace("st-", "").toUpperCase() || "HANN";
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -64,36 +66,36 @@ export default function Rapport() {
           setR(existing);
         } else {
           const fresh = rapportVide(ref, selectedStation, date, profil?.nom_complet);
-          // 1. Index début veille & Index fin du jour depuis descentes pompistes
+          const stationRow = (ref.stations || []).find((s) => s.code === selectedStation || s.id === selectedStation);
+          const stationFilter = stationRow?.id || selectedStation;
+          // 1. Index début veille & Index fin du jour depuis descentes pompistes (multi-pompes)
           let jourDescentes = [];
           try {
-            jourDescentes = await listDescentes(selectedStation, date);
+            jourDescentes = await listDescentes(stationFilter, date);
           } catch {}
 
-          for (const p of (ref.pistolets || []).filter((x) => x.station_code === selectedStation || !x.station_code)) {
+          const maxFinParPistolet = indexesMaxParPistolet(jourDescentes);
+          for (const p of (ref.pistolets || []).filter((x) => x.station_code === selectedStation || x.station_id === stationFilter || !x.station_code)) {
+            if (!fresh.pistolets[p.code]) continue;
             try {
               const prev = await indexVeille(selectedStation, date, p.code);
               if (prev != null) fresh.pistolets[p.code].depart = prev;
             } catch {}
 
-            // Trouver la dernière descente enregistrée pour ce pistolet ce jour-là
-            const pDescentes = jourDescentes.filter((d) => d.pistolet_code === p.code);
-            if (pDescentes.length > 0) {
-              const maxFin = Math.max(...pDescentes.map((d) => n(d.index_fin)));
-              if (maxFin > 0) fresh.pistolets[p.code].fin = maxFin;
-            }
+            const maxFin = maxFinParPistolet[p.code];
+            if (maxFin > 0) fresh.pistolets[p.code].fin = maxFin;
           }
 
           // 2. Auto-remplissage des recettes Lavage du jour
           try {
-            const lavages = await listPrestationsLavage(selectedStation, date);
+            const lavages = await listPrestationsLavage(stationFilter, date);
             const totalLavage = (lavages || []).reduce((s, item) => s + (n(item.montant_total) || n(item.prix) || 0), 0);
             if (totalLavage > 0) fresh.lavage = totalLavage;
           } catch {}
 
           // 3. Auto-remplissage des recettes Boutique du jour
           try {
-            const ventes = await listVentesBoutique(selectedStation, date);
+            const ventes = await listVentesBoutique(stationFilter, date);
             const totalBoutique = (ventes || []).reduce((s, item) => s + (n(item.total_montant) || 0), 0);
             if (totalBoutique > 0) fresh.boutique = totalBoutique;
           } catch {}
@@ -109,7 +111,7 @@ export default function Rapport() {
 
           // 5. Auto-remplissage des dépenses réseau enregistrées pour la date
           try {
-            const deps = await listDepenses(selectedStation);
+            const deps = await listDepenses(stationFilter);
             const dayDeps = (deps || []).filter((d) => d.date_depense === date);
             if (dayDeps.length > 0) {
               fresh.depenses = dayDeps.map((d) => ({
@@ -535,7 +537,7 @@ export default function Rapport() {
                     style={{ borderColor: T.line }}
                   >
                     <option value="">— Choisir le client —</option>
-                    {(ref.clients || []).map((cl) => <option key={cl.code} value={cl.code}>{cl.nom}</option>)}
+                    {listeClientsCredit(ref).map((cl) => <option key={cl.code} value={cl.code}>{cl.nom} ({cl.code})</option>)}
                   </select>
                 )}
                 <input
@@ -634,7 +636,7 @@ export default function Rapport() {
           />
 
           <div className="mt-4 grid gap-2">
-            {(role === "gerant" || role === "admin") && (r.statut === "BROUILLON" || r.statut === "REJETE") && (
+            {peutSoumettreRapport(role) && (r.statut === "BROUILLON" || r.statut === "REJETE") && (
               <>
                 <button disabled={busy} onClick={() => sauver()} className="py-3 rounded-lg font-medium" style={{ border: `1px solid ${T.petrol}`, color: T.petrol, background: "white" }}>
                   {busy ? "Enregistrement…" : "Enregistrer le brouillon"}
@@ -647,7 +649,7 @@ export default function Rapport() {
                 >Soumettre au superviseur</button>
               </>
             )}
-            {(role === "admin" || role === "superviseur" || role === "directeur") && r.statut === "SOUMIS" && (
+            {peutValiderRapport(role) && r.statut === "SOUMIS" && (
               <>
                 <button onClick={() => changerStatut("VALIDE", { valideLe: new Date().toISOString(), valide_par: profil.id })} className="py-3 rounded-lg font-semibold" style={{ background: T.ok, color: "white" }}>Valider le rapport</button>
                 <button onClick={() => { const m = prompt("Motif du rejet ?"); if (m) changerStatut("REJETE", { motifRejet: m }); }} className="py-3 rounded-lg font-medium" style={{ border: `1px solid ${T.alert}`, color: T.alert, background: "white" }}>Rejeter avec motif</button>

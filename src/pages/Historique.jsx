@@ -8,7 +8,7 @@ import { peutSupprimerRapport } from "../lib/permissions";
 
 export default function Historique() {
   const { profil } = useAuth();
-  const role = profil?.role || "gerant";
+  const role = profil?.role || "";
   const stationScope = profil?.stations?.code || profil?.station_id?.replace("st-", "").toUpperCase() || "";
 
   const [ref, setRef] = useState(null);

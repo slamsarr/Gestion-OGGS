@@ -1,57 +1,52 @@
 import { useEffect, useState, useMemo } from "react";
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { T } from "../lib/calcul";
 import { flushQueue, listNotifications, marquerNotificationLue, getParametres } from "../lib/api";
 import { db } from "../lib/db";
-import { ROLE_LABELS } from "../lib/permissions";
+import { ROLE_LABELS, peutVoirNav } from "../lib/permissions";
 
 const NAV_POLES = [
   {
     id: "pilotage",
     label: "📊 Pilotage & Cockpit",
-    roles: ["superviseur", "directeur", "comptable", "gerant", "admin"],
     items: [
-      { to: "/gerant", label: "Poste de Commande", icon: "🏪", roles: ["gerant", "admin", "superviseur", "directeur"] },
-      { to: "/", label: "Cockpit Réseau", icon: "📈", roles: ["superviseur", "directeur", "comptable", "admin"] },
-      { to: "/bilan-site", label: "Bilan Journalier Site", icon: "📑", roles: ["gerant", "superviseur", "directeur", "comptable", "admin"] },
-      { to: "/rapport", label: "Rapport Journalier", icon: "📋", roles: ["superviseur", "directeur", "admin"] },
-      { to: "/historique", label: "Historique Rapports", icon: "📁", roles: ["superviseur", "directeur", "comptable", "admin"] },
+      { to: "/gerant", label: "Poste de Commande", icon: "🏪" },
+      { to: "/", label: "Cockpit Réseau", icon: "📈" },
+      { to: "/bilan-site", label: "Bilan Journalier Site", icon: "📑" },
+      { to: "/rapport", label: "Rapport Journalier", icon: "📋" },
+      { to: "/historique", label: "Historique Rapports", icon: "📁" },
     ],
   },
   {
     id: "operations",
     label: "⛽ Opérations Terrain",
-    roles: ["pompiste", "gerant", "admin", "superviseur", "directeur", "stock", "lavage", "boutique", "maintenance"],
     items: [
-      { to: "/descente", label: "Descentes Pompistes", icon: "⛽", roles: ["pompiste", "gerant", "admin", "superviseur", "directeur"] },
-      { to: "/cuves", label: "Cuves & Dépotage", icon: "🛢️", roles: ["stock", "gerant", "admin", "superviseur", "directeur"] },
-      { to: "/stocks", label: "Stocks Produits & Cuves", icon: "📦", roles: ["stock", "gerant", "admin", "superviseur", "directeur"] },
-      { to: "/fidelite", label: "Fidélité Clients", icon: "🎁", roles: ["pompiste", "boutique", "lavage", "gerant", "admin", "superviseur", "directeur", "commercial"] },
-      { to: "/lavage", label: "Lavage Auto", icon: "🚿", roles: ["lavage", "gerant", "admin", "superviseur", "directeur"] },
-      { to: "/boutique", label: "Boutique / Shop", icon: "🛒", roles: ["boutique", "stock", "gerant", "admin", "superviseur", "directeur"] },
-      { to: "/maintenance", label: "Maintenance", icon: "🛠️", roles: ["maintenance", "gerant", "admin", "superviseur", "directeur"] },
+      { to: "/descente", label: "Descentes Pompistes", icon: "⛽" },
+      { to: "/cuves", label: "Cuves & Dépotage", icon: "🛢️" },
+      { to: "/stocks", label: "Stocks Produits & Cuves", icon: "📦" },
+      { to: "/fidelite", label: "Fidélité Clients", icon: "🎁" },
+      { to: "/lavage", label: "Lavage Auto", icon: "🚿" },
+      { to: "/boutique", label: "Boutique / Shop", icon: "🛒" },
+      { to: "/maintenance", label: "Maintenance", icon: "🛠️" },
     ],
   },
   {
     id: "finance",
     label: "💼 Finance & Crédits",
-    roles: ["superviseur", "directeur", "comptable", "gerant", "admin", "commercial"],
     items: [
-      { to: "/clients-pro", label: "Clients Pro & Bons", icon: "👥", roles: ["gerant", "superviseur", "directeur", "comptable", "admin", "commercial"] },
-      { to: "/depenses", label: "Dépenses & Justifs", icon: "🧾", roles: ["gerant", "superviseur", "directeur", "comptable", "admin"] },
-      { to: "/finance", label: "Finance & Caisse", icon: "💰", roles: ["superviseur", "directeur", "comptable", "admin"] },
-      { to: "/fournisseurs", label: "Fournisseurs & BL", icon: "🚚", roles: ["superviseur", "directeur", "comptable", "admin"] },
+      { to: "/clients-pro", label: "Clients Pro & Bons", icon: "👥" },
+      { to: "/depenses", label: "Dépenses & Justifs", icon: "🧾" },
+      { to: "/finance", label: "Finance & Caisse", icon: "💰" },
+      { to: "/fournisseurs", label: "Fournisseurs & BL", icon: "🚚" },
     ],
   },
   {
     id: "gestion",
     label: "⚙️ Configuration",
-    roles: ["directeur", "admin", "gerant", "superviseur"],
     items: [
-      { to: "/pistolets", label: "Pistolets & Pompes", icon: "🔫", roles: ["superviseur", "directeur", "gerant", "admin"] },
-      { to: "/pompistes", label: "Équipe Pompistes", icon: "👷", roles: ["superviseur", "directeur", "gerant", "admin"] },
-      { to: "/parametres", label: "Paramètres Réseau", icon: "⚙️", roles: ["directeur", "admin"] },
+      { to: "/pistolets", label: "Pistolets & Pompes", icon: "🔫" },
+      { to: "/pompistes", label: "Équipe Pompistes", icon: "👷" },
+      { to: "/parametres", label: "Paramètres Réseau", icon: "⚙️" },
     ],
   },
 ];
@@ -60,7 +55,7 @@ export default function Layout() {
   const { profil, logout, online, cloud } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const role = profil?.role || "gerant";
+  const role = profil?.role || "";
 
   const [pending, setPending] = useState(0);
   const [syncMsg, setSyncMsg] = useState("");
@@ -75,7 +70,7 @@ export default function Layout() {
   const availablePoles = useMemo(() => {
     return NAV_POLES.map((pole) => ({
       ...pole,
-      items: pole.items.filter((item) => item.roles.includes(role)),
+      items: pole.items.filter((item) => peutVoirNav(role, item.to)),
     })).filter((pole) => pole.items.length > 0);
   }, [role]);
 
@@ -141,6 +136,25 @@ export default function Layout() {
     const interval = setInterval(load, 60000);
     return () => clearInterval(interval);
   }, [cloud]);
+
+  if (!role) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-8 text-center">
+        <p className="text-sm text-slate-700 font-medium">Ce compte n’a pas encore de rôle attribué.</p>
+        <p className="text-xs text-slate-500 mt-2 max-w-sm">Contacte le responsable réseau. Aucun droit gérant n’est accordé par défaut.</p>
+        <button
+          type="button"
+          className="mt-6 px-4 py-2 rounded-lg bg-rose-50 text-rose-700 text-xs font-bold border border-rose-200"
+          onClick={async () => {
+            await logout();
+            navigate("/login");
+          }}
+        >
+          Se déconnecter
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans">
@@ -402,7 +416,7 @@ export default function Layout() {
             <span className="text-amber-700 font-semibold italic">« Une marque sénégalaise — Li nio ko mom ! »</span>
           </div>
           <div className="text-gray-400 text-[10px]">
-            45 Stations-Service au Sénégal · Système Intégré de Gestion Pétrolière
+            Hann Mariste · Ndiakhirate · Système intégré de gestion
           </div>
         </div>
       </footer>

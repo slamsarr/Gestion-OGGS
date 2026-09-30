@@ -13,6 +13,7 @@ import {
 import { setLocalRef } from "../lib/db";
 import { F, n, T, todayISO } from "../lib/calcul";
 import { Section, Row, Num, Loading } from "../components/ui";
+import { listeClientsCredit } from "../lib/seed";
 
 function AddForm({ label, children, onSubmit, show, setShow }) {
   if (!show) return <button onClick={() => setShow(true)} className="w-full py-2 my-2 rounded text-sm font-medium" style={{ border: `1px dashed ${T.petrol}`, color: T.petrol }}>+ {label}</button>;
@@ -211,7 +212,7 @@ export default function Parametres() {
   const prix = ref?.prix || [];
   const produits = ref?.produits || [];
   const categories = ref?.categories || [];
-  const clients = ref?.clients || [];
+  const clients = listeClientsCredit(ref);
 
   return (
     <div>

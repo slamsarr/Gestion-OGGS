@@ -6,6 +6,7 @@ import { exporterCsv } from "../lib/exportExcel";
 import { Section, Num, Loading } from "../components/ui";
 import { db } from "../lib/db";
 import { getSupabase } from "../lib/supabase";
+import { listeClientsCredit } from "../lib/seed";
 
 export default function Finance() {
   const { profil } = useAuth();
@@ -40,7 +41,7 @@ export default function Finance() {
           setTotalPages(raps?.pages || 1);
         }
         const s = {};
-        for (const cl of (r?.clients || [])) {
+        for (const cl of listeClientsCredit(r)) {
           try { s[cl.code] = await soldeClient(cl.code); } catch {}
         }
         if (alive) setSoldes(s);
@@ -100,7 +101,7 @@ export default function Finance() {
   const totalBoutique = valides.reduce((s, r) => s + n(r.boutique || r.ca_boutique), 0);
   const totalLub = valides.reduce((s, r) => s + n(r.ca_lubrifiant), 0);
   const totalGaz = valides.reduce((s, r) => s + n(r.ca_gaz), 0);
-  const clients = ref?.clients || [];
+  const clients = listeClientsCredit(ref);
 
   const exportSyscohada = () => {
     const all = [["Date", "Journal", "Compte", "Libellé", "Débit", "Crédit", "Pièce", "Station"]];

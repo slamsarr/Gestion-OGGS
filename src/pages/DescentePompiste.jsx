@@ -1,9 +1,11 @@
 import { useEffect, useState, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
   loadReferentiel,
   createDescente,
   updateDescente,
+  getDescente,
   listDescentes,
   indexVeille,
   saveOperationCredit,
@@ -11,6 +13,7 @@ import {
 } from "../lib/api";
 import { F, fmtDate, n, T, todayISO, prixDuJour, uuid } from "../lib/calcul";
 import { Section, Row, Num, Loading, InputComptable } from "../components/ui";
+import { peutCorrigerDescente, ROLES_CORRECTION_DESCENTE } from "../lib/permissions";
 
 /** Normalisation défensive pour rétrocompatibilité avec les anciennes descentes mono-pompe */
 export function normalizeDescente(d) {
@@ -102,9 +105,11 @@ export function normalizeDescente(d) {
 
 export default function DescentePompiste() {
   const { profil } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const stationId = profil?.station_id || "st-hann";
   const stationCode = profil?.stations?.code || stationId.replace("st-", "").toUpperCase();
-  const isManager = ["gerant", "admin", "superviseur", "directeur"].includes(profil?.role);
+  const isManager = ROLES_CORRECTION_DESCENTE.includes(profil?.role);
+  const editIdFromUrl = searchParams.get("id");
   const [ref, setRef] = useState(null);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState("");
@@ -192,32 +197,6 @@ export default function DescentePompiste() {
       setRef(r);
       const des = await listDescentes(stationId);
       setDescentes((des || []).map(normalizeDescente));
-
-      // Si aucune pompe dans la session et qu'on n'est pas en mode édition, initialiser avec la 1ère pompe disponible
-      const dispo = (r.pistolets || []).filter((p) => !stationId || p.station_id === stationId);
-      if (pompes.length === 0 && dispo.length > 0 && !editingDescenteId) {
-        const firstPist = dispo[0];
-        const prix = prixDuJour(r.prix || [], firstPist.produit, date) || 0;
-        let lastIdx = 0;
-        try {
-          const l = await indexVeille(stationCode, date, firstPist.code);
-          if (l != null) lastIdx = l;
-        } catch {}
-
-        setPompes([
-          {
-            id: uuid(),
-            caisseId: "C1",
-            pistolet_code: firstPist.code,
-            produit: firstPist.produit,
-            index_debut: lastIdx.toString(),
-            index_fin: "",
-            volume_vendu: 0,
-            prix_unitaire: prix,
-            montant: 0,
-          },
-        ]);
-      }
     } finally {
       setLoading(false);
     }
@@ -226,6 +205,20 @@ export default function DescentePompiste() {
   useEffect(() => {
     loadData();
   }, [stationId]);
+
+  useEffect(() => {
+    if (!editIdFromUrl) return undefined;
+    let cancelled = false;
+    (async () => {
+      const d = await getDescente(editIdFromUrl);
+      if (cancelled) return;
+      if (d) handleEditerDescente(d);
+      else flash("Descente introuvable. Elle a peut-être été supprimée.", "error");
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [editIdFromUrl]);
 
   // Liste de tous les pistolets configurés pour cette station
   const pistList = useMemo(() => {
@@ -329,20 +322,8 @@ export default function DescentePompiste() {
   };
 
   const openAddPompeModal = async () => {
-    const dispoNonAjoutes = pistList.filter((p) => !pompes.some((item) => item.pistolet_code === p.code));
-    if (dispoNonAjoutes.length > 0) {
-      const code = dispoNonAjoutes[0].code;
-      setSelectedAddCode(code);
-      try {
-        const lastIdx = await indexVeille(stationCode, date, code);
-        setAddIndexDebut(lastIdx != null ? lastIdx.toString() : "");
-      } catch {
-        setAddIndexDebut("");
-      }
-    } else {
-      setSelectedAddCode("");
-      setAddIndexDebut("");
-    }
+    setSelectedAddCode("");
+    setAddIndexDebut("");
     setAddIndexFin("");
     setIsNewPhysicalPump(false);
     setNewPhysicalCode("");
@@ -429,13 +410,10 @@ export default function DescentePompiste() {
   };
 
   const handleSupprimerPompeSession = (pompeId) => {
-    if (pompes.length <= 1) {
-      return flash("Vous devez conserver au moins une pompe pour ce quart", "error");
-    }
     const filtered = pompes.filter((p) => p.id !== pompeId);
     const reindexed = filtered.map((p, idx) => ({ ...p, caisseId: `C${idx + 1}` }));
     setPompes(reindexed);
-    flash("Pompe retirée de la session");
+    flash(reindexed.length === 0 ? "Aucune pompe en session. Choisissez vos pompes pour ce quart." : "Pompe retirée de la session");
   };
 
   // ── GESTION DES BONS D'ENCAISSEMENT ──
@@ -543,7 +521,7 @@ export default function DescentePompiste() {
     const norm = normalizeDescente(d);
     if (!norm) return;
 
-    if (norm.statut === "TERMINEE" && !isManager) {
+    if (!peutCorrigerDescente(profil?.role, norm.statut)) {
       return flash("Cette descente a déjà été clôturée et soumise. Les modifications sont verrouillées pour le pompiste.", "error");
     }
 
@@ -620,13 +598,29 @@ export default function DescentePompiste() {
     flash(`Descente du ${fmtDate(norm.date)} chargée pour correction. Modifiez les champs puis validez.`);
   };
 
-  const handleAnnulerModification = () => {
+  /** Formulaire vierge pour un nouveau quart — le pompiste choisit ses pompes. */
+  const resetFormForNewDescente = async (targetDate = todayISO()) => {
     setEditingDescenteId(null);
-    setDate(todayISO());
+    if (searchParams.get("id")) setSearchParams({}, { replace: true });
+    setHistoriqueView(false);
+    setDate(targetDate);
+    setPompisteId(profil?.id || "");
+    setPompisteNom(profil?.nom_complet || "");
     setBons([]);
-    setBonLitres("");
+    setShowBonModal(false);
+    setEditingBonId(null);
+    setBonClientCode("");
+    setBonNumero("");
+    setBonDate(targetDate);
     setBonProduit("GASOIL");
+    setBonLitres("");
+    setBonMontant("");
+    setBonObservation("");
     setLubrifiants([]);
+    setShowAddLubModal(false);
+    setSelectedLubCode("");
+    setLubQuantite("1");
+    setLubPrixUnitaire("");
     setRemiseCuveValeur("");
     setRemiseCuveLitres("");
     setRemiseCuveMotif("");
@@ -642,27 +636,18 @@ export default function DescentePompiste() {
     setTickets("");
     setAutrePaiement("");
     setCommentaire("");
+    setPompes([]);
+    setShowAddPompeModal(false);
+    setSelectedAddCode("");
+    setAddIndexDebut("");
+    setAddIndexFin("");
+    setIsNewPhysicalPump(false);
+    setNewPhysicalCode("");
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
-    // Réinitialiser avec la 1ère pompe disponible
-    if (pistList.length > 0) {
-      const firstPist = pistList[0];
-      const prix = prixDuJour(ref?.prix || [], firstPist.produit, todayISO()) || 0;
-      setPompes([
-        {
-          id: uuid(),
-          caisseId: "C1",
-          pistolet_code: firstPist.code,
-          produit: firstPist.produit,
-          index_debut: "",
-          index_fin: "",
-          volume_vendu: 0,
-          prix_unitaire: prix,
-          montant: 0,
-        },
-      ]);
-    } else {
-      setPompes([]);
-    }
+  const handleAnnulerModification = async () => {
+    await resetFormForNewDescente();
     flash("Mode modification quitté. Nouvelle descente prête.");
   };
 
@@ -797,6 +782,15 @@ export default function DescentePompiste() {
       maj_le: new Date().toISOString(),
     };
 
+    const previous = editingDescenteId ? await getDescente(editingDescenteId) : null;
+    const previousStatut = previous?.statut;
+    const isFirstClosure = statut === "TERMINEE" && previousStatut !== "TERMINEE";
+
+    if (isManager && previousStatut === "TERMINEE") {
+      payload.corrige_par = profil?.nom_complet || "Gérant";
+      payload.corrige_le = new Date().toISOString();
+    }
+
     let res;
     if (editingDescenteId) {
       res = await updateDescente(editingDescenteId, payload);
@@ -806,37 +800,51 @@ export default function DescentePompiste() {
     }
 
     if (res.ok) {
-      // Enregistrer chaque bon dans operations_credit si validé
-      if (statut === "TERMINEE" && bons.length > 0) {
-        for (const b of bons) {
-          if (n(b.montant) > 0 && b.client_code) {
-            try {
-              const litStr = n(b.volume_litres) > 0 ? ` (${F(b.volume_litres)} L)` : "";
-              const obsStr = b.observation ? " - " + b.observation : "";
-              await saveOperationCredit({
-                client_code: b.client_code,
-                station_id: stationId,
-                date_op: b.date || date,
-                matricule: `Bon ${b.numero_bon}${litStr}${obsStr}`,
-                volume_l: n(b.volume_litres),
-                valeur_cons: n(b.montant),
-                depot: 0,
-              });
-            } catch (err) {
-              console.error("Erreur enregistrement crédit client pour bon:", b, err);
-            }
-          }
+      const activeId = editingDescenteId || res.descente?.id;
+      const savedRow = normalizeDescente({ ...payload, id: activeId });
+
+      // Crédit client : uniquement à la première clôture (évite les doublons si le gérant corrige)
+      const prevById = Object.fromEntries((previous?.bons || []).map((b) => [b.id, b]));
+      for (const b of bons) {
+        if (n(b.montant) <= 0 || !b.client_code || b.client_code === "DIVERS") continue;
+        const ancien = prevById[b.id];
+        const inedit = isFirstClosure || !ancien || !ancien.client_code || ancien.client_code === "DIVERS";
+        if (!inedit) continue;
+        try {
+          const litStr = n(b.volume_litres) > 0 ? ` (${F(b.volume_litres)} L)` : "";
+          const obsStr = b.observation ? " - " + b.observation : "";
+          await saveOperationCredit({
+            client_code: b.client_code,
+            station_id: stationId,
+            date_op: b.date || date,
+            matricule: `Bon ${b.numero_bon}${litStr}${obsStr}`,
+            volume_l: n(b.volume_litres),
+            valeur_cons: n(b.montant),
+            depot: 0,
+          });
+        } catch (err) {
+          console.error("Erreur enregistrement crédit client pour bon:", b, err);
         }
       }
 
-      const activeId = editingDescenteId || res.descente?.id;
-      flash(
-        editingDescenteId
-          ? "Descente corrigée et mise à jour avec succès ! Ticket actualisé."
-          : "Descente enregistrée avec succès ! Ticket généré."
-      );
-      setTicketModal(normalizeDescente({ ...payload, id: activeId }));
-      setEditingDescenteId(null);
+      if (statut === "TERMINEE") {
+        flash(
+          editingDescenteId && previousStatut === "TERMINEE"
+            ? "Corrections enregistrées. Nouveau quart prêt pour saisie."
+            : "Descente clôturée avec succès ! Ticket généré — formulaire réinitialisé pour le prochain quart."
+        );
+        setTicketModal(savedRow);
+        await resetFormForNewDescente();
+      } else {
+        setEditingDescenteId(activeId);
+        flash(
+          editingDescenteId
+            ? "Brouillon mis à jour. Reprenez la saisie ou clôturez le quart quand tout est prêt."
+            : "Brouillon enregistré. Vous pouvez quitter et reprendre plus tard via « Mes descentes »."
+        );
+        setTicketModal(savedRow);
+      }
+
       await loadData();
     } else {
       flash("Erreur lors de l'enregistrement de la descente", "error");
@@ -1125,6 +1133,22 @@ export default function DescentePompiste() {
 
             {/* Liste des blocs de pompes */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+              {pompes.length === 0 && (
+                <div className="md:col-span-2 py-8 px-4 rounded-xl border border-dashed text-center" style={{ borderColor: T.line }}>
+                  <p className="text-sm font-semibold text-gray-800 mb-1">Aucune pompe sélectionnée</p>
+                  <p className="text-xs text-gray-500 mb-3">
+                    Choisissez vous-même les pompes de votre quart — aucune n’est attribuée par défaut.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={openAddPompeModal}
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold text-white"
+                    style={{ background: T.petrol }}
+                  >
+                    ➕ Choisir une pompe
+                  </button>
+                </div>
+              )}
               {pompes.map((p) => {
                 const idxDeb = n(p.index_debut);
                 const idxFin = n(p.index_fin);
@@ -1150,16 +1174,14 @@ export default function DescentePompiste() {
                             {p.produit}
                           </span>
                         </div>
-                        {pompes.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => handleSupprimerPompeSession(p.id)}
-                            className="text-gray-400 hover:text-red-600 text-xs px-1 font-semibold"
-                            title="Retirer cette pompe de la session"
-                          >
-                            ✕ Retirer
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleSupprimerPompeSession(p.id)}
+                          className="text-gray-400 hover:text-red-600 text-xs px-1 font-semibold"
+                          title="Retirer cette pompe de la session"
+                        >
+                          ✕ Retirer
+                        </button>
                       </div>
 
                       {/* Tarif unitaire */}
@@ -1856,7 +1878,9 @@ export default function DescentePompiste() {
                     onChange={(e) => handleSelectAddCode(e.target.value)}
                     className="w-full text-xs border rounded-lg px-2.5 py-2 font-bold bg-white"
                     style={{ borderColor: T.line }}
+                    required
                   >
+                    <option value="">— Choisir une pompe —</option>
                     {pistList.map((p) => {
                       const isAlreadyAssigned = pompes.some((item) => item.pistolet_code === p.code);
                       return (

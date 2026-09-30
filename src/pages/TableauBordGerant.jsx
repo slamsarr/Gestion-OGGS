@@ -197,6 +197,14 @@ export default function TableauBordGerant() {
             >
               🔄
             </button>
+            <button
+              type="button"
+              onClick={() => navigate(`/rapport?station=${encodeURIComponent(stationCode)}&date=${encodeURIComponent(date)}`)}
+              className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black uppercase tracking-wide transition-colors shadow-md"
+              title="Ouvrir ou compléter le rapport journalier du jour (pré-rempli depuis le terrain)"
+            >
+              📋 Rapport du jour
+            </button>
           </div>
         </div>
 
@@ -378,9 +386,7 @@ export default function TableauBordGerant() {
                       <div className="flex items-center gap-1.5">
                         {/* Bouton Corriger réservé au Gérant */}
                         <button
-                          onClick={() => {
-                            navigate("/descente");
-                          }}
+                          onClick={() => navigate(`/descente?id=${encodeURIComponent(d.id)}`)}
                           className="px-3 py-1.5 rounded-lg bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs flex items-center gap-1 shadow-xs transition-colors"
                           title="Le gérant peut corriger les index, les bons et les versements d'une descente soumise"
                         >
@@ -555,7 +561,7 @@ export default function TableauBordGerant() {
                             )}
                             {reste > 0 && !isDivers && (
                               <button
-                                onClick={() => navigate("/clients-pro")}
+                                onClick={() => navigate(`/clients-pro?client=${encodeURIComponent(b.client_code)}`)}
                                 className="px-2 py-1 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-[10px]"
                                 title="Aller régler dans le compte client"
                               >

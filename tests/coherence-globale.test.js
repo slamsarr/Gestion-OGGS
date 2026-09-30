@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ALL_ROLES, ROLE_LABELS, rolesRoute, peutAgir, peutSoumettreRapport, peutValiderRapport, peutSupprimerRapport } from "../src/lib/permissions";
 import { calculer, rapportVide, n } from "../src/lib/calcul";
-import { referentielFromSeed, DEMO_USERS } from "../src/lib/seed";
+import { referentielFromSeed, DEMO_USERS, codeClientCanonique } from "../src/lib/seed";
 import { calculerPointsFidelite } from "../src/lib/api";
 
 // Mock des collections Dexie en mémoire pour Vitest Node.js
@@ -155,11 +155,11 @@ describe("Audit de Cohérence Globale & Interactions Multi-Utilisateurs", () => 
       ALL_ROLES.forEach((r) => {
         expect(ROLE_LABELS[r]).toBeDefined();
         expect(typeof ROLE_LABELS[r]).toBe("string");
+        expect(DEMO_USERS.some((u) => u.role === r)).toBe(true);
       });
-      // Vérifier que commercial existe dans demo users
       const commUser = DEMO_USERS.find((u) => u.role === "commercial");
-      expect(commUser).toBeDefined();
       expect(commUser.email).toContain("commercial");
+      expect(DEMO_USERS.find((u) => u.role === "client_pro")?.client_code).toBe("CP-ITS");
     });
 
     it("vérifie les autorisations de routage pour le rôle commercial", () => {
@@ -241,6 +241,22 @@ describe("Audit de Cohérence Globale & Interactions Multi-Utilisateurs", () => 
       const soldeFinal = await soldeClient(clientCode);
       expect(soldeFinal).toBe(-50000);
       expect(plafond + soldeFinal).toBe(3450000);
+    });
+
+    it("un code historique ITS alimente le même solde que CP-ITS", async () => {
+      const { saveOperationCredit, soldeClient } = await import("../src/lib/api.js");
+      expect(codeClientCanonique("ITS")).toBe("CP-ITS");
+      await saveOperationCredit({
+        client_code: "ITS",
+        station_id: "st-hann",
+        date_op: "2026-09-27",
+        matricule: "Alias Excel",
+        volume_l: 10,
+        valeur_cons: 7550,
+        depot: 0,
+      });
+      expect(await soldeClient("CP-ITS")).toBe(-7550);
+      expect(await soldeClient("ITS")).toBe(-7550);
     });
   });
 
@@ -330,6 +346,26 @@ describe("Audit de Cohérence Globale & Interactions Multi-Utilisateurs", () => 
       const jaugeGasoil = jauges.find((j) => j.produit === "GASOIL");
       expect(jaugeGasoil).toBeDefined();
       expect(jaugeGasoil.volume_physique).toBe(22950);
+    });
+
+    it("une jauge pistolets est enregistrée dans jauges_cuves", async () => {
+      const { saveJauge, listJaugesCuves, listJauges } = await import("../src/lib/api.js");
+      const res = await saveJauge({
+        station_id: "st-hann",
+        date_jauge: "2026-09-30",
+        produit: "SUPER",
+        jauge_j: 5000,
+        livraison_l: 2000,
+        vente_j: 800,
+        jauge_j1: 6200,
+      });
+      expect(res.ok).toBe(true);
+      const ops = await listJaugesCuves("st-hann");
+      const superJ = ops.find((j) => j.produit === "SUPER");
+      expect(superJ).toBeDefined();
+      expect(superJ.volume_physique).toBe(6200);
+      const vue = await listJauges("st-hann");
+      expect(vue.find((j) => j.produit === "SUPER")?.jauge_j1).toBe(6200);
     });
   });
 

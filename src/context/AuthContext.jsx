@@ -35,7 +35,7 @@ export function AuthProvider({ children }) {
           const u = JSON.parse(raw);
           if (alive) {
             setSession({ type: "demo", user: u });
-            setProfil({ id: u.id, nom_complet: u.nom_complet, role: u.role, station_id: u.station_id, stations: u.stations, email: u.email });
+            setProfil({ id: u.id, nom_complet: u.nom_complet, role: u.role, station_id: u.station_id, stations: u.stations, email: u.email, client_code: u.client_code || null });
           }
           return;
         } catch {}
@@ -102,7 +102,7 @@ export function AuthProvider({ children }) {
         const packed = { ...safe, stations };
         localStorage.setItem("ogss_demo_session", JSON.stringify(packed));
         setSession({ type: "demo", user: packed });
-        setProfil({ id: packed.id, nom_complet: packed.nom_complet, role: packed.role, station_id: packed.station_id, stations: packed.stations, email: packed.email });
+        setProfil({ id: packed.id, nom_complet: packed.nom_complet, role: packed.role, station_id: packed.station_id, stations: packed.stations, email: packed.email, client_code: packed.client_code || null });
         return;
       }
 
@@ -118,7 +118,7 @@ export function AuthProvider({ children }) {
           } catch {}
           localStorage.removeItem("ogss_demo_session");
           setSession({ type: "cloud", user: data.user });
-          setProfil(p || { id: data.user.id, email: data.user.email, role: "gerant", nom_complet: data.user.email });
+          setProfil(p || { id: data.user.id, email: data.user.email, role: null, nom_complet: data.user.email });
           return;
         } catch (err) {
           if (err.message && (err.message.includes("fetch failed") || err.message.includes("NetworkError") || err.message.includes("Failed to fetch"))) {
@@ -140,7 +140,7 @@ export function AuthProvider({ children }) {
       const packed = { ...safe, stations };
       localStorage.setItem("ogss_demo_session", JSON.stringify(packed));
       setSession({ type: "demo", user: packed });
-      setProfil({ id: packed.id, nom_complet: packed.nom_complet, role: packed.role, station_id: packed.station_id, stations: packed.stations, email: packed.email });
+      setProfil({ id: packed.id, nom_complet: packed.nom_complet, role: packed.role, station_id: packed.station_id, stations: packed.stations, email: packed.email, client_code: packed.client_code || null });
     },
     async signup(email, password, nom) {
       const sb = getSupabase();

@@ -22,6 +22,7 @@ import Fidelite from "./pages/Fidelite";
 import BilanJournalierSite from "./pages/BilanJournalierSite";
 import EspaceClientFidelite from "./pages/EspaceClientFidelite";
 import TableauBordGerant from "./pages/TableauBordGerant";
+import { rolesRoute } from "./lib/permissions";
 
 function RequireAuth({ children }) {
   const { session, loading } = useAuth();
@@ -30,17 +31,19 @@ function RequireAuth({ children }) {
   return children;
 }
 
-function RequireRole({ roles, children }) {
+function RequireRole({ path, children }) {
   const { profil } = useAuth();
-  const role = profil?.role || "gerant";
-  if (!roles.includes(role)) return <Navigate to="/" replace />;
+  const role = profil?.role;
+  if (!role) return null;
+  if (!rolesRoute(role, path)) return <Navigate to="/" replace />;
   return children;
 }
 
 // Redirection d'accueil selon le métier opérationnel réel (§37)
 function HomeRouter() {
   const { profil } = useAuth();
-  const role = profil?.role || "gerant";
+  const role = profil?.role;
+  if (!role) return null;
   if (role === "gerant") return <Navigate to="/gerant" replace />;
   if (role === "pompiste") return <Navigate to="/descente" replace />;
   if (role === "lavage") return <Navigate to="/lavage" replace />;
@@ -48,6 +51,7 @@ function HomeRouter() {
   if (role === "stock") return <Navigate to="/cuves" replace />;
   if (role === "maintenance") return <Navigate to="/maintenance" replace />;
   if (role === "commercial") return <Navigate to="/clients-pro" replace />;
+  if (role === "client_pro") return <Navigate to="/clients-pro" replace />;
   return <Dashboard />;
 }
 
@@ -66,28 +70,26 @@ export default function App() {
         }
       >
         <Route path="/" element={<HomeRouter />} />
-        {/* Cockpit Gérant de Station */}
-        <Route path="/gerant" element={<RequireRole roles={["admin", "gerant", "superviseur", "directeur"]}><TableauBordGerant /></RequireRole>} />
-        {/* Modules opérationnels terrain §37 */}
-        <Route path="/descente" element={<RequireRole roles={["admin", "gerant", "superviseur", "directeur", "pompiste"]}><DescentePompiste /></RequireRole>} />
-        <Route path="/cuves" element={<RequireRole roles={["admin", "gerant", "superviseur", "directeur", "stock"]}><CuvesCarburant /></RequireRole>} />
-        <Route path="/fidelite" element={<RequireRole roles={["admin", "gerant", "superviseur", "directeur", "commercial", "pompiste", "boutique", "lavage"]}><Fidelite /></RequireRole>} />
-        <Route path="/lavage" element={<RequireRole roles={["admin", "gerant", "superviseur", "directeur", "lavage"]}><Lavage /></RequireRole>} />
-        <Route path="/boutique" element={<RequireRole roles={["admin", "gerant", "superviseur", "directeur", "boutique", "stock"]}><Boutique /></RequireRole>} />
-        <Route path="/maintenance" element={<RequireRole roles={["admin", "gerant", "superviseur", "directeur", "maintenance"]}><Maintenance /></RequireRole>} />
+        <Route path="/gerant" element={<RequireRole path="/gerant"><TableauBordGerant /></RequireRole>} />
+        <Route path="/descente" element={<RequireRole path="/descente"><DescentePompiste /></RequireRole>} />
+        <Route path="/cuves" element={<RequireRole path="/cuves"><CuvesCarburant /></RequireRole>} />
+        <Route path="/fidelite" element={<RequireRole path="/fidelite"><Fidelite /></RequireRole>} />
+        <Route path="/lavage" element={<RequireRole path="/lavage"><Lavage /></RequireRole>} />
+        <Route path="/boutique" element={<RequireRole path="/boutique"><Boutique /></RequireRole>} />
+        <Route path="/maintenance" element={<RequireRole path="/maintenance"><Maintenance /></RequireRole>} />
+        <Route path="/incidents" element={<RequireRole path="/incidents"><Navigate to="/maintenance" replace /></RequireRole>} />
 
-        {/* Modules de gestion & pilotage */}
-        <Route path="/historique" element={<RequireRole roles={["admin", "superviseur", "directeur", "comptable"]}><Historique /></RequireRole>} />
-        <Route path="/rapport" element={<RequireRole roles={["admin", "superviseur", "directeur"]}><Rapport /></RequireRole>} />
-        <Route path="/bilan-site" element={<RequireRole roles={["admin", "gerant", "superviseur", "directeur", "comptable"]}><BilanJournalierSite /></RequireRole>} />
-        <Route path="/stocks" element={<RequireRole roles={["admin", "gerant", "superviseur", "directeur", "comptable", "stock"]}><Stocks /></RequireRole>} />
-        <Route path="/finance" element={<RequireRole roles={["admin", "superviseur", "directeur", "comptable"]}><Finance /></RequireRole>} />
-        <Route path="/depenses" element={<RequireRole roles={["admin", "gerant", "superviseur", "directeur", "comptable"]}><Depenses /></RequireRole>} />
-        <Route path="/clients-pro" element={<RequireRole roles={["admin", "gerant", "superviseur", "directeur", "comptable", "commercial"]}><ClientsPro /></RequireRole>} />
-        <Route path="/fournisseurs" element={<RequireRole roles={["admin", "superviseur", "directeur", "comptable"]}><Fournisseurs /></RequireRole>} />
-        <Route path="/pistolets" element={<RequireRole roles={["admin", "superviseur", "directeur", "gerant"]}><Pistolets /></RequireRole>} />
-        <Route path="/pompistes" element={<RequireRole roles={["admin", "superviseur", "directeur", "gerant"]}><Pompistes /></RequireRole>} />
-        <Route path="/parametres" element={<RequireRole roles={["admin", "directeur"]}><Parametres /></RequireRole>} />
+        <Route path="/historique" element={<RequireRole path="/historique"><Historique /></RequireRole>} />
+        <Route path="/rapport" element={<RequireRole path="/rapport"><Rapport /></RequireRole>} />
+        <Route path="/bilan-site" element={<RequireRole path="/bilan-site"><BilanJournalierSite /></RequireRole>} />
+        <Route path="/stocks" element={<RequireRole path="/stocks"><Stocks /></RequireRole>} />
+        <Route path="/finance" element={<RequireRole path="/finance"><Finance /></RequireRole>} />
+        <Route path="/depenses" element={<RequireRole path="/depenses"><Depenses /></RequireRole>} />
+        <Route path="/clients-pro" element={<RequireRole path="/clients-pro"><ClientsPro /></RequireRole>} />
+        <Route path="/fournisseurs" element={<RequireRole path="/fournisseurs"><Fournisseurs /></RequireRole>} />
+        <Route path="/pistolets" element={<RequireRole path="/pistolets"><Pistolets /></RequireRole>} />
+        <Route path="/pompistes" element={<RequireRole path="/pompistes"><Pompistes /></RequireRole>} />
+        <Route path="/parametres" element={<RequireRole path="/parametres"><Parametres /></RequireRole>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

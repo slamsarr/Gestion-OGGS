@@ -74,6 +74,7 @@ vi.mock("../src/lib/db", async (importOriginal) => {
   };
 });
 
+import { db } from "../src/lib/db";
 import {
   saveBonCarburant,
   listBonsClient,
@@ -82,8 +83,12 @@ import {
   reglerBonsClient,
   syncBonsFromDescente,
   listOperationsCredit,
+  indexesMaxParPistolet,
+  rowMatchesStation,
+  stationKeys,
 } from "../src/lib/api";
-import { todayISO } from "../src/lib/calcul";
+import { todayISO, n } from "../src/lib/calcul";
+import { peutCorrigerDescente } from "../src/lib/permissions";
 
 describe("Améliorations Pompiste & Gérant", () => {
   beforeEach(() => {
@@ -144,26 +149,9 @@ describe("Améliorations Pompiste & Gérant", () => {
       expect(bon.produit).toBe("GASOIL");
     });
 
-    it("interdit la modification d'une descente soumise (statut TERMINEE)", () => {
-      const descenteSoumise = {
-        id: "desc-001",
-        numero: "DESC-2026-001",
-        statut: "TERMINEE",
-        total_recette_theorique: 150000,
-      };
-
-      // Simule la garde de modification
-      const canEdit = descenteSoumise.statut !== "TERMINEE";
-      expect(canEdit).toBe(false);
-
-      const descenteBrouillon = {
-        id: "desc-002",
-        numero: "DESC-2026-002",
-        statut: "BROUILLON",
-        total_recette_theorique: 80000,
-      };
-      const canEditDraft = descenteBrouillon.statut !== "TERMINEE";
-      expect(canEditDraft).toBe(true);
+    it("interdit au pompiste de modifier une descente clôturée (statut TERMINEE)", () => {
+      expect(peutCorrigerDescente("pompiste", "TERMINEE")).toBe(false);
+      expect(peutCorrigerDescente("pompiste", "BROUILLON")).toBe(true);
     });
   });
 
@@ -246,6 +234,7 @@ describe("Améliorations Pompiste & Gérant", () => {
         ],
       };
 
+      await db.descentes.put(descente);
       await syncBonsFromDescente(descente);
 
       // 2. Vérifier que listBonsClient charge les 2 bons
@@ -282,6 +271,11 @@ describe("Améliorations Pompiste & Gérant", () => {
       expect(bon1.historique_reglements.length).toBe(1);
       expect(bon1.historique_reglements[0].montant).toBe(50000);
       expect(bon1.historique_reglements[0].reference).toBe("CHQ-001122");
+
+      const apresResync = await listTousBonsStation("st-hann");
+      const bon1Resync = apresResync.find((b) => b.id === "bon-1");
+      expect(bon1Resync.statut_paiement).toBe("PARTIELLEMENT_REGLE");
+      expect(bon1Resync.montant_regle).toBe(50000);
 
       // Bon 2 n'a pas été impacté
       expect(bon2.reste_a_payer).toBe(37750);
@@ -345,6 +339,7 @@ describe("Améliorations Pompiste & Gérant", () => {
         ],
       };
 
+      await db.descentes.put(descenteAvecBonSansClient);
       await syncBonsFromDescente(descenteAvecBonSansClient);
 
       // Le gérant liste TOUS les bons de la station
@@ -365,28 +360,39 @@ describe("Améliorations Pompiste & Gérant", () => {
       const bonMaj = bonsApresAttrib.find((b) => b.id === bonTrouve.id);
       expect(bonMaj.client_code).toBe("CP-SOCOCIM");
       expect(bonMaj.client_nom).toBe("Sococim Industries");
+
+      const opsApresAttrib = await listOperationsCredit("CP-SOCOCIM");
+      expect(opsApresAttrib.some((o) => n(o.valeur_cons) === 30200)).toBe(true);
+    });
+
+    it("relie le code station HANN à l'id st-hann et lit les index de fin des pompes", () => {
+      expect(stationKeys("HANN")).toEqual(expect.arrayContaining(["st-hann", "HANN"]));
+      expect(
+        rowMatchesStation({ station_id: "st-hann" }, "HANN", [{ id: "st-hann", code: "HANN" }])
+      ).toBe(true);
+      expect(
+        rowMatchesStation({ station_id: "st-ndia" }, "NDIAKHIRATE", [
+          { id: "st-ndia", code: "NDIAKHIRATE" },
+        ])
+      ).toBe(true);
+
+      const maxFin = indexesMaxParPistolet([
+        {
+          pompes: [
+            { pistolet_code: "gasoil1", index_fin: 10100 },
+            { pistolet_code: "super1", index_fin: 5500 },
+          ],
+        },
+        { pistolet_code: "gasoil1", index_fin: 10250 },
+      ]);
+      expect(maxFin.gasoil1).toBe(10250);
+      expect(maxFin.super1).toBe(5500);
     });
 
     it("permet au gérant de corriger une descente clôturée alors que le pompiste est verrouillé", () => {
-      const descenteCloturee = {
-        id: "desc-cloturee-1",
-        statut: "TERMINEE",
-        total_caisse: 200000,
-      };
-
-      // Règle d'autorisation
-      const peutCorrigerDescente = (role, statut) => {
-        const isManager = ["gerant", "admin", "superviseur", "directeur"].includes(role);
-        if (statut === "TERMINEE" && !isManager) return false;
-        return true;
-      };
-
-      // Le pompiste ne peut PAS modifier
-      expect(peutCorrigerDescente("pompiste", descenteCloturee.statut)).toBe(false);
-
-      // Le gérant PEUT modifier pour corriger
-      expect(peutCorrigerDescente("gerant", descenteCloturee.statut)).toBe(true);
-      expect(peutCorrigerDescente("admin", descenteCloturee.statut)).toBe(true);
+      expect(peutCorrigerDescente("pompiste", "TERMINEE")).toBe(false);
+      expect(peutCorrigerDescente("gerant", "TERMINEE")).toBe(true);
+      expect(peutCorrigerDescente("admin", "TERMINEE")).toBe(true);
     });
   });
 });

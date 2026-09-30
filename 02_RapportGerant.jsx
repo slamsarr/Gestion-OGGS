@@ -1,8 +1,11 @@
+// OBSOLÈTE — ne pas importer dans l’app.
+// Le rapport vivant est src/pages/Rapport.jsx (moteur src/lib/calcul.js).
+// Conservé comme archive des formules Excel d’origine (voir 03_ARCHITECTURE.md).
+//
 // =====================================================================
-//  OGSS RÉSEAU — Module 1 : Rapport journalier gérant
+//  OGSS RÉSEAU — Module 1 : Rapport journalier gérant (prototype 2026-09)
 //  React (mobile-first) — calculs identiques au journal Excel source
-//  Persistance brouillon : window.storage (à remplacer par Dexie/IndexedDB
-//  + Supabase dans le PWA de production — voir 03_ARCHITECTURE.md §4)
+//  Persistance brouillon : window.storage (remplacé par Dexie dans la PWA)
 //  Export Excel : SheetJS, mise en page identique au bloc journalier source
 // =====================================================================
 import { useEffect, useMemo, useState } from "react";

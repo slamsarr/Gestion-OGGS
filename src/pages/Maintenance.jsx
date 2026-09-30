@@ -3,10 +3,14 @@ import { useAuth } from "../context/AuthContext";
 import { loadReferentiel, listEquipements, listIncidents, createIncident, updateIncident, listMaintenances, createMaintenance } from "../lib/api";
 import { F, fmtDate, n, T, todayISO } from "../lib/calcul";
 import { Section, Row, Num, Loading } from "../components/ui";
+import { peutAgirProfil } from "../lib/permissions";
 
 export default function Maintenance() {
   const { profil } = useAuth();
   const stationId = profil?.station_id || "st-hann";
+  const peutSignaler = peutAgirProfil(profil, "incident", "creer");
+  const peutResoudre = peutAgirProfil(profil, "incident", "resoudre");
+  const peutPlanifier = peutAgirProfil(profil, "maintenance", "creer");
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("incidents"); // incidents | interventions | equipements
   const [msg, setMsg] = useState("");
@@ -67,6 +71,7 @@ export default function Maintenance() {
 
   const handleDeclarerPanne = async (e) => {
     e.preventDefault();
+    if (!peutSignaler) return flash("Tu n'as pas le droit de déclarer un incident.");
     if (!descriptionPanne.trim()) return flash("Veuillez décrire la panne");
 
     const eqObj = equipements.find((eq) => (eq.id === selectedEq || eq.nom_equipement === selectedEq));
@@ -85,6 +90,8 @@ export default function Maintenance() {
     if (res.ok) {
       flash("Panne signalée avec succès !");
       setDescriptionPanne("");
+      setPriorite("MOYENNE");
+      if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
       loadData();
     } else {
       flash("Erreur lors de la déclaration");
@@ -92,6 +99,7 @@ export default function Maintenance() {
   };
 
   const handleCloturerIncident = async (id) => {
+    if (!peutResoudre) return flash("Tu n'as pas le droit de clôturer un incident.");
     await updateIncident(id, { statut_resolution: "RESOLU" });
     flash("Incident marqué comme résolu !");
     loadData();
@@ -99,6 +107,7 @@ export default function Maintenance() {
 
   const handleEnregistrerIntervention = async (e) => {
     e.preventDefault();
+    if (!peutPlanifier) return flash("Tu n'as pas le droit d'enregistrer une intervention.");
     if (!descriptionTravaux.trim()) return flash("Veuillez décrire les travaux effectués");
 
     const eqObj = equipements.find((eq) => (eq.id === intervEquipement || eq.nom_equipement === intervEquipement));
@@ -121,6 +130,8 @@ export default function Maintenance() {
       setPiecesChangees("");
       setPrestataire("");
       setCoutMaintenance("");
+      setDateInterv(todayISO());
+      if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
       loadData();
     } else {
       flash("Erreur lors de l'enregistrement de l'intervention");

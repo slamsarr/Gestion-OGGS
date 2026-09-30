@@ -3,12 +3,14 @@ import { useAuth } from "../context/AuthContext";
 import { loadReferentiel, listDepenses, saveDepense, deleteDepense, createCategorie } from "../lib/api";
 import { F, fmtDate, n, T, todayISO, uuid } from "../lib/calcul";
 import { Section, Row, Num, Loading } from "../components/ui";
+import { peutAgirProfil } from "../lib/permissions";
 
 const CAT_VIDE = { code: "", libelle: "", nature_depense: "FONCTIONNEMENT", compte_syscohada: "6588" };
 
 export default function Depenses() {
   const { profil } = useAuth();
   const stationId = profil?.station_id || "";
+  const peutDeclarer = peutAgirProfil(profil, "depense", "declarer");
   const [ref, setRef] = useState(null);
   const [cats, setCats] = useState([]);
   const [depenses, setDeps] = useState([]);
@@ -40,12 +42,14 @@ export default function Depenses() {
   };
 
   const save = async () => {
+    if (!peutDeclarer) return flash("Tu n'as pas le droit de déclarer une dépense.");
     if (!dForm.categorie_code) return flash("Catégorie requise");
     if (!n(dForm.montant) || n(dForm.montant) <= 0) return flash("Montant invalide");
     const res = await saveDepense({ ...dForm, montant: n(dForm.montant), id: uuid() });
     if (res?.error) return flash("Erreur : " + res.error);
     setDForm({ categorie_code: "", libelle: "", montant: "", date_depense: todayISO(), mode_paiement: "ESPECES", station_id: stationId });
     flash("Dépense enregistrée");
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
     load();
   };
 

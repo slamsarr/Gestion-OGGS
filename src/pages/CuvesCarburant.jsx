@@ -12,10 +12,13 @@ import {
 } from "../lib/api";
 import { F, fmtDate, n, T, todayISO } from "../lib/calcul";
 import { Loading } from "../components/ui";
+import { peutAgirProfil } from "../lib/permissions";
 
 export default function CuvesCarburant() {
   const { profil } = useAuth();
   const stationId = profil?.station_id || "st-hann";
+  const peutSaisirJauge = peutAgirProfil(profil, "stock", "ajuster");
+  const peutDepotage = peutAgirProfil(profil, "depotage", "creer");
 
   const [ref, setRef] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -262,6 +265,7 @@ export default function CuvesCarburant() {
 
   const handleEnregistrerJauge = async (e) => {
     e.preventDefault();
+    if (!peutSaisirJauge) return flash("Tu n'as pas le droit d'ajuster une jauge cuve.", "err");
     if (!stockPhysique) return flash("Veuillez saisir le volume physique mesuré", "err");
 
     const payload = {
@@ -289,6 +293,7 @@ export default function CuvesCarburant() {
   const handleValiderDepotage = async (e) => {
     e.preventDefault();
 
+    if (!peutDepotage) return flash("Tu n'as pas le droit de valider un dépotage.", "err");
     if (!depotageForm.numero_bl?.trim()) {
       return flash("Le numéro de BL du camion est obligatoire", "err");
     }
@@ -326,6 +331,49 @@ export default function CuvesCarburant() {
     if (res.ok) {
       flash(`✅ Rapport de dépotage convoi validé avec succès !`, "ok");
       setPvModal(res.rapport);
+      setDepotageForm({
+        date: todayISO(),
+        heure_debut: "",
+        heure_fin: "",
+        produit: "GASOIL / SUPER",
+        cuve_id: "",
+        numero_bl: "",
+        fournisseur: "",
+        transporteur: "",
+        immatriculation_camion: "",
+        nom_chauffeur: "",
+        numero_permis: "",
+        volume_bl: "",
+        prise_de_terre_branchee: true,
+        extincteurs_en_place: true,
+        moteur_coupe_cales: true,
+        scelles_conformes: true,
+        numeros_scelles: "",
+        test_eau_fond_cuve: false,
+        test_eau_camion: false,
+        densite_mesuree: "",
+        temperature_c: "",
+        responsable_reception: profil?.nom_complet || "Chef de Station",
+        observations: "",
+      });
+      setCompartiments([
+        {
+          id: "comp-1",
+          numero_compartiment: "C1",
+          produit: "GASOIL",
+          cuve_station_id: "cuve-gasoil-1",
+          numero_bl: "",
+          numero_scelle: "",
+          volume_bl: "",
+          jauge_camion_avant: "",
+          reste_camion_litres: "0",
+          jauge_cuve_avant_cm: "",
+          jauge_cuve_avant_l: "",
+          jauge_cuve_apres_cm: "",
+          jauge_cuve_apres_l: "",
+        },
+      ]);
+      if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
       loadData();
     } else {
       flash("Erreur lors de l'enregistrement du rapport de dépotage", "err");

@@ -125,7 +125,7 @@ export default function Login() {
                 </span>
               </div>
               <p className="text-xs text-gray-500 font-medium">
-                Progiciel de gestion réseau & pilotage multi-stations (45 Stations)
+                Progiciel de gestion réseau — Hann Mariste · Ndiakhirate
               </p>
             </div>
           </div>

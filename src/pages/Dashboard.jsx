@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { loadReferentiel, listRapports, stocksTheoriques, listPrestationsLavage, listVentesBoutique } from "../lib/api";
 import { F, fmtDate, todayISO, T, n, calculer } from "../lib/calcul";
 import { Section, Row, Loading, PageHeader, StatCard, Badge, Card } from "../components/ui";
+import { peutValiderRapport } from "../lib/permissions";
 
 function Bar({ label, value, max, color = "#0B2F3A" }) {
   const pct = max > 0 ? Math.min((value / max) * 100, 100) : 0;
@@ -277,7 +278,7 @@ export default function Dashboard() {
       </div>
 
       {/* RAPPORTS À VALIDER POUR LA DIRECTION */}
-      {soumis.length > 0 && (profil?.role === "admin" || profil?.role === "superviseur" || profil?.role === "directeur") && (
+      {soumis.length > 0 && peutValiderRapport(profil?.role) && (
         <Section titre="📋 Rapports Journaliers en Attente de Validation" aside={`${soumis.length} rapport(s)`}>
           <div className="divide-y divide-slate-100">
             {soumis.map((r, i) => (

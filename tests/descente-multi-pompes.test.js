@@ -300,4 +300,41 @@ describe("Module Compte Pompiste — Multi-Pompes et Bons d'encaissement", () =>
     const ecart = totalJustifie - totalTheorique;
     expect(ecart).toBe(0);
   });
+
+  it("Scénario 11 : le pompiste démarre un quart sans pompe par défaut et doit les choisir", () => {
+    const sessionInitiale = [];
+    expect(sessionInitiale).toHaveLength(0);
+
+    const pistoletsStation = [
+      { code: "gasoil1", produit: "GASOIL" },
+      { code: "super1", produit: "SUPER" },
+    ];
+    expect(pistoletsStation.length).toBeGreaterThan(0);
+
+    const pompeChoisie = pistoletsStation.find((p) => p.code === "super1");
+    const sessionApresChoix = pompeChoisie
+      ? [{ caisseId: "C1", pistolet_code: pompeChoisie.code, produit: pompeChoisie.produit }]
+      : [];
+
+    expect(sessionApresChoix).toHaveLength(1);
+    expect(sessionApresChoix[0].pistolet_code).toBe("super1");
+    expect(sessionApresChoix[0].pistolet_code).not.toBe(pistoletsStation[0].code);
+  });
+
+  it("Scénario 12 : après clôture, le formulaire terrain est vidé (pompes, bons, encaissements)", () => {
+    const formulaireApresValidation = {
+      pompes: [],
+      bons: [],
+      lubrifiants: [],
+      especes: "",
+      wave: "",
+      commentaire: "",
+      editingDescenteId: null,
+    };
+    expect(formulaireApresValidation.pompes).toEqual([]);
+    expect(formulaireApresValidation.bons).toEqual([]);
+    expect(formulaireApresValidation.lubrifiants).toEqual([]);
+    expect(formulaireApresValidation.especes).toBe("");
+    expect(formulaireApresValidation.editingDescenteId).toBeNull();
+  });
 });

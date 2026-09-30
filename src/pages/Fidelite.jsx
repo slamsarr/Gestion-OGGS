@@ -15,6 +15,7 @@ import {
 } from "../lib/api";
 import { F, fmtDate, n, T, todayISO } from "../lib/calcul";
 import { Loading } from "../components/ui";
+import { peutAgirProfil } from "../lib/permissions";
 
 const PALIERS = [
   { nom: "Bronze", min: 0, max: 499, color: "#CD7F32", bg: "bg-amber-100 text-amber-900 border-amber-300" },
@@ -143,6 +144,9 @@ function CameraScannerModal({ isOpen, onClose, onScanSuccess }) {
 export default function Fidelite() {
   const { profil } = useAuth();
   const stationId = profil?.station_id || "st-hann";
+  const peutCrediter = peutAgirProfil(profil, "fidelite", "crediter");
+  const peutDebiter = peutAgirProfil(profil, "fidelite", "debiter");
+  const peutGererMembres = peutAgirProfil(profil, "fidelite", "gerer");
 
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("guichet"); // guichet | adherents | borne | catalogue | historique
@@ -263,6 +267,7 @@ export default function Fidelite() {
   // Validation du crédit de points lors du paiement
   const handleCrediterPoints = async (e) => {
     e.preventDefault();
+    if (!peutCrediter) return flash("Tu n'as pas le droit de créditer des points.", "err");
     if (!selectedMembre) return flash("Veuillez d'abord sélectionner un adhérent", "err");
     if (pointsCalcules <= 0) return flash("Nombre de points à créditer invalide", "err");
 
@@ -289,6 +294,10 @@ export default function Fidelite() {
         date: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
       });
       setSelectedMembre(res.membre);
+      setCreditValeur("");
+      setCreditRefPiece("");
+      setCreditNotes("");
+      if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
       loadData();
     } else {
       flash(res.error || "Erreur lors du crédit de points", "err");
@@ -296,6 +305,7 @@ export default function Fidelite() {
   };
 
   const handleDebiterRecompense = async (rec) => {
+    if (!peutDebiter) return flash("Tu n'as pas le droit d'échanger des points (débit).", "err");
     if (!selectedMembre) return flash("Veuillez sélectionner un adhérent", "err");
     if ((n(selectedMembre.points_solde) || 0) < rec.points_requis) {
       return flash(`Solde insuffisant pour cette récompense (${rec.points_requis} pts requis)`, "err");
@@ -324,6 +334,7 @@ export default function Fidelite() {
 
   const handleCreateMembre = async (e) => {
     e.preventDefault();
+    if (!peutGererMembres && !peutCrediter) return flash("Tu n'as pas le droit de créer un adhérent.", "err");
     if (!newMembreForm.nom.trim() || !newMembreForm.telephone.trim()) {
       return flash("Le nom et le numéro de téléphone sont obligatoires", "err");
     }
@@ -883,12 +894,13 @@ export default function Fidelite() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   {recompenses.map((rec) => {
-                    const peutDebiter = (n(selectedMembre.points_solde) || 0) >= rec.points_requis;
+                    const pointsSuffisants = (n(selectedMembre.points_solde) || 0) >= rec.points_requis;
+                    const peutOffrir = peutDebiter && pointsSuffisants;
                     return (
                       <div
                         key={rec.id}
                         className={`p-3 rounded-xl border flex flex-col justify-between transition-all ${
-                          peutDebiter ? "bg-white hover:border-amber-400 hover:shadow-xs" : "bg-gray-50/60 opacity-60"
+                          peutOffrir ? "bg-white hover:border-amber-400 hover:shadow-xs" : "bg-gray-50/60 opacity-60"
                         }`}
                         style={{ borderColor: T.line }}
                       >
@@ -909,14 +921,14 @@ export default function Fidelite() {
                           <button
                             type="button"
                             onClick={() => handleDebiterRecompense(rec)}
-                            disabled={!peutDebiter}
+                            disabled={!peutOffrir}
                             className={`text-xs px-2.5 py-1 rounded font-bold transition-all ${
-                              peutDebiter
+                              peutOffrir
                                 ? "bg-emerald-600 text-white hover:bg-emerald-700 shadow-xs"
                                 : "bg-gray-200 text-gray-500 cursor-not-allowed"
                             }`}
                           >
-                            {peutDebiter ? "Offrir ✓" : "Points manquants"}
+                            {!peutDebiter ? "Non autorisé" : pointsSuffisants ? "Offrir ✓" : "Points manquants"}
                           </button>
                         </div>
                       </div>

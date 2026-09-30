@@ -1,7 +1,7 @@
 import { db, ensureLocalSeed, getLocalRef, isCloudConfigured, setLocalRef } from "./db";
 import { getSupabase } from "./supabase";
 import { calculer, n, todayISO, uuid, F } from "./calcul";
-import { referentielFromSeed } from "./seed";
+import { codeClientCanonique, codesClientEquivalents, listeClientsCredit, referentielFromSeed } from "./seed";
 import {
   TABLES_CLOUD_METIER,
   TABLES_META_METIER,
@@ -12,6 +12,68 @@ import {
 } from "./metier-sync";
 
 export { isCloudConfigured };
+
+/** Clés comparables pour une station (id `st-hann` et code `HANN`). */
+export function stationKeys(station) {
+  if (station == null || station === "") return [];
+  const raw = String(station).trim();
+  const keys = new Set();
+  const add = (v) => {
+    if (!v) return;
+    keys.add(v);
+    keys.add(v.toLowerCase());
+    keys.add(v.toUpperCase());
+  };
+  add(raw);
+  const noPrefix = raw.replace(/^st-/i, "");
+  add(noPrefix);
+  add(`st-${noPrefix.toLowerCase()}`);
+  return [...keys];
+}
+
+export function rowMatchesStation(row, station, stations = []) {
+  if (!station) return true;
+  const sid = row?.station_id || row?.station || row?.station_code;
+  if (!sid) return true;
+  const filter = new Set(stationKeys(station));
+  const found = (stations || []).find(
+    (s) => stationKeys(s.id).some((k) => filter.has(k)) || stationKeys(s.code).some((k) => filter.has(k))
+  );
+  if (found) {
+    stationKeys(found.id).forEach((k) => filter.add(k));
+    stationKeys(found.code).forEach((k) => filter.add(k));
+  }
+  return stationKeys(sid).some((k) => filter.has(k));
+}
+
+async function stationsDuReferentiel() {
+  try {
+    const ref = await getLocalRef();
+    return ref?.stations || [];
+  } catch {
+    return [];
+  }
+}
+
+/** Index de fin max par pistolet (descentes multi-pompes ou anciennes mono-pompe). */
+export function indexesMaxParPistolet(descentes) {
+  const maxFin = {};
+  for (const d of descentes || []) {
+    const pompes =
+      Array.isArray(d.pompes) && d.pompes.length > 0
+        ? d.pompes
+        : d.pistolet_code
+          ? [{ pistolet_code: d.pistolet_code, index_fin: d.index_fin }]
+          : [];
+    for (const p of pompes) {
+      const code = p.pistolet_code;
+      if (!code) continue;
+      const fin = n(p.index_fin);
+      if (fin > (maxFin[code] || 0)) maxFin[code] = fin;
+    }
+  }
+  return maxFin;
+}
 
 function totaux(r, ref) {
   const c = calculer(r, ref);
@@ -54,7 +116,7 @@ export async function loadReferentiel() {
           lubrifiants: (produits || []).filter((p) => p.famille === "LUBRIFIANT" || p.famille === "ACCESSOIRE"),
           gaz: (produits || []).filter((p) => p.famille === "GAZ"),
           categories: categories || [],
-          clients: clients || [],
+          clients: listeClientsCredit({ clients: clients || [] }),
           cuves: cuves || [],
         };
         await setLocalRef(ref);
@@ -266,7 +328,7 @@ async function explodeCloud(sb, r, ref, stationId) {
   await sb.from("rapport_reglements").delete().eq("rapport_id", id);
   for (const rg of r.reglements || []) {
     if (!modes.includes(rg.mode) || n(rg.montant) <= 0) continue;
-    const client = ref.clients?.find((c) => c.code === rg.client);
+    const client = listeClientsCredit(ref).find((c) => c.code === codeClientCanonique(rg.client));
     await sb.from("rapport_reglements").insert({
       rapport_id: id,
       mode: rg.mode,
@@ -532,16 +594,29 @@ export async function deleteCategorie(id) {
 // ── CRUD Clients crédit ──
 export async function createClientCredit(client) {
   const sb = getSupabase();
-  const row = { id: client.id || uuid(), code: client.code, nom: client.nom, plafond: n(client.plafond) || 0, actif: true };
+  const code = codeClientCanonique(client.code);
+  const row = { id: client.id || uuid(), code, nom: client.nom, plafond: n(client.plafond) || 0, actif: true };
   if (sb) { const { error } = await sb.from("clients_credit").insert(row); if (error) return { error: error.message }; }
-  const ref = await getLocalRef(); ref.clients = [...(ref.clients || []), row]; await setLocalRef(ref);
+  const ref = await getLocalRef();
+  const pro = { code, nom_entreprise: client.nom, plafond_credit: row.plafond, actif: true, station_id: client.station_id || null };
+  ref.clients_pro = [...(ref.clients_pro || []), pro];
+  ref.clients = listeClientsCredit(ref);
+  await setLocalRef(ref);
   return { ok: true, client: row };
 }
 export async function updateClientCredit(id, patch) {
   const sb = getSupabase();
-  if (sb) { const { error } = await sb.from("clients_credit").update(patch).eq("id", id); if (error) return { error: error.message }; }
+  const canonPatch = patch.code ? { ...patch, code: codeClientCanonique(patch.code) } : patch;
+  if (sb) { const { error } = await sb.from("clients_credit").update(canonPatch).eq("id", id); if (error) return { error: error.message }; }
   const ref = await getLocalRef();
-  ref.clients = (ref.clients || []).map((c) => (c.id === id || c.code === id) ? { ...c, ...patch } : c);
+  ref.clients = (ref.clients || []).map((c) => (c.id === id || c.code === id) ? { ...c, ...canonPatch } : c);
+  ref.clients_pro = (ref.clients_pro || []).map((c) => (c.id === id || c.code === id) ? {
+    ...c,
+    ...canonPatch,
+    nom_entreprise: canonPatch.nom ?? c.nom_entreprise,
+    plafond_credit: canonPatch.plafond ?? c.plafond_credit,
+  } : c);
+  ref.clients = listeClientsCredit(ref);
   await setLocalRef(ref);
   return { ok: true };
 }
@@ -571,17 +646,59 @@ export async function listLivraisons(stationId) {
 }
 
 // ── Jauges cuves ──
+function jaugeVersVuePistolets(j) {
+  const date_jauge = j.date_jauge || j.date;
+  const jauge_j = j.jauge_j != null && j.jauge_j !== "" ? n(j.jauge_j) : n(j.stock_theorique);
+  const hasJ1 = j.jauge_j1 != null && j.jauge_j1 !== "";
+  const jauge_j1 = hasJ1 ? n(j.jauge_j1) : (j.volume_physique != null ? n(j.volume_physique) : null);
+  return {
+    ...j,
+    date_jauge,
+    produit: j.produit,
+    jauge_j,
+    livraison_l: n(j.livraison_l),
+    vente_j: n(j.vente_j),
+    jauge_j1,
+  };
+}
+
 export async function saveJauge(jauge) {
-  const row = { station_id: jauge.station_id, date_jauge: jauge.date_jauge, produit: jauge.produit, jauge_j: +jauge.jauge_j, livraison_l: n(jauge.livraison_l), vente_j: n(jauge.vente_j), jauge_j1: jauge.jauge_j1 != null && jauge.jauge_j1 !== "" ? +jauge.jauge_j1 : null };
-  const sb = getSupabase();
-  if (sb) { const { error } = await sb.from("jauges_cuves").upsert(row, { onConflict: "station_id,date_jauge,produit" }); if (error) return { error: error.message }; }
-  await db.jauges.put({ ...row, id: jauge.id || undefined });
-  return { ok: true };
+  const theo = n(jauge.jauge_j) + n(jauge.livraison_l) - n(jauge.vente_j);
+  const hasJ1 = jauge.jauge_j1 != null && jauge.jauge_j1 !== "";
+  const physique = hasJ1 ? n(jauge.jauge_j1) : n(jauge.jauge_j);
+  return saveJaugeCuve({
+    station_id: jauge.station_id,
+    date: jauge.date_jauge,
+    date_jauge: jauge.date_jauge,
+    produit: jauge.produit,
+    volume_physique: physique,
+    stock_theorique: theo,
+    ecart_litres: hasJ1 ? n(jauge.jauge_j1) - theo : 0,
+    hauteur_cm: n(jauge.hauteur_cm),
+    jauge_j: n(jauge.jauge_j),
+    livraison_l: n(jauge.livraison_l),
+    vente_j: n(jauge.vente_j),
+    jauge_j1: hasJ1 ? n(jauge.jauge_j1) : null,
+    operateur: jauge.operateur || "",
+  });
 }
 export async function listJauges(stationId) {
-  const sb = getSupabase();
-  if (sb) { try { const { data } = await sb.from("jauges_cuves").select("*").eq("station_id", stationId).order("date_jauge", { ascending: false }).limit(60); if (data) return data; } catch {} }
-  return db.jauges.where("station_id").equals(stationId).reverse().sortBy("date_jauge");
+  const ops = await listJaugesCuves(stationId);
+  let legacy = [];
+  try {
+    if (db.jauges) {
+      legacy = await db.jauges.where("station_id").equals(stationId).reverse().sortBy("date_jauge");
+    }
+  } catch { /* table absente en test */ }
+  const seen = new Set();
+  const out = [];
+  for (const j of [...ops, ...legacy].map(jaugeVersVuePistolets)) {
+    const k = `${j.date_jauge}|${j.produit}|${j.id || ""}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(j);
+  }
+  return out.sort((a, b) => (b.date_jauge || "").localeCompare(a.date_jauge || ""));
 }
 
 // ── Pompistes ──
@@ -662,7 +779,7 @@ export async function saveCuve(cuve) {
 
 // ── Opérations crédit ──
 export async function saveOperationCredit(op) {
-  const row = { client_code: op.client_code, station_id: op.station_id, date_op: op.date_op, matricule: op.matricule || "", volume_l: n(op.volume_l), valeur_cons: n(op.valeur_cons), depot: n(op.depot), rapport_id: op.rapport_id || null };
+  const row = { client_code: codeClientCanonique(op.client_code), station_id: op.station_id, date_op: op.date_op, matricule: op.matricule || "", volume_l: n(op.volume_l), valeur_cons: n(op.valeur_cons), depot: n(op.depot), rapport_id: op.rapport_id || null };
   const id = await db.operations_credit.add(row);
   const sb = getSupabase();
   if (sb) {
@@ -679,9 +796,22 @@ export async function saveOperationCredit(op) {
   return { ok: true, cloud: Boolean(sb), id, row };
 }
 export async function listOperationsCredit(clientCode) {
+  const codes = codesClientEquivalents(clientCode);
   const sb = getSupabase();
-  if (sb) { try { const { data: cl } = await sb.from("clients_credit").select("id").eq("code", clientCode).maybeSingle(); if (cl) { const { data } = await sb.from("operations_credit").select("*").eq("client_id", cl.id).order("date_op", { ascending: false }).limit(200); if (data) return data; } } catch {} }
-  return db.operations_credit.where("client_code").equals(clientCode).reverse().sortBy("date_op");
+  if (sb) {
+    try {
+      const { data: cls } = await sb.from("clients_credit").select("id").in("code", codes);
+      const ids = (cls || []).map((c) => c.id);
+      if (ids.length) {
+        const { data } = await sb.from("operations_credit").select("*").in("client_id", ids).order("date_op", { ascending: false }).limit(200);
+        if (data) return data;
+      }
+    } catch {}
+  }
+  const lots = await Promise.all(
+    codes.map((c) => db.operations_credit.where("client_code").equals(c).reverse().sortBy("date_op"))
+  );
+  return lots.flat().sort((a, b) => (b.date_op || "").localeCompare(a.date_op || ""));
 }
 export async function soldeClient(clientCode) {
   const ops = await listOperationsCredit(clientCode);
@@ -926,7 +1056,10 @@ async function collectMetier(table, stationId) {
     const key = r.id || r.code;
     if (key && !seen.has(key)) { seen.add(key); rows.push(r); }
   }
-  if (stationId) return rows.filter((r) => r.station_id === stationId || !r.station_id);
+  if (stationId) {
+    const stations = await stationsDuReferentiel();
+    return rows.filter((r) => rowMatchesStation(r, stationId, stations));
+  }
   return rows;
 }
 
@@ -1174,13 +1307,19 @@ export async function syncBonsFromDescente(descenteRow) {
   try {
     for (const b of descenteRow.bons) {
       // Ne plus sauter les bons sans client — on les garde avec code DIVERS
-      const clientCode = b.client_code || "DIVERS";
       const numeroBon = b.numero_bon || `BON-${(descenteRow.id || "x").slice(0, 6)}-${Date.now()}`;
-      const bonId = b.id || `bon-${clientCode}-${numeroBon}`;
+      const incomingCode = b.client_code || "";
+      const bonIdHint = incomingCode && incomingCode !== "DIVERS" ? incomingCode : "DIVERS";
+      const bonId = b.id || `bon-${bonIdHint}-${numeroBon}`;
       const existing = await db.bons_carburant.get(bonId);
       const mt = n(b.montant);
       // Ignorer les vrais bons vides (montant 0 ET pas de numéro bon)
       if (mt <= 0 && !b.numero_bon) continue;
+      const attribue = incomingCode && incomingCode !== "DIVERS"
+        ? { client_code: incomingCode, client_nom: b.client_nom || incomingCode }
+        : existing?.client_code && existing.client_code !== "DIVERS"
+          ? { client_code: existing.client_code, client_nom: existing.client_nom || existing.client_code }
+          : { client_code: incomingCode || "DIVERS", client_nom: b.client_nom || existing?.client_nom || "Client divers" };
       const regle = n(existing?.montant_regle ?? b.montant_regle ?? 0);
       const reste = Math.max(0, mt - regle);
       const statut = regle >= mt && mt > 0 ? "REGLE" : regle > 0 ? "PARTIELLEMENT_REGLE" : "NON_REGLE";
@@ -1188,8 +1327,8 @@ export async function syncBonsFromDescente(descenteRow) {
       const row = {
         id: bonId,
         station_id: descenteRow.station_id || "st-hann",
-        client_code: clientCode,
-        client_nom: b.client_nom || b.client_code || "Client divers",
+        client_code: attribue.client_code,
+        client_nom: attribue.client_nom,
         numero_bon: numeroBon,
         immatriculation: b.immatriculation || b.vehicule || "",
         observations: b.observation || b.observations || "",
@@ -1200,8 +1339,9 @@ export async function syncBonsFromDescente(descenteRow) {
         montant: mt,
         montant_regle: regle,
         reste_a_payer: reste,
-        statut_paiement: existing?.statut_paiement || statut,
+        statut_paiement: statut,
         historique_reglements: existing?.historique_reglements || [],
+        attribue_par: existing?.attribue_par,
         pompiste_id: descenteRow.pompiste_id || "",
         pompiste_nom: descenteRow.pompiste_nom || "Pompiste",
         descente_id: descenteRow.id,
@@ -1220,15 +1360,16 @@ export async function listTousBonsStation(stationId) {
   await ensureLocalSeed();
   // Re-synchroniser depuis toutes les descentes pour s'assurer d'avoir les bons à jour
   const allDescentes = await db.descentes.toArray();
+  const stations = await stationsDuReferentiel();
   for (const d of allDescentes) {
-    if (!stationId || d.station_id === stationId) {
+    if (!stationId || rowMatchesStation(d, stationId, stations)) {
       if (Array.isArray(d.bons) && d.bons.length > 0) {
         await syncBonsFromDescente(d);
       }
     }
   }
   let rows = await db.bons_carburant.toArray();
-  if (stationId) rows = rows.filter((b) => !b.station_id || b.station_id === stationId);
+  if (stationId) rows = rows.filter((b) => rowMatchesStation(b, stationId, stations));
   return rows.sort(
     (a, b) => (b.date || "").localeCompare(a.date || "") || (b.created_at || "").localeCompare(a.created_at || "")
   );
@@ -1239,6 +1380,9 @@ export async function attribuerBonClient(bonId, clientCode, clientNom) {
   await ensureLocalSeed();
   const bon = await db.bons_carburant.get(bonId);
   if (!bon) return { error: "Bon introuvable" };
+  if (!clientCode || clientCode === "DIVERS") return { error: "Client identifié requis" };
+
+  const etaitAnonyme = !bon.client_code || bon.client_code === "DIVERS";
   const updated = {
     ...bon,
     client_code: clientCode,
@@ -1247,6 +1391,30 @@ export async function attribuerBonClient(bonId, clientCode, clientNom) {
     maj_le: new Date().toISOString(),
   };
   await db.bons_carburant.put(updated);
+
+  if (bon.descente_id) {
+    const descente = await db.descentes.get(bon.descente_id);
+    if (descente && Array.isArray(descente.bons)) {
+      const bons = descente.bons.map((b) =>
+        b.id === bonId ? { ...b, client_code: clientCode, client_nom: clientNom || clientCode } : b
+      );
+      await db.descentes.put({ ...descente, bons, maj_le: new Date().toISOString() });
+    }
+  }
+
+  if (etaitAnonyme && n(bon.montant) > 0) {
+    const litStr = n(bon.volume_litres) > 0 ? ` (${bon.volume_litres} L)` : "";
+    await saveOperationCredit({
+      client_code: clientCode,
+      station_id: bon.station_id || "st-hann",
+      date_op: bon.date || todayISO(),
+      matricule: `Bon ${bon.numero_bon || bonId}${litStr} (attribué gérant)`,
+      volume_l: n(bon.volume_litres),
+      valeur_cons: n(bon.montant),
+      depot: 0,
+    });
+  }
+
   return { ok: true };
 }
 
@@ -1271,7 +1439,8 @@ export async function updateDescente(id, patch) {
 export async function listDescentes(stationId, date) {
   await ensureLocalSeed();
   let rows = await db.descentes.toArray();
-  if (stationId) rows = rows.filter((d) => d.station_id === stationId);
+  const stations = await stationsDuReferentiel();
+  if (stationId) rows = rows.filter((d) => rowMatchesStation(d, stationId, stations));
   if (date) rows = rows.filter((d) => d.date === date);
   return rows.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
 }
@@ -1420,7 +1589,8 @@ export async function createPrestationLavage(p) {
 export async function listPrestationsLavage(stationId, date) {
   await ensureLocalSeed();
   let rows = await db.prestations_lavage.toArray();
-  if (stationId) rows = rows.filter((p) => p.station_id === stationId);
+  const stations = await stationsDuReferentiel();
+  if (stationId) rows = rows.filter((p) => rowMatchesStation(p, stationId, stations));
   if (date) rows = rows.filter((p) => p.date === date);
   return rows.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
 }
@@ -1475,7 +1645,8 @@ export async function createVenteBoutique(v) {
 export async function listVentesBoutique(stationId, date) {
   await ensureLocalSeed();
   let rows = await db.ventes_boutique.toArray();
-  if (stationId) rows = rows.filter((v) => v.station_id === stationId);
+  const stations = await stationsDuReferentiel();
+  if (stationId) rows = rows.filter((v) => rowMatchesStation(v, stationId, stations));
   if (date) rows = rows.filter((v) => v.date === date);
   return rows.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
 }
@@ -1504,7 +1675,8 @@ export async function deleteVenteBoutique(id) {
 export async function listJaugesCuves(stationId, date) {
   await ensureLocalSeed();
   let rows = await db.jauges_cuves.toArray();
-  if (stationId) rows = rows.filter((j) => j.station_id === stationId);
+  const stations = await stationsDuReferentiel();
+  if (stationId) rows = rows.filter((j) => rowMatchesStation(j, stationId, stations));
   if (date) rows = rows.filter((j) => j.date === date);
   return rows.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
 }

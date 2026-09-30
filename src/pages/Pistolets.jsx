@@ -90,7 +90,7 @@ export default function Pistolets() {
   return (
     <div>
       <h1 className="text-xl font-bold mb-1" style={{ color: T.petrol }}>Pistolets, jauges & livraisons</h1>
-      <p className="text-sm mb-4" style={{ color: T.muted }}>Index compteurs, jauges cuves, livraisons carburant</p>
+      <p className="text-sm mb-4" style={{ color: T.muted }}>Index compteurs et livraisons. Les jauges sont le même registre que Cuves &amp; Dépotage.</p>
       {msg && <div className="rounded px-3 py-2 mb-3 text-sm" style={{ background: "#E3F4EA", color: T.ok }}>{msg}</div>}
 
       {/* Tabs */}

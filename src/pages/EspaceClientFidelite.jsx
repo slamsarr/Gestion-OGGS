@@ -181,6 +181,8 @@ export default function EspaceClientFidelite() {
     if (res.ok) {
       setMembre(res.membre);
       setShowPaymentModal(false);
+      setPaymentMontant("");
+      setPaymentRef("");
       setCelebration({
         pointsGagnes: pointsSimules,
         nouveauSolde: res.nouveau_solde,

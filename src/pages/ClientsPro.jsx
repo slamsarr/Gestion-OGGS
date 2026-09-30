@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
   loadReferentiel,
@@ -14,9 +15,14 @@ import {
 } from "../lib/api";
 import { Section, Row, Num, Loading } from "../components/ui";
 import { F, fmtDate, n, T, todayISO, uuid } from "../lib/calcul";
+import { codeClientCanonique, listeClientsCredit } from "../lib/seed";
+import { peutAgirProfil } from "../lib/permissions";
 
 export default function ClientsPro() {
   const { profil, cloud } = useAuth();
+  const peutCreerClient = peutAgirProfil(profil, "client_pro", "creer");
+  const peutEncaisserCredit = peutAgirProfil(profil, "credit", "encaisser");
+  const [searchParams] = useSearchParams();
   const [stationId, setStationId] = useState(profil?.station_id || "");
   const [loading, setLoading] = useState(true);
   const [ref, setRef] = useState(null);
@@ -43,7 +49,14 @@ export default function ClientsPro() {
     allocations: {}, // { [bonId]: number }
   });
 
-  const clients = ref?.clients_pro || [];
+  const clients = useMemo(() => {
+    let list = listeClientsCredit(ref);
+    if (profil?.role === "client_pro") {
+      const mine = codeClientCanonique(profil.client_code);
+      list = list.filter((c) => c.code === mine);
+    }
+    return list.map((c) => ({ ...c, nom_entreprise: c.nom_entreprise || c.nom }));
+  }, [ref, profil]);
   const vehicules = selected ? (ref?.vehicules || []).filter((v) => v.client_code === selected) : [];
   const clientActif = clients.find((c) => c.code === selected);
 
@@ -56,7 +69,7 @@ export default function ClientsPro() {
     try {
       const r = await loadReferentiel();
       setRef(r);
-      const cls = r?.clients_pro || [];
+      const cls = listeClientsCredit(r);
       const sMap = {};
       for (const cl of cls) {
         try {
@@ -72,12 +85,20 @@ export default function ClientsPro() {
   };
 
   useEffect(() => {
-    if (!stationId && ref?.stations?.length) setStationId(ref.stations[0].code);
+    if (!stationId && ref?.stations?.length) setStationId(ref.stations[0].id);
   }, [ref, stationId]);
 
   useEffect(() => {
     loadData();
   }, [cloud]);
+
+  useEffect(() => {
+    const fromUrl = searchParams.get("client");
+    if (fromUrl) {
+      setSelected(fromUrl);
+      setSubTab("bons");
+    }
+  }, [searchParams]);
 
   const loadClientOps = async (code) => {
     setLoadingOps(true);
@@ -193,6 +214,7 @@ export default function ClientsPro() {
   };
 
   const handleValiderReglementBons = async () => {
+    if (!peutEncaisserCredit) return flash("Tu n'as pas le droit d'encaisser un crédit client.");
     const mtVerse = n(reglementBonsForm.montant_verse);
     if (mtVerse <= 0) return flash("Veuillez saisir un montant versé valide (> 0)");
 
@@ -221,6 +243,13 @@ export default function ClientsPro() {
 
       flash(`✓ Règlement de ${F(mtVerse)} FCFA enregistré avec succès ! (${allocationsArray.length} bon(s) ventilé(s))`);
       setReglementBonsModal(false);
+      setReglementBonsForm({
+        montant_verse: "",
+        date: todayISO(),
+        mode: "ESPECES",
+        reference: "",
+        allocations: {},
+      });
       await loadClientOps(selected);
     } catch (err) {
       console.error(err);
@@ -229,6 +258,7 @@ export default function ClientsPro() {
   };
 
   const save = async () => {
+    if (!peutCreerClient) return flash("Tu n'as pas le droit de créer un client professionnel.");
     if (!clForm.nom_entreprise.trim()) return flash("Le nom de l'entreprise est requis");
     const code = clForm.code.trim() || `CP-${clForm.nom_entreprise.trim().slice(0, 4).toUpperCase()}`;
     const res = await createClientPro({ ...clForm, code, station_id: stationId, plafond_credit: n(clForm.plafond_credit) });
@@ -250,6 +280,7 @@ export default function ClientsPro() {
   };
 
   const saveReglement = async () => {
+    if (!peutEncaisserCredit) return flash("Tu n'as pas le droit d'encaisser un crédit client.");
     if (!selected) return flash("Sélectionnez un client");
     const m = n(reglementForm.montant);
     if (m <= 0) return flash("Montant de règlement invalide");
@@ -294,6 +325,7 @@ export default function ClientsPro() {
       {msg && <div className="rounded-lg px-3 py-2 text-sm font-semibold shadow-xs" style={{ background: "#E3F4EA", color: T.ok }}>{msg}</div>}
 
       {/* Formulaire nouveau client */}
+      {peutCreerClient && (
       <Section titre="Nouveau Compte Client Entreprise" aside="RBAC : Commercial, Gérant, Direction">
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 py-2">
           <div>
@@ -323,6 +355,7 @@ export default function ClientsPro() {
           </button>
         </div>
       </Section>
+      )}
 
       {/* Liste des comptes clients pro */}
       <Section titre="Comptes Clients & Encours de Crédit" aside="Cliquez sur un compte pour ouvrir sa fiche détaillée">
