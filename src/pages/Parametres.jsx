@@ -10,6 +10,7 @@ import {
   listCuves, saveCuve,
   getParametres, saveParametres, diagSync,
   creerCollaborateur, listCollaborateurs, deleteCollaborateur,
+  toggleCollaborateurActif, resetCollaborateurPassword,
 } from "../lib/api";
 import { setLocalRef } from "../lib/db";
 import { F, n, T, todayISO } from "../lib/calcul";
@@ -59,12 +60,17 @@ export default function Parametres() {
   const [showCl, setShowCl] = useState(false);
   const [clForm, setClForm] = useState({ code: "", nom: "", plafond: 0 });
   const [cuves, setCuves] = useState([]);
+  const [showCuve, setShowCuve] = useState(false);
+  const [cuveForm, setCuveForm] = useState({ station_id: "", produit: "GASOIL", capacite_l: 30000 });
   const [parametres, setParametres] = useState(null);
   const [diag, setDiag] = useState(null);
 
   // Collaborateurs & Création automatique de comptes
   const [collaborateurs, setCollaborateurs] = useState([]);
   const [showCollabModal, setShowCollabModal] = useState(false);
+  const [searchCollab, setSearchCollab] = useState("");
+  const [filterCollabStation, setFilterCollabStation] = useState("ALL");
+  const [showPasswordIds, setShowPasswordIds] = useState({});
   const [collabForm, setCollabForm] = useState({
     nom_complet: "",
     role: "pompiste",
@@ -258,7 +264,56 @@ export default function Parametres() {
     setCollaborateurs((prev) => prev.filter((u) => u.id !== userId));
     flash("Collaborateur retiré");
   };
+
+  const handleTogglePassword = (userId) => {
+    setShowPasswordIds((prev) => ({ ...prev, [userId]: !prev[userId] }));
+  };
+
+  const handleToggleActifCollab = async (collab) => {
+    const res = await toggleCollaborateurActif(collab.id);
+    if (res.ok) {
+      flash(`${collab.nom_complet} : compte ${res.actif ? "activé" : "suspendu"}`);
+      setCollaborateurs((prev) => prev.map((x) => x.id === collab.id ? { ...x, actif: res.actif } : x));
+    } else {
+      flash("Erreur lors de la modification du statut");
+    }
+  };
+
+  const handleResetPassword = async (collab) => {
+    if (!window.confirm(`Réinitialiser le mot de passe de ${collab.nom_complet} ?`)) return;
+    const res = await resetCollaborateurPassword(collab.id);
+    if (res.ok) {
+      flash(`✓ Nouveau mot de passe pour ${collab.nom_complet} : ${res.password}`);
+      setCollaborateurs((prev) => prev.map((x) => x.id === collab.id ? { ...x, password: res.password } : x));
+    } else {
+      flash("Erreur lors de la réinitialisation du mot de passe");
+    }
+  };
+
   const editCuve = (id, capacite_l) => setCuves((list) => list.map((c) => c.id === id ? { ...c, capacite_l } : c));
+  
+  const addCuve = async () => {
+    const stId = cuveForm.station_id || stations[0]?.id;
+    if (!stId) {
+      flash("Veuillez sélectionner une station");
+      return;
+    }
+    const res = await saveCuve({ station_id: stId, produit: cuveForm.produit, capacite_l: n(cuveForm.capacite_l) || 30000 });
+    if (res.ok) {
+      flash("✓ Cuve ajoutée avec succès");
+      setShowCuve(false);
+      setCuveForm({ station_id: stId, produit: "GASOIL", capacite_l: 30000 });
+      const all = [];
+      for (const st of (ref?.stations || [])) {
+        const c = await listCuves(st.id);
+        all.push(...c);
+      }
+      setCuves(all);
+    } else {
+      flash("Erreur : " + (res.error || "Échec"));
+    }
+  };
+
   const saveCuves = async () => {
     let ok = 0;
     for (const c of cuves) {
@@ -553,6 +608,39 @@ export default function Parametres() {
         </div>
         {cuves.length > 0 && <button onClick={saveCuves} className="w-full py-2 my-2 rounded text-sm font-medium" style={{ border: `1px dashed ${T.petrol}`, color: T.petrol }}>Enregistrer les capacités</button>}
         {cuves.length === 0 && <p className="text-sm py-3" style={{ color: T.muted }}>Aucune cuve enregistrée.</p>}
+        <AddForm label="Ajouter une cuve" show={showCuve} setShow={setShowCuve} onSubmit={addCuve}>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div>
+              <div className="text-xs mb-1" style={{ color: T.muted }}>Station</div>
+              <select
+                value={cuveForm.station_id || stations[0]?.id || ""}
+                onChange={(e) => setCuveForm({ ...cuveForm, station_id: e.target.value })}
+                className={inp}
+                style={{ borderColor: T.line }}
+              >
+                {stations.map((st) => (
+                  <option key={st.id} value={st.id}>{st.nom} ({st.code})</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <div className="text-xs mb-1" style={{ color: T.muted }}>Produit</div>
+              <select
+                value={cuveForm.produit}
+                onChange={(e) => setCuveForm({ ...cuveForm, produit: e.target.value })}
+                className={inp}
+                style={{ borderColor: T.line }}
+              >
+                <option value="GASOIL">Gasoil</option>
+                <option value="SUPER">Super</option>
+              </select>
+            </div>
+            <div>
+              <div className="text-xs mb-1" style={{ color: T.muted }}>Capacité (L)</div>
+              <Num value={cuveForm.capacite_l} onChange={(v) => setCuveForm({ ...cuveForm, capacite_l: v })} w="w-full" />
+            </div>
+          </div>
+        </AddForm>
       </Section>
 
       {/* ───────────────────────────────────────────────────────────
@@ -741,6 +829,38 @@ export default function Parametres() {
           </div>
         )}
 
+        {/* Barre de Recherche et Filtre Station */}
+        <div className="mb-3 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+          <div className="flex-1 relative">
+            <input
+              type="text"
+              placeholder="🔍 Rechercher un collaborateur (nom, rôle, email)..."
+              value={searchCollab}
+              onChange={(e) => setSearchCollab(e.target.value)}
+              className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border bg-white"
+              style={{ borderColor: T.line }}
+            />
+            <span className="absolute left-2.5 top-2 text-xs text-gray-400">🔍</span>
+          </div>
+
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className="text-gray-500 font-bold shrink-0">Station :</span>
+            <select
+              value={filterCollabStation}
+              onChange={(e) => setFilterCollabStation(e.target.value)}
+              className="text-xs border rounded-lg px-2.5 py-1.5 bg-white font-medium"
+              style={{ borderColor: T.line }}
+            >
+              <option value="ALL">Toutes les stations ({collaborateurs.length})</option>
+              {stations.map((st) => (
+                <option key={st.id} value={st.id}>
+                  {st.nom} ({st.code})
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
         {/* Tableau de l'équipe */}
         <div className="overflow-x-auto border rounded-xl" style={{ borderColor: T.line }}>
           <table className="w-full text-xs">
@@ -749,83 +869,137 @@ export default function Parametres() {
                 <th className="py-2.5 px-3 text-left">Collaborateur</th>
                 <th className="py-2.5 px-3 text-left">Profil / Rôle</th>
                 <th className="py-2.5 px-3 text-left">Station</th>
-                <th className="py-2.5 px-3 text-left">Email de Connexion</th>
+                <th className="py-2.5 px-3 text-left">Email &amp; Accès</th>
                 <th className="py-2.5 px-3 text-center">Statut</th>
-                <th className="py-2.5 px-3 text-center">Action</th>
+                <th className="py-2.5 px-3 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {collaborateurs.map((u) => {
-                const st = stations.find((s) => s.id === u.station_id);
-                const roleIcon =
-                  u.role === "pompiste" ? "⛽" :
-                  u.role === "lavage" ? "🚿" :
-                  u.role === "boutique" ? "🛍️" :
-                  u.role === "stock" ? "📦" :
-                  u.role === "maintenance" ? "🔧" :
-                  u.role === "gerant" ? "📋" :
-                  u.role === "comptable" ? "📊" :
-                  u.role === "commercial" ? "🤝" :
-                  u.role === "superviseur" ? "🛡️" :
-                  u.role === "directeur" ? "🏢" : "👑";
+              {collaborateurs
+                .filter((u) => {
+                  if (filterCollabStation !== "ALL" && u.station_id !== filterCollabStation) return false;
+                  if (searchCollab.trim()) {
+                    const q = searchCollab.toLowerCase().trim();
+                    const matchNom = (u.nom_complet || "").toLowerCase().includes(q);
+                    const matchRole = (u.role || "").toLowerCase().includes(q);
+                    const matchEmail = (u.email || "").toLowerCase().includes(q);
+                    const matchTel = (u.telephone || "").includes(q);
+                    if (!matchNom && !matchRole && !matchEmail && !matchTel) return false;
+                  }
+                  return true;
+                })
+                .map((u) => {
+                  const st = stations.find((s) => s.id === u.station_id);
+                  const isActif = u.actif !== false;
+                  const isPwdVisible = Boolean(showPasswordIds[u.id]);
+                  const roleIcon =
+                    u.role === "pompiste" ? "⛽" :
+                    u.role === "lavage" ? "🚿" :
+                    u.role === "boutique" ? "🛍️" :
+                    u.role === "stock" ? "📦" :
+                    u.role === "maintenance" ? "🔧" :
+                    u.role === "gerant" ? "📋" :
+                    u.role === "comptable" ? "📊" :
+                    u.role === "commercial" ? "🤝" :
+                    u.role === "superviseur" ? "🛡️" :
+                    u.role === "directeur" ? "🏢" : "👑";
 
-                return (
-                  <tr key={u.id} className="hover:bg-purple-50/20 transition-colors">
-                    <td className="py-2.5 px-3">
-                      <div className="font-bold text-gray-900 flex items-center gap-1.5">
-                        <span>{roleIcon}</span>
-                        <span>{u.nom_complet}</span>
-                      </div>
-                      {u.telephone && <div className="text-[10px] text-gray-400">📞 {u.telephone}</div>}
-                    </td>
+                  return (
+                    <tr key={u.id} className={`transition-colors ${isActif ? "hover:bg-purple-50/20" : "bg-gray-50/70 opacity-75"}`}>
+                      <td className="py-2.5 px-3">
+                        <div className="font-bold text-gray-900 flex items-center gap-1.5">
+                          <span>{roleIcon}</span>
+                          <span>{u.nom_complet}</span>
+                        </div>
+                        {u.telephone && <div className="text-[10px] text-gray-400">📞 {u.telephone}</div>}
+                      </td>
 
-                    <td className="py-2.5 px-3">
-                      <select
-                        value={u.role || "pompiste"}
-                        onChange={async (e) => {
-                          const newR = e.target.value;
-                          await changeRole(u.id, newR);
-                          setCollaborateurs((prev) => prev.map((x) => x.id === u.id ? { ...x, role: newR } : x));
-                        }}
-                        className="text-xs border rounded-lg px-2 py-1 bg-white font-medium"
-                        style={{ borderColor: T.line }}
-                      >
-                        {Object.entries(ROLE_LABELS).map(([k, label]) => (
-                          <option key={k} value={k}>{label}</option>
-                        ))}
-                      </select>
-                    </td>
+                      <td className="py-2.5 px-3">
+                        <select
+                          value={u.role || "pompiste"}
+                          onChange={async (e) => {
+                            const newR = e.target.value;
+                            await changeRole(u.id, newR);
+                            setCollaborateurs((prev) => prev.map((x) => x.id === u.id ? { ...x, role: newR } : x));
+                          }}
+                          className="text-xs border rounded-lg px-2 py-1 bg-white font-medium"
+                          style={{ borderColor: T.line }}
+                        >
+                          {Object.entries(ROLE_LABELS).map(([k, label]) => (
+                            <option key={k} value={k}>{label}</option>
+                          ))}
+                        </select>
+                      </td>
 
-                    <td className="py-2.5 px-3 text-gray-700">
-                      <span className="font-semibold text-gray-800">{st ? st.nom : "Réseau global"}</span>
-                    </td>
+                      <td className="py-2.5 px-3 text-gray-700">
+                        <span className="font-semibold text-gray-800">{st ? st.nom : "Réseau global"}</span>
+                      </td>
 
-                    <td className="py-2.5 px-3 font-mono text-[11px] text-gray-600">
-                      <div>{u.email}</div>
-                      {u.password && (
-                        <div className="text-[9.5px] text-gray-400">MdP : {u.password}</div>
-                      )}
-                    </td>
+                      <td className="py-2.5 px-3 font-mono text-[11px] text-gray-600">
+                        <div className="font-semibold text-gray-800">{u.email}</div>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-gray-400 text-[10px]">MdP :</span>
+                          <span className="text-[10px] font-mono text-gray-700">
+                            {isPwdVisible ? (u.password || "••••••••") : "••••••••"}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleTogglePassword(u.id)}
+                            className="text-[11px] px-1 py-0.2 rounded hover:bg-gray-200 transition-colors"
+                            title={isPwdVisible ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                          >
+                            {isPwdVisible ? "🙈" : "👁️"}
+                          </button>
+                        </div>
+                      </td>
 
-                    <td className="py-2.5 px-3 text-center">
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                        Actif
-                      </span>
-                    </td>
+                      <td className="py-2.5 px-3 text-center">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                            isActif
+                              ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                              : "bg-rose-100 text-rose-800 border-rose-200"
+                          }`}
+                        >
+                          {isActif ? "Actif" : "Suspendu"}
+                        </span>
+                      </td>
 
-                    <td className="py-2.5 px-3 text-center">
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteCollaborateur(u.id, u.nom_complet)}
-                        className="p-1 rounded text-rose-600 hover:bg-rose-50 text-xs font-bold"
-                        title="Supprimer ce collaborateur"
-                      >
-                        🗑️
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
+                      <td className="py-2.5 px-3 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleResetPassword(u)}
+                            className="px-2 py-1 rounded bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-bold transition-colors"
+                            title="Réinitialiser le mot de passe"
+                          >
+                            🔑
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleActifCollab(u)}
+                            className={`px-2 py-1 rounded text-xs font-bold border transition-colors ${
+                              isActif
+                                ? "bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300"
+                                : "bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300"
+                            }`}
+                            title={isActif ? "Suspendre l'accès" : "Réactiver le compte"}
+                          >
+                            {isActif ? "⏸️" : "▶️"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteCollaborateur(u.id, u.nom_complet)}
+                            className="px-2 py-1 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold transition-colors"
+                            title="Supprimer définitivement ce compte"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
             </tbody>
           </table>
         </div>

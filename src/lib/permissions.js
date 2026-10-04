@@ -171,5 +171,6 @@ export function rolesRoute(role, route) {
 export function peutVoirNav(role, route) {
   if (route === "/") return ROLES_COCKPIT_RESEAU.includes(role);
   if (route === "/incidents") return false;
+  if (role === "gerant" && (route === "/rapport" || route === "/historique")) return false;
   return rolesRoute(role, route);
 }

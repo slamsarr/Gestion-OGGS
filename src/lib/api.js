@@ -2244,6 +2244,35 @@ export async function deleteCollaborateur(userId) {
   return { ok: true };
 }
 
+export async function toggleCollaborateurActif(userId) {
+  await ensureLocalSeed();
+  const u = await db.users.get(userId);
+  if (!u) return { ok: false, error: "Utilisateur non trouvé" };
+  const nextActif = u.actif === false ? true : false;
+  await db.users.update(userId, { actif: nextActif });
+  try {
+    const p = await db.pompistes.toArray();
+    const pomp = p.find((x) => x.user_id === userId);
+    if (pomp) await db.pompistes.update(pomp.id, { actif: nextActif });
+  } catch {}
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      await sb.from("profils").update({ actif: nextActif }).eq("id", userId);
+    } catch {}
+  }
+  return { ok: true, actif: nextActif };
+}
+
+export async function resetCollaborateurPassword(userId, newPassword = null) {
+  await ensureLocalSeed();
+  const u = await db.users.get(userId);
+  if (!u) return { ok: false, error: "Utilisateur non trouvé" };
+  const pwd = newPassword || `Star${Math.floor(1000 + Math.random() * 9000)}!`;
+  await db.users.update(userId, { password: pwd });
+  return { ok: true, password: pwd };
+}
+
 
 
 

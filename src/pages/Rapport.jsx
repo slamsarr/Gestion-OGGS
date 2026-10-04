@@ -189,11 +189,27 @@ export default function Rapport() {
 
   return (
     <div className="pb-20">
+      {/* Bandeau d'information et de finalité de la clôture officielle */}
+      <div className="mb-3 p-3.5 rounded-xl border border-amber-200 bg-amber-50/80 text-amber-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 text-xs shadow-xs">
+        <div className="flex items-start gap-2">
+          <span className="text-lg">📋</span>
+          <div>
+            <div className="font-black text-amber-900 uppercase tracking-wide">
+              Clôture Journalière Officielle &amp; Réconciliation SYSCOHADA (Direction)
+            </div>
+            <p className="text-amber-800 text-[11.5px] mt-0.5">
+              Ce document officiel constitue le procès-verbal de clôture transmis à la Direction et à la Comptabilité.
+              Les index des pompes, recettes carburant, lavage et boutique y sont <strong>pré-consolidés automatiquement</strong> depuis vos opérations terrain.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* En-tête rapport */}
       <div className="rounded-lg p-4 mb-4" style={{ background: T.petrol, color: "white" }}>
         <div className="flex items-end justify-between gap-3">
           <div>
-            <div className="text-xs opacity-80">Rapport journalier</div>
+            <div className="text-xs opacity-80">Procès-Verbal de Clôture Officielle</div>
             {role === "gerant" ? (
               <div className="font-semibold text-lg">{selectedStation}</div>
             ) : (

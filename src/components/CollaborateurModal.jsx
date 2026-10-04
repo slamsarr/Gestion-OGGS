@@ -14,6 +14,8 @@ export default function CollaborateurModal({ isOpen, onClose, stations = [], def
   });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [successData, setSuccessData] = useState(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (defaultStationId) {
@@ -22,6 +24,21 @@ export default function CollaborateurModal({ isOpen, onClose, stations = [], def
   }, [defaultStationId]);
 
   if (!isOpen) return null;
+
+  const handleClose = () => {
+    setSuccessData(null);
+    setCopied(false);
+    setErr("");
+    onClose();
+  };
+
+  const copyCreds = () => {
+    if (!successData) return;
+    const text = `Identifiants OGGS / Star Energy :\nNom : ${successData.nom}\nProfil : ${ROLE_LABELS[successData.role] || successData.role}\nEmail : ${successData.email}\nMot de passe : ${successData.password}`;
+    navigator.clipboard?.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  };
 
   const onNomChange = (nom) => {
     const cleanNom = nom.trim().toLowerCase()
@@ -55,7 +72,7 @@ export default function CollaborateurModal({ isOpen, onClose, stations = [], def
 
       if (res.ok) {
         if (onCreated) onCreated(res);
-        onClose();
+        setSuccessData(res.identifiants);
       } else {
         setErr(res.error || "Échec de création du collaborateur.");
       }
@@ -72,141 +89,204 @@ export default function CollaborateurModal({ isOpen, onClose, stations = [], def
         <div className="px-5 py-4 bg-[#56216C] text-white flex items-center justify-between">
           <div className="font-bold text-sm flex items-center gap-2">
             <span>👤</span>
-            <span>Nouveau Collaborateur &amp; Création Automatique de Compte</span>
+            <span>{successData ? "Compte Collaborateur Créé" : "Nouveau Collaborateur & Création Automatique de Compte"}</span>
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             className="text-white/80 hover:text-white font-bold text-base"
           >
             ✕
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-3.5 text-xs">
-          {err && (
-            <div className="p-2.5 rounded-lg bg-rose-50 text-rose-800 border border-rose-200 font-semibold">
-              ⚠️ {err}
+        {successData ? (
+          <div className="p-6 space-y-4 text-xs">
+            <div className="text-center space-y-1.5 pb-2 border-b border-gray-100">
+              <div className="w-12 h-12 mx-auto rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-2xl font-black shadow-inner">
+                ✓
+              </div>
+              <h3 className="text-base font-black text-gray-900">
+                Compte Collaborateur Opérationnel !
+              </h3>
+              <p className="text-xs text-gray-500">
+                Le compte a été créé avec succès et configuré pour le profil <span className="font-bold text-purple-900">{ROLE_LABELS[successData.role] || successData.role}</span>.
+              </p>
             </div>
-          )}
 
-          <div>
-            <label className="block text-gray-700 font-bold mb-1">Nom et Prénom du Collaborateur *</label>
-            <input
-              type="text"
-              required
-              placeholder="ex: Mamadou Ndiaye"
-              value={form.nom_complet}
-              onChange={(e) => onNomChange(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-purple-500 bg-white"
-              style={{ borderColor: T.line }}
-            />
-          </div>
+            <div className="p-3.5 rounded-xl bg-purple-50/80 border border-purple-200 space-y-2.5">
+              <div className="text-[11px] font-bold text-purple-950 uppercase tracking-wide flex items-center justify-between">
+                <span>Identifiants d'accès</span>
+                <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold">Actif</span>
+              </div>
+              
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between items-center py-1 border-b border-purple-100">
+                  <span className="text-gray-600 font-medium">Nom complet :</span>
+                  <span className="font-bold text-gray-900">{successData.nom}</span>
+                </div>
+                <div className="flex justify-between items-center py-1 border-b border-purple-100">
+                  <span className="text-gray-600 font-medium">Profil Métier :</span>
+                  <span className="font-bold text-purple-900">{ROLE_LABELS[successData.role] || successData.role}</span>
+                </div>
+                <div className="flex justify-between items-center py-1 border-b border-purple-100">
+                  <span className="text-gray-600 font-medium">Email de connexion :</span>
+                  <span className="font-mono font-bold text-gray-900 bg-white px-2 py-0.5 rounded border border-purple-200">{successData.email}</span>
+                </div>
+                <div className="flex justify-between items-center py-1">
+                  <span className="text-gray-600 font-medium">Mot de passe temporaire :</span>
+                  <span className="font-mono font-black text-emerald-800 bg-white px-2 py-0.5 rounded border border-emerald-300">{successData.password}</span>
+                </div>
+              </div>
+            </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-gray-700 font-bold mb-1">Profil / Métier *</label>
-              <select
-                value={form.role}
-                onChange={(e) => setForm({ ...form, role: e.target.value })}
-                className="w-full border rounded-lg px-3 py-2 text-xs bg-white font-medium"
-                style={{ borderColor: T.line }}
+            <p className="text-[11px] text-gray-500 italic">
+              💡 Transmettez ces identifiants au collaborateur pour qu'il puisse immédiatement se connecter à son interface dédiée.
+            </p>
+
+            <div className="pt-2 flex items-center justify-between gap-2 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={copyCreds}
+                className="px-4 py-2 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-900 font-bold text-xs flex items-center gap-1.5 transition-colors border border-purple-200"
               >
-                <option value="pompiste">⛽ Pompiste (Piste &amp; Descente)</option>
-                <option value="lavage">🚿 Agent de Lavage</option>
-                <option value="boutique">🛍️ Vendeur Boutique</option>
-                <option value="stock">📦 Responsable Stock</option>
-                <option value="maintenance">🔧 Technicien Maintenance</option>
-                <option value="gerant">📋 Gérant de Station</option>
-                <option value="comptable">📊 Comptable</option>
-                <option value="commercial">🤝 Commercial</option>
-                <option value="superviseur">🛡️ Superviseur Réseau</option>
-                <option value="directeur">🏢 Directeur</option>
-                <option value="admin">👑 Administrateur</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-gray-700 font-bold mb-1">Station d'affectation</label>
-              <select
-                value={form.station_id}
-                onChange={(e) => setForm({ ...form, station_id: e.target.value })}
-                className="w-full border rounded-lg px-3 py-2 text-xs bg-white font-medium"
-                style={{ borderColor: T.line }}
+                <span>{copied ? "✓ Identifiants Copiés !" : "📋 Copier les identifiants"}</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleClose}
+                className="px-5 py-2 rounded-xl bg-[#56216C] hover:bg-[#431454] text-white font-bold text-xs shadow-md transition-colors"
               >
-                <option value="">(Tout le Réseau / Siège)</option>
-                {stations.map((st) => (
-                  <option key={st.id} value={st.id}>
-                    {st.nom} ({st.code})
-                  </option>
-                ))}
-              </select>
+                Terminer &amp; Fermer
+              </button>
             </div>
           </div>
-
-          <div>
-            <label className="block text-gray-700 font-bold mb-1">Numéro de Téléphone (Optionnel)</label>
-            <input
-              type="tel"
-              placeholder="ex: 77 123 45 67"
-              value={form.telephone}
-              onChange={(e) => setForm({ ...form, telephone: e.target.value })}
-              className="w-full border rounded-lg px-3 py-2 text-xs bg-white"
-              style={{ borderColor: T.line }}
-            />
-          </div>
-
-          <div className="pt-2 border-t space-y-2" style={{ borderColor: T.line }}>
-            <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
-              Identifiants de Connexion Automatiques
-            </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="p-5 space-y-3.5 text-xs">
+            {err && (
+              <div className="p-2.5 rounded-lg bg-rose-50 text-rose-800 border border-rose-200 font-semibold">
+                ⚠️ {err}
+              </div>
+            )}
 
             <div>
-              <label className="block text-gray-600 font-medium mb-0.5">Adresse e-mail de connexion</label>
-              <input
-                type="email"
-                required
-                placeholder="prenom.nom@starenergy.sn"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                className="w-full border rounded-lg px-3 py-2 text-xs font-mono bg-slate-50"
-                style={{ borderColor: T.line }}
-              />
-            </div>
-
-            <div>
-              <label className="block text-gray-600 font-medium mb-0.5">Mot de passe temporaire (ou code PIN)</label>
+              <label className="block text-gray-700 font-bold mb-1">Nom et Prénom du Collaborateur *</label>
               <input
                 type="text"
                 required
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                className="w-full border rounded-lg px-3 py-2 text-xs font-mono bg-slate-50"
+                placeholder="ex: Mamadou Ndiaye"
+                value={form.nom_complet}
+                onChange={(e) => onNomChange(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-purple-500 bg-white"
                 style={{ borderColor: T.line }}
               />
             </div>
-            <p className="text-[11px] text-gray-400">
-              Le collaborateur utilisera cet e-mail et ce mot de passe (ou son PIN) pour se connecter immédiatement sur sa session métier.
-            </p>
-          </div>
 
-          <div className="pt-3 border-t flex items-center justify-end gap-2" style={{ borderColor: T.line }}>
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-lg border text-xs font-semibold text-gray-600 hover:bg-gray-100"
-            >
-              Annuler
-            </button>
-            <button
-              type="submit"
-              disabled={busy}
-              className="px-5 py-2 rounded-lg bg-[#56216C] hover:bg-[#431454] text-white font-bold text-xs shadow-md transition-colors disabled:opacity-50"
-            >
-              {busy ? "Génération en cours…" : "✓ Créer le Collaborateur & Compte"}
-            </button>
-          </div>
-        </form>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-gray-700 font-bold mb-1">Profil / Métier *</label>
+                <select
+                  value={form.role}
+                  onChange={(e) => setForm({ ...form, role: e.target.value })}
+                  className="w-full border rounded-lg px-3 py-2 text-xs bg-white font-medium"
+                  style={{ borderColor: T.line }}
+                >
+                  <option value="pompiste">⛽ Pompiste (Piste &amp; Descente)</option>
+                  <option value="lavage">🚿 Agent de Lavage</option>
+                  <option value="boutique">🛍️ Vendeur Boutique</option>
+                  <option value="stock">📦 Responsable Stock</option>
+                  <option value="maintenance">🔧 Technicien Maintenance</option>
+                  <option value="gerant">📋 Gérant de Station</option>
+                  <option value="comptable">📊 Comptable</option>
+                  <option value="commercial">🤝 Commercial</option>
+                  <option value="superviseur">🛡️ Superviseur Réseau</option>
+                  <option value="directeur">🏢 Directeur</option>
+                  <option value="admin">👑 Administrateur</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-gray-700 font-bold mb-1">Station d'affectation</label>
+                <select
+                  value={form.station_id}
+                  onChange={(e) => setForm({ ...form, station_id: e.target.value })}
+                  className="w-full border rounded-lg px-3 py-2 text-xs bg-white font-medium"
+                  style={{ borderColor: T.line }}
+                >
+                  <option value="">(Tout le Réseau / Siège)</option>
+                  {stations.map((st) => (
+                    <option key={st.id} value={st.id}>
+                      {st.nom} ({st.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-gray-700 font-bold mb-1">Numéro de Téléphone (Optionnel)</label>
+              <input
+                type="tel"
+                placeholder="ex: 77 123 45 67"
+                value={form.telephone}
+                onChange={(e) => setForm({ ...form, telephone: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2 text-xs bg-white"
+                style={{ borderColor: T.line }}
+              />
+            </div>
+
+            <div className="pt-2 border-t space-y-2" style={{ borderColor: T.line }}>
+              <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                Identifiants de Connexion Automatiques
+              </div>
+
+              <div>
+                <label className="block text-gray-600 font-medium mb-0.5">Adresse e-mail de connexion</label>
+                <input
+                  type="email"
+                  required
+                  placeholder="prenom.nom@starenergy.sn"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  className="w-full border rounded-lg px-3 py-2 text-xs font-mono bg-slate-50"
+                  style={{ borderColor: T.line }}
+                />
+              </div>
+
+              <div>
+                <label className="block text-gray-600 font-medium mb-0.5">Mot de passe temporaire (ou code PIN)</label>
+                <input
+                  type="text"
+                  required
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  className="w-full border rounded-lg px-3 py-2 text-xs font-mono bg-slate-50"
+                  style={{ borderColor: T.line }}
+                />
+              </div>
+              <p className="text-[11px] text-gray-400">
+                Le collaborateur utilisera cet e-mail et ce mot de passe (ou son PIN) pour se connecter immédiatement sur sa session métier.
+              </p>
+            </div>
+
+            <div className="pt-3 border-t flex items-center justify-end gap-2" style={{ borderColor: T.line }}>
+              <button
+                type="button"
+                onClick={handleClose}
+                className="px-4 py-2 rounded-lg border text-xs font-semibold text-gray-600 hover:bg-gray-100"
+              >
+                Annuler
+              </button>
+              <button
+                type="submit"
+                disabled={busy}
+                className="px-5 py-2 rounded-lg bg-[#56216C] hover:bg-[#431454] text-white font-bold text-xs shadow-md transition-colors disabled:opacity-50"
+              >
+                {busy ? "Génération en cours…" : "✓ Créer le Collaborateur & Compte"}
+              </button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );

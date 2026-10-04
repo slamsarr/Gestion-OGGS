@@ -14,8 +14,8 @@ const NAV_POLES = [
       { to: "/gerant", label: "Poste de Commande", icon: "🏪" },
       { to: "/", label: "Cockpit Réseau", icon: "📈" },
       { to: "/bilan-site", label: "Bilan Journalier Site", icon: "📑" },
-      { to: "/rapport", label: "Rapport Journalier", icon: "📋" },
-      { to: "/historique", label: "Historique Rapports", icon: "📁" },
+      { to: "/rapport", label: "Clôture Officielle (Direction)", icon: "📋" },
+      { to: "/historique", label: "Historique Clôtures", icon: "📁" },
     ],
   },
   {
@@ -46,7 +46,7 @@ const NAV_POLES = [
     label: "⚙️ Configuration & Équipe",
     items: [
       { to: "/parametres", label: "👥 Équipe & Paramètres", icon: "👥" },
-      { to: "/pompistes", label: "👷 Pompistes & Quarts", icon: "👷" },
+      { to: "/pompistes", label: "👷 Équipe, Comptes & Quarts", icon: "👷" },
       { to: "/pistolets", label: "🔫 Pistolets & Pompes", icon: "🔫" },
     ],
   },

@@ -11,9 +11,14 @@ import {
   listJaugesCuves,
   deletePrestationLavage,
   deleteVenteBoutique,
+  listCollaborateurs,
+  toggleCollaborateurActif,
+  resetCollaborateurPassword,
 } from "../lib/api";
 import { F, fmtDate, n, T, todayISO } from "../lib/calcul";
+import { ROLE_LABELS } from "../lib/permissions";
 import { Section, Row, Num, Loading } from "../components/ui";
+import CollaborateurModal from "../components/CollaborateurModal";
 
 export default function TableauBordGerant() {
   const { profil } = useAuth();
@@ -25,7 +30,7 @@ export default function TableauBordGerant() {
   const [date, setDate] = useState(todayISO());
   const [loading, setLoading] = useState(true);
   const [ref, setRef] = useState(null);
-  const [activeTab, setActiveTab] = useState("descentes"); // descentes | bons | services | cuves
+  const [activeTab, setActiveTab] = useState("descentes"); // descentes | bons | services | cuves | equipe
   const [msg, setMsg] = useState("");
   const [msgType, setMsgType] = useState("ok");
 
@@ -35,6 +40,8 @@ export default function TableauBordGerant() {
   const [lavages, setLavages] = useState([]);
   const [ventesBoutique, setVentesBoutique] = useState([]);
   const [jauges, setJauges] = useState([]);
+  const [equipe, setEquipe] = useState([]);
+  const [showCollabModal, setShowCollabModal] = useState(false);
 
   // Filtre Bons
   const [filtreBon, setFiltreBon] = useState("TOUS"); // TOUS | IMPAYES | REGLES
@@ -51,13 +58,14 @@ export default function TableauBordGerant() {
 
   const loadStationData = async () => {
     try {
-      const [r, dList, bList, lList, vList, jList] = await Promise.all([
+      const [r, dList, bList, lList, vList, jList, cList] = await Promise.all([
         loadReferentiel().catch(() => null),
         listDescentes(stationId, date).catch(() => []),
         listTousBonsStation(stationId).catch(() => []),
         listPrestationsLavage(stationId, date).catch(() => []),
         listVentesBoutique(stationId, date).catch(() => []),
         listJaugesCuves(stationId, date).catch(() => []),
+        listCollaborateurs(stationId).catch(() => []),
       ]);
       setRef(r);
       setDescentes(dList || []);
@@ -65,6 +73,7 @@ export default function TableauBordGerant() {
       setLavages(lList || []);
       setVentesBoutique(vList || []);
       setJauges(jList || []);
+      setEquipe(cList || []);
     } catch (err) {
       console.error("Erreur chargement données gérant:", err);
     } finally {
@@ -156,6 +165,34 @@ export default function TableauBordGerant() {
     loadStationData();
   };
 
+  const handleToggleActifCollab = async (collab) => {
+    const res = await toggleCollaborateurActif(collab.id);
+    if (res.ok) {
+      flash(`${collab.nom_complet} : compte ${res.actif ? "activé" : "suspendu"}`);
+      setEquipe((prev) => prev.map((x) => x.id === collab.id ? { ...x, actif: res.actif } : x));
+    } else {
+      flash("Erreur lors de la modification du statut");
+    }
+  };
+
+  const handleResetPassword = async (collab) => {
+    if (!window.confirm(`Réinitialiser le mot de passe de ${collab.nom_complet} ?`)) return;
+    const res = await resetCollaborateurPassword(collab.id);
+    if (res.ok) {
+      flash(`✓ Nouveau mot de passe pour ${collab.nom_complet} : ${res.password}`);
+      setEquipe((prev) => prev.map((x) => x.id === collab.id ? { ...x, password: res.password } : x));
+    } else {
+      flash("Erreur réinitialisation mot de passe");
+    }
+  };
+
+  const handleCollabCreated = (res) => {
+    flash(`✓ Collaborateur ${res.identifiants.nom} créé avec succès !`);
+    if (res.user) {
+      setEquipe((prev) => [res.user, ...prev]);
+    }
+  };
+
   if (loading) return <Loading label="Chargement du poste de commande Gérant..." />;
 
   return (
@@ -209,21 +246,33 @@ export default function TableauBordGerant() {
             </button>
             <button
               type="button"
-              onClick={() => navigate(`/pompistes`)}
-              className="px-3 py-2 rounded-xl bg-purple-700 hover:bg-purple-600 text-white text-xs font-bold transition-colors shadow-md flex items-center gap-1.5"
-              title="Ajouter un collaborateur et créer son compte"
+              onClick={() => navigate(`/clients-pro?tab=factures`)}
+              className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-colors shadow-md flex items-center gap-1.5"
+              title="Accéder à la facturation officielle OHADA"
+            >
+              <span>📄</span>
+              <span className="hidden sm:inline">Facturation OHADA</span>
+              <span className="sm:hidden">Factures</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("equipe")}
+              className={`px-3 py-2 rounded-xl text-white text-xs font-bold transition-colors shadow-md flex items-center gap-1.5 ${
+                activeTab === "equipe" ? "bg-purple-800 ring-2 ring-amber-400" : "bg-purple-700 hover:bg-purple-600"
+              }`}
+              title="Gérer l'équipe de la station et créer des comptes collaborateurs"
             >
               <span>👥</span>
-              <span className="hidden sm:inline">Équipe &amp; Comptes</span>
-              <span className="sm:hidden">Équipe</span>
+              <span className="hidden sm:inline">Mon Équipe &amp; Comptes ({equipe.length})</span>
+              <span className="sm:hidden">Équipe ({equipe.length})</span>
             </button>
             <button
               type="button"
               onClick={() => navigate(`/rapport?station=${encodeURIComponent(stationCode)}&date=${encodeURIComponent(date)}`)}
               className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black uppercase tracking-wide transition-colors shadow-md"
-              title="Ouvrir ou compléter le rapport journalier du jour (pré-rempli depuis le terrain)"
+              title="Clôture officielle et réconciliation comptable SYSCOHADA pour la Direction"
             >
-              📋 Rapport du jour
+              📋 Clôture Officielle
             </button>
           </div>
         </div>
@@ -255,11 +304,13 @@ export default function TableauBordGerant() {
           </div>
 
           <div className="bg-white/5 border border-white/10 p-2.5 rounded-xl col-span-2 sm:col-span-1">
-            <div className="text-[10px] font-bold text-amber-300 uppercase">Écart Caisse Descentes</div>
+            <div className="text-[10px] font-bold text-amber-300 uppercase">Écart Caisse & Équipe</div>
             <div className={`text-lg font-black tabular mt-0.5 ${totalEcartDescentes >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
               {totalEcartDescentes >= 0 ? "+" : ""}{F(totalEcartDescentes)} F
             </div>
-            <div className="text-[10px] text-gray-300">{descentes.length} shift(s) pompiste</div>
+            <div className="text-[10px] text-gray-300">
+              {descentes.length} quart(s) · {equipe.filter((e) => e.actif !== false).length} agent(s) actif(s)
+            </div>
           </div>
         </div>
       </div>
@@ -324,6 +375,17 @@ export default function TableauBordGerant() {
           }`}
         >
           <span>🛢️ Cuves & Jauges ({jauges.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("equipe")}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs ${
+            activeTab === "equipe"
+              ? "bg-[#431454] text-white shadow-md ring-2 ring-amber-400"
+              : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-200"
+          }`}
+        >
+          <span>👥 Mon Équipe ({equipe.length})</span>
         </button>
 
         <div className="ml-auto flex items-center gap-2">
@@ -765,6 +827,126 @@ export default function TableauBordGerant() {
         </div>
       )}
 
+      {/* ── TAB 5 : MON ÉQUIPE & COMPTES COLLABORATEURS ── */}
+      {activeTab === "equipe" && (
+        <div className="bg-white rounded-2xl border p-4 shadow-sm space-y-4" style={{ borderColor: T.line }}>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-3" style={{ borderColor: T.line }}>
+            <div>
+              <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wide flex items-center gap-2">
+                <span>👥 Équipe de la {stationNom}</span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-black bg-purple-100 text-purple-900">
+                  {equipe.filter((e) => e.actif !== false).length} actif(s) sur {equipe.length}
+                </span>
+              </h2>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Pompistes, agents de lavage, vendeurs boutique et techniciens rattachés à votre site.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowCollabModal(true)}
+              className="px-4 py-2 rounded-xl bg-[#431454] hover:bg-[#56216C] text-white text-xs font-bold transition-colors shadow-xs flex items-center justify-center gap-1.5 shrink-0"
+            >
+              <span>➕</span>
+              <span>Nouveau Collaborateur (Créer Compte)</span>
+            </button>
+          </div>
+
+          {equipe.length === 0 ? (
+            <div className="text-center py-8 text-xs text-gray-500">
+              <p className="font-bold text-gray-700">Aucun collaborateur rattaché à cette station pour l'instant.</p>
+              <p className="text-gray-400 mt-1">Cliquez sur « Nouveau Collaborateur » pour créer un compte pompiste, lavage ou boutique.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto border rounded-xl" style={{ borderColor: T.line }}>
+              <table className="w-full text-xs">
+                <thead className="bg-gray-50 border-b text-gray-500 uppercase tracking-wider text-[10px]" style={{ borderColor: T.line }}>
+                  <tr>
+                    <th className="py-2.5 px-3 text-left">Collaborateur</th>
+                    <th className="py-2.5 px-3 text-left">Profil / Métier</th>
+                    <th className="py-2.5 px-3 text-left">Email de Connexion</th>
+                    <th className="py-2.5 px-3 text-center">Statut</th>
+                    <th className="py-2.5 px-3 text-center">Actions Gérant</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {equipe.map((u) => {
+                    const isActif = u.actif !== false;
+                    const roleIcon =
+                      u.role === "pompiste" ? "⛽" :
+                      u.role === "lavage" ? "🚿" :
+                      u.role === "boutique" ? "🛍️" :
+                      u.role === "stock" ? "📦" :
+                      u.role === "maintenance" ? "🔧" :
+                      u.role === "gerant" ? "📋" : "👤";
+
+                    return (
+                      <tr key={u.id} className={isActif ? "hover:bg-purple-50/20" : "bg-gray-50/70 opacity-75"}>
+                        <td className="py-2.5 px-3">
+                          <div className="font-bold text-gray-900 flex items-center gap-1.5">
+                            <span>{roleIcon}</span>
+                            <span>{u.nom_complet}</span>
+                          </div>
+                          {u.telephone && <div className="text-[10px] text-gray-400">📞 {u.telephone}</div>}
+                        </td>
+
+                        <td className="py-2.5 px-3">
+                          <span className="font-semibold text-purple-900 bg-purple-50 px-2 py-0.5 rounded border border-purple-200 text-[11px]">
+                            {ROLE_LABELS[u.role] || u.role}
+                          </span>
+                        </td>
+
+                        <td className="py-2.5 px-3 font-mono text-[11px] text-gray-700">
+                          {u.email}
+                        </td>
+
+                        <td className="py-2.5 px-3 text-center">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                              isActif
+                                ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                                : "bg-rose-100 text-rose-800 border-rose-200"
+                            }`}
+                          >
+                            {isActif ? "Actif" : "Suspendu"}
+                          </span>
+                        </td>
+
+                        <td className="py-2.5 px-3 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleResetPassword(u)}
+                              className="px-2 py-1 rounded bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-bold transition-colors"
+                              title="Générer un nouveau mot de passe temporaire"
+                            >
+                              🔑 Reset MdP
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleActifCollab(u)}
+                              className={`px-2 py-1 rounded text-xs font-bold border transition-colors ${
+                                isActif
+                                  ? "bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300"
+                                  : "bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300"
+                              }`}
+                              title={isActif ? "Suspendre l'accès" : "Réactiver l'accès"}
+                            >
+                              {isActif ? "⏸️ Suspendre" : "▶️ Réactiver"}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── MODAL ATTRIBUTION BON ── */}
       {attribModal && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-3">
@@ -831,6 +1013,15 @@ export default function TableauBordGerant() {
           </div>
         </div>
       )}
+
+      {/* Modal de création de compte collaborateur depuis le cockpit gérant */}
+      <CollaborateurModal
+        isOpen={showCollabModal}
+        onClose={() => setShowCollabModal(false)}
+        stations={ref?.stations || []}
+        defaultStationId={stationId}
+        onCreated={handleCollabCreated}
+      />
     </div>
   );
 }
