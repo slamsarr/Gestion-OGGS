@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { loadReferentiel, listPompistes, savePompiste, listRapports, listQuarts, saveQuarts as saveQuartsCloud } from "../lib/api";
 import { F, fmtDate, n, T, todayISO, uuid } from "../lib/calcul";
 import { Section, Row, Num, Loading } from "../components/ui";
+import CollaborateurModal from "../components/CollaborateurModal";
 
 export default function Pompistes() {
   const { profil } = useAuth();
+  const navigate = useNavigate();
   const [ref, setRef] = useState(null);
   const [pompistes, setPompistes] = useState([]);
   const [rapports, setRapports] = useState([]);
@@ -15,6 +18,8 @@ export default function Pompistes() {
   const [nom, setNom] = useState("");
   const [stId, setStId] = useState("");
   const [selectedStation, setSelectedStation] = useState("ALL");
+  const [showCollabModal, setShowCollabModal] = useState(false);
+  const [collabCreds, setCollabCreds] = useState(null);
 
   // Quarts state
   const [quarts, setQuarts] = useState([]);
@@ -97,13 +102,71 @@ export default function Pompistes() {
 
   const stations = ref?.stations || [];
   const filteredP = selectedStation === "ALL" ? pompistes : pompistes.filter((p) => p.station_id === selectedStation);
+  const handleCollabCreated = (res) => {
+    setCollabCreds(res.identifiants);
+    flash(`✓ Collaborateur ${res.identifiants.nom} créé avec succès !`);
+    if (res.user?.role === "pompiste") {
+      setPompistes((prev) => [
+        ...prev,
+        { id: `pomp-${res.user.id}`, nom: res.user.nom_complet, station_id: res.user.station_id || stId, actif: true },
+      ]);
+    }
+  };
+
   const stationName = (id) => stations.find((s) => s.id === id)?.nom || id;
 
   return (
     <div>
-      <h1 className="text-xl font-bold mb-1" style={{ color: T.petrol }}>Pompistes</h1>
-      <p className="text-sm mb-4" style={{ color: T.muted }}>Gestion des pompistes et quarts journaliers</p>
+      <h1 className="text-xl font-bold mb-1" style={{ color: T.petrol }}>Équipe Pompistes &amp; Collaborateurs</h1>
+      <p className="text-sm mb-4" style={{ color: T.muted }}>Gestion de l'équipe terrain, des comptes d'accès et des quarts journaliers</p>
       {msg && <div className="rounded px-3 py-2 mb-3 text-sm" style={{ background: "#E3F4EA", color: T.ok }}>{msg}</div>}
+
+      {/* Raccourci vers la création complète de compte collaborateur */}
+      <div className="mb-4 p-4 rounded-xl border border-purple-200 bg-gradient-to-r from-purple-50 via-indigo-50 to-blue-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+        <div>
+          <div className="font-bold text-xs text-purple-950 flex items-center gap-1.5">
+            <span>👥</span>
+            <span>Nouveau Collaborateur &amp; Création Automatique de Compte</span>
+          </div>
+          <p className="text-xs text-purple-800/80 mt-0.5">
+            Créez immédiatement un compte pour un <strong>Pompiste, Agent Lavage, Vendeur Boutique, Gérant</strong> avec code PIN d'accès.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowCollabModal(true)}
+          className="px-4 py-2.5 rounded-xl bg-[#56216C] hover:bg-[#4A1559] text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-md shrink-0"
+        >
+          <span>➕</span>
+          <span>Ajouter Collaborateur (Créer Compte)</span>
+        </button>
+      </div>
+
+      {/* Bannière de confirmation des identifiants créés */}
+      {collabCreds && (
+        <div className="mb-4 p-4 rounded-xl border border-emerald-300 bg-emerald-50/90 shadow-xs space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="font-bold text-xs text-emerald-900 flex items-center gap-1.5">
+              <span>✓</span>
+              <span>Compte d'accès généré avec succès pour {collabCreds.nom} !</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setCollabCreds(null)}
+              className="text-xs text-emerald-700 font-bold hover:text-emerald-900"
+            >
+              ✕ Fermer
+            </button>
+          </div>
+          <div className="text-xs text-emerald-800 grid grid-cols-1 sm:grid-cols-2 gap-2 bg-white/90 p-2.5 rounded-lg border border-emerald-200">
+            <div><strong>Identifiant :</strong> <code className="bg-emerald-100 px-1.5 py-0.5 rounded text-emerald-900 font-mono">{collabCreds.email}</code></div>
+            <div><strong>Code PIN / Mot de passe :</strong> <code className="bg-emerald-100 px-1.5 py-0.5 rounded text-emerald-900 font-mono">{collabCreds.password}</code></div>
+          </div>
+          <p className="text-[11px] text-emerald-700">
+            ℹ️ Le collaborateur peut se connecter dès maintenant sur l'écran d'accueil avec ces accès pour débuter ses saisies terrain.
+          </p>
+        </div>
+      )}
 
       {/* Filtre station */}
       <div className="flex gap-2 mb-4 flex-wrap">
@@ -195,6 +258,15 @@ export default function Pompistes() {
           </div>
         )}
       </Section>
+
+      {/* Modal de création de compte collaborateur */}
+      <CollaborateurModal
+        isOpen={showCollabModal}
+        onClose={() => setShowCollabModal(false)}
+        stations={stations}
+        defaultStationId={stId}
+        onCreated={handleCollabCreated}
+      />
     </div>
   );
 }

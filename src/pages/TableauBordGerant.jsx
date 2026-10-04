@@ -199,6 +199,26 @@ export default function TableauBordGerant() {
             </button>
             <button
               type="button"
+              onClick={() => navigate(`/clients-pro?tab=factures`)}
+              className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-colors shadow-md flex items-center gap-1.5"
+              title="Accéder à la facturation officielle OHADA"
+            >
+              <span>📄</span>
+              <span className="hidden sm:inline">Facturation OHADA</span>
+              <span className="sm:hidden">Factures</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate(`/pompistes`)}
+              className="px-3 py-2 rounded-xl bg-purple-700 hover:bg-purple-600 text-white text-xs font-bold transition-colors shadow-md flex items-center gap-1.5"
+              title="Ajouter un collaborateur et créer son compte"
+            >
+              <span>👥</span>
+              <span className="hidden sm:inline">Équipe &amp; Comptes</span>
+              <span className="sm:hidden">Équipe</span>
+            </button>
+            <button
+              type="button"
               onClick={() => navigate(`/rapport?station=${encodeURIComponent(stationCode)}&date=${encodeURIComponent(date)}`)}
               className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black uppercase tracking-wide transition-colors shadow-md"
               title="Ouvrir ou compléter le rapport journalier du jour (pré-rempli depuis le terrain)"

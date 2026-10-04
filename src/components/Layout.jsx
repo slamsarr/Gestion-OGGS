@@ -35,7 +35,7 @@ const NAV_POLES = [
     id: "finance",
     label: "💼 Finance & Crédits",
     items: [
-      { to: "/clients-pro", label: "Clients Pro & Bons", icon: "👥" },
+      { to: "/clients-pro", label: "Clients Pro & Factures OHADA", icon: "📄" },
       { to: "/depenses", label: "Dépenses & Justifs", icon: "🧾" },
       { to: "/finance", label: "Finance & Caisse", icon: "💰" },
       { to: "/fournisseurs", label: "Fournisseurs & BL", icon: "🚚" },
@@ -43,11 +43,11 @@ const NAV_POLES = [
   },
   {
     id: "gestion",
-    label: "⚙️ Configuration",
+    label: "⚙️ Configuration & Équipe",
     items: [
-      { to: "/pistolets", label: "Pistolets & Pompes", icon: "🔫" },
-      { to: "/pompistes", label: "Équipe Pompistes", icon: "👷" },
-      { to: "/parametres", label: "Paramètres Réseau", icon: "⚙️" },
+      { to: "/parametres", label: "👥 Équipe & Paramètres", icon: "👥" },
+      { to: "/pompistes", label: "👷 Pompistes & Quarts", icon: "👷" },
+      { to: "/pistolets", label: "🔫 Pistolets & Pompes", icon: "🔫" },
     ],
   },
 ];

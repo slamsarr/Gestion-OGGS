@@ -159,7 +159,7 @@ const ROUTES = {
   "/incidents": ["admin", "gerant", "superviseur", "directeur", "maintenance", "pompiste"],
   "/clients-pro": ["admin", "gerant", "superviseur", "directeur", "commercial", "comptable", "client_pro"],
   "/finance": ["admin", "superviseur", "directeur", "comptable"],
-  "/parametres": ["admin", "directeur"],
+  "/parametres": ["admin", "directeur", "superviseur"],
   "/fidelite": ["admin", "gerant", "superviseur", "directeur", "commercial", "pompiste", "boutique", "lavage"],
 };
 

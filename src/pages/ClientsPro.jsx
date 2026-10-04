@@ -56,6 +56,10 @@ export default function ClientsPro() {
   });
 
   // Factures Officielles OHADA / Sénégal
+  const [mainTab, setMainTab] = useState(searchParams.get("tab") === "factures" ? "factures" : "clients"); // clients | factures
+  const [toutesFactures, setToutesFactures] = useState([]);
+  const [loadingToutesFactures, setLoadingToutesFactures] = useState(false);
+  const [filtreStatutFacture, setFiltreStatutFacture] = useState("TOUS");
   const [facturesClient, setFacturesClient] = useState([]);
   const [loadingFactures, setLoadingFactures] = useState(false);
   const [factureAffichee, setFactureAffichee] = useState(null);
@@ -100,8 +104,21 @@ export default function ClientsPro() {
     if (!stationId && ref?.stations?.length) setStationId(ref.stations[0].id);
   }, [ref, stationId]);
 
+  const loadToutesFactures = async () => {
+    setLoadingToutesFactures(true);
+    try {
+      const facs = await listFactures();
+      setToutesFactures(facs || []);
+    } catch (e) {
+      console.error("Erreur chargement factures:", e);
+    } finally {
+      setLoadingToutesFactures(false);
+    }
+  };
+
   useEffect(() => {
     loadData();
+    loadToutesFactures();
   }, [cloud]);
 
   useEffect(() => {
@@ -109,6 +126,11 @@ export default function ClientsPro() {
     if (fromUrl) {
       setSelected(fromUrl);
       setSubTab("bons");
+      setMainTab("clients");
+    }
+    if (searchParams.get("tab") === "factures") {
+      setMainTab("factures");
+      loadToutesFactures();
     }
   }, [searchParams]);
 
@@ -225,6 +247,7 @@ export default function ClientsPro() {
 
       await saveFacture(nouvelleFacture);
       setFacturesClient((prev) => [nouvelleFacture, ...prev]);
+      setToutesFactures((prev) => [nouvelleFacture, ...prev]);
       setFactureAffichee(nouvelleFacture);
       setSelectedBonsIds(new Set());
       flash(`✓ Facture officielle ${numeroFacture} générée avec succès (${F(calculFiscal.totalTTC)} FCFA)`);
@@ -238,6 +261,9 @@ export default function ClientsPro() {
       const res = await marquerFactureReglee(factureId);
       if (res.ok) {
         setFacturesClient((prev) =>
+          prev.map((f) => (f.id === factureId ? { ...f, statut: "REGLEE", date_reglement: todayISO() } : f))
+        );
+        setToutesFactures((prev) =>
           prev.map((f) => (f.id === factureId ? { ...f, statut: "REGLEE", date_reglement: todayISO() } : f))
         );
         if (factureAffichee?.id === factureId) {
@@ -428,22 +454,61 @@ export default function ClientsPro() {
 
   return (
     <div className="space-y-4">
-      {/* Entête */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b" style={{ borderColor: T.line }}>
-        <div>
-          <h1 className="text-xl font-black tracking-tight" style={{ color: T.petrol }}>
-            Portefeuille Clients Professionnels & Flottes
-          </h1>
-          <p className="text-xs text-gray-500 font-medium">
-            Gestion des crédits carburant, suivi des encaissements de bons & suivi des flottes (§33)
-          </p>
-        </div>
-        <div className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 self-start sm:self-auto">
-          {clients.length} compte(s) B2B actif(s)
-        </div>
+      {/* ── SÉLECTEUR D'ONGLET RACINE : CLIENTS VS FACTURATION OHADA ── */}
+      <div className="flex flex-wrap items-center gap-2 border-b pb-3" style={{ borderColor: T.line }}>
+        <button
+          type="button"
+          onClick={() => setMainTab("clients")}
+          className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-xs ${
+            mainTab === "clients"
+              ? "bg-[#56216C] text-white shadow-md ring-2 ring-purple-300"
+              : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-200"
+          }`}
+        >
+          <span>👥</span>
+          <span>Portefeuille Clients &amp; Comptes B2B ({clients.length})</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setMainTab("factures");
+            loadToutesFactures();
+          }}
+          className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-xs ${
+            mainTab === "factures"
+              ? "bg-blue-600 text-white shadow-md ring-2 ring-blue-300"
+              : "bg-white text-blue-800 hover:bg-blue-50 border border-blue-200"
+          }`}
+        >
+          <span>📄</span>
+          <span>Facturation Officielle OHADA (Certifiée QR Code)</span>
+          {toutesFactures.length > 0 && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-900">
+              {toutesFactures.length}
+            </span>
+          )}
+        </button>
       </div>
 
       {msg && <div className="rounded-lg px-3 py-2 text-sm font-semibold shadow-xs" style={{ background: "#E3F4EA", color: T.ok }}>{msg}</div>}
+
+      {/* ── VUE 1 : PORTEFEUILLE CLIENTS B2B ── */}
+      {mainTab === "clients" && (
+        <div className="space-y-4">
+          {/* Entête */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b" style={{ borderColor: T.line }}>
+            <div>
+              <h1 className="text-xl font-black tracking-tight" style={{ color: T.petrol }}>
+                Portefeuille Clients Professionnels &amp; Flottes
+              </h1>
+              <p className="text-xs text-gray-500 font-medium">
+                Gestion des crédits carburant, suivi des encaissements de bons &amp; suivi des flottes (§33)
+              </p>
+            </div>
+            <div className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 self-start sm:self-auto">
+              {clients.length} compte(s) B2B actif(s)
+            </div>
+          </div>
 
       {/* Formulaire nouveau client */}
       {peutCreerClient && (
@@ -1315,15 +1380,272 @@ export default function ClientsPro() {
             </div>
           )}
 
-          {/* Modal Facture Officielle OHADA / Sénégal avec QR Code */}
-          {factureAffichee && (
-            <FactureOfficielleModal
-              facture={factureAffichee}
-              onClose={() => setFactureAffichee(null)}
-              onMarquerReglee={handleMarquerFactureReglee}
-            />
-          )}
         </div>
+      )}
+        </div>
+      )}
+
+      {/* ── VUE 2 : FACTURATION OFFICIELLE OHADA GLOBALE ── */}
+      {mainTab === "factures" && (
+        <div className="space-y-4">
+          {/* Bannière de conformité fiscale */}
+          <div className="bg-gradient-to-r from-[#1B3A57] via-[#2A4D6F] to-[#12263A] text-white rounded-2xl p-5 shadow-lg border-2 border-blue-400/40">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl">📑</span>
+                  <h2 className="text-lg font-black tracking-tight text-white flex items-center gap-2">
+                    <span>Facturation Officielle Réseau — Conforme OHADA &amp; DGID</span>
+                  </h2>
+                </div>
+                <p className="text-xs text-blue-200/90 max-w-2xl">
+                  Factures certifiées avec calcul automatique HT / TVA (18%), montant légal en toutes lettres et QR Code de vérification fiscale conforme aux normes de la Direction Générale des Impôts et Domaines du Sénégal.
+                </p>
+                <div className="flex flex-wrap items-center gap-2 pt-1 text-[10px]">
+                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
+                    🇸🇳 Conforme DGID Sénégal
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-200 font-bold border border-blue-400/30">
+                    ⚖️ Acte Uniforme SYSCOHADA
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-200 font-bold border border-purple-400/30">
+                    📱 QR Code Signature SHA-256
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap sm:flex-col gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMainTab("clients");
+                    if (clients.length > 0 && !selected) setSelected(clients[0].code);
+                  }}
+                  className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-md transition-all flex items-center justify-center gap-1.5"
+                >
+                  <span>➕</span>
+                  <span>Émettre une Facture</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={loadToutesFactures}
+                  className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs transition-colors flex items-center justify-center gap-1"
+                >
+                  <span>🔄</span>
+                  <span>Actualiser</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Statistiques globales de facturation */}
+            {(() => {
+              const totalTTC = toutesFactures.reduce((acc, f) => acc + n(f.montant_ttc || 0), 0);
+              const totalHT = toutesFactures.reduce((acc, f) => acc + n(f.montant_ht || 0), 0);
+              const totalTVA = toutesFactures.reduce((acc, f) => acc + n(f.montant_tva || 0), 0);
+              const totalRegle = toutesFactures.filter((f) => f.statut === "REGLEE").reduce((acc, f) => acc + n(f.montant_ttc || 0), 0);
+              const totalReste = toutesFactures.filter((f) => f.statut !== "REGLEE").reduce((acc, f) => acc + n(f.montant_ttc || 0), 0);
+
+              return (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-4">
+                  <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
+                    <div className="text-[10px] uppercase font-bold text-blue-200">Total Facturé TTC</div>
+                    <div className="text-base sm:text-lg font-black text-white tabular mt-0.5">{F(totalTTC)} F</div>
+                    <div className="text-[10px] text-gray-300">Dont HT : {F(totalHT)} F</div>
+                  </div>
+
+                  <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
+                    <div className="text-[10px] uppercase font-bold text-purple-200">TVA Collectée (18%)</div>
+                    <div className="text-base sm:text-lg font-black text-purple-300 tabular mt-0.5">{F(totalTVA)} F</div>
+                    <div className="text-[10px] text-gray-300">Crédit TVA légal</div>
+                  </div>
+
+                  <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
+                    <div className="text-[10px] uppercase font-bold text-emerald-300">Factures Réglées</div>
+                    <div className="text-base sm:text-lg font-black text-emerald-400 tabular mt-0.5">{F(totalRegle)} F</div>
+                    <div className="text-[10px] text-gray-300">
+                      {toutesFactures.filter((f) => f.statut === "REGLEE").length} facture(s) soldée(s)
+                    </div>
+                  </div>
+
+                  <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
+                    <div className="text-[10px] uppercase font-bold text-amber-300">Encours à Recouvrer</div>
+                    <div className="text-base sm:text-lg font-black text-amber-400 tabular mt-0.5">{F(totalReste)} F</div>
+                    <div className="text-[10px] text-gray-300">
+                      {toutesFactures.filter((f) => f.statut !== "REGLEE").length} facture(s) en attente
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* Filtres & Recherche de factures */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3 rounded-xl border" style={{ borderColor: T.line }}>
+            <div className="flex items-center gap-1.5 text-xs font-semibold">
+              <span className="text-gray-500 mr-1">Filtrer statut :</span>
+              <button
+                type="button"
+                onClick={() => setFiltreStatutFacture("TOUS")}
+                className={`px-3 py-1.5 rounded-lg transition-colors ${
+                  filtreStatutFacture === "TOUS" ? "bg-[#1B3A57] text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                }`}
+              >
+                Toutes ({toutesFactures.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFiltreStatutFacture("EMISE")}
+                className={`px-3 py-1.5 rounded-lg transition-colors ${
+                  filtreStatutFacture === "EMISE" ? "bg-amber-600 text-white" : "bg-amber-50 text-amber-800 hover:bg-amber-100"
+                }`}
+              >
+                En Attente ({toutesFactures.filter((f) => f.statut === "EMISE").length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFiltreStatutFacture("REGLEE")}
+                className={`px-3 py-1.5 rounded-lg transition-colors ${
+                  filtreStatutFacture === "REGLEE" ? "bg-emerald-600 text-white" : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                }`}
+              >
+                Réglées ({toutesFactures.filter((f) => f.statut === "REGLEE").length})
+              </button>
+            </div>
+            <div className="text-xs text-gray-400">
+              Mise à jour automatique
+            </div>
+          </div>
+
+          {/* Liste des factures */}
+          {loadingToutesFactures ? (
+            <p className="text-xs text-gray-400 py-8 text-center">Chargement des factures…</p>
+          ) : (() => {
+            const listAAfficher = toutesFactures.filter((f) => {
+              if (filtreStatutFacture === "EMISE") return f.statut === "EMISE";
+              if (filtreStatutFacture === "REGLEE") return f.statut === "REGLEE";
+              return true;
+            });
+
+            if (listAAfficher.length === 0) {
+              return (
+                <div className="border rounded-2xl p-10 text-center bg-white text-xs text-gray-500 space-y-3" style={{ borderColor: T.line }}>
+                  <span className="text-4xl block">📑</span>
+                  <p className="font-bold text-gray-800 text-base">Aucune facture officielle enregistrée pour le moment.</p>
+                  <p className="max-w-md mx-auto text-gray-500 text-xs">
+                    Pour émettre votre première facture certifiée OHADA avec QR code, cliquez sur le bouton ci-dessous, sélectionnez une entreprise partenaire et validez ses bons de carburant.
+                  </p>
+                  <div className="pt-2 flex justify-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMainTab("clients");
+                        if (clients.length > 0) {
+                          setSelected(clients[0].code);
+                          setSubTab("factures");
+                        }
+                      }}
+                      className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md inline-flex items-center gap-2"
+                    >
+                      <span>➕</span>
+                      <span>Émettre une facture pour {clients[0]?.nom_entreprise || "un client"}</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div className="bg-white rounded-xl border shadow-xs overflow-hidden" style={{ borderColor: T.line }}>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50 border-b text-gray-500 uppercase tracking-wider text-[10px]" style={{ borderColor: T.line }}>
+                      <tr>
+                        <th className="py-3 px-3 text-left">N° Facture</th>
+                        <th className="py-3 px-3 text-left">Date</th>
+                        <th className="py-3 px-3 text-left">Client B2B</th>
+                        <th className="py-3 px-3 text-right">Montant HT</th>
+                        <th className="py-3 px-3 text-right">TVA (18%)</th>
+                        <th className="py-3 px-3 text-right">Total TTC (FCFA)</th>
+                        <th className="py-3 px-3 text-center">Statut</th>
+                        <th className="py-3 px-3 text-center">Certification &amp; PDF</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {listAAfficher.map((fac) => (
+                        <tr key={fac.id} className="hover:bg-blue-50/30 transition-colors">
+                          <td className="py-3 px-3 font-mono font-bold text-blue-900 whitespace-nowrap">
+                            {fac.numero_facture}
+                          </td>
+                          <td className="py-3 px-3 text-gray-700 whitespace-nowrap">
+                            {fmtDate(fac.date_emission)}
+                          </td>
+                          <td className="py-3 px-3 text-gray-900">
+                            <div className="font-bold">{fac.client_nom}</div>
+                            <div className="text-[10px] text-gray-400 font-mono">
+                              Code : {fac.client_code} · NINEA : {fac.client_ninea || "—"}
+                            </div>
+                          </td>
+                          <td className="py-3 px-3 text-right font-mono text-gray-600">
+                            {F(fac.montant_ht)} F
+                          </td>
+                          <td className="py-3 px-3 text-right font-mono text-purple-700 font-semibold">
+                            {F(fac.montant_tva)} F
+                          </td>
+                          <td className="py-3 px-3 text-right font-mono font-black text-gray-900">
+                            {F(fac.montant_ttc)} F
+                          </td>
+                          <td className="py-3 px-3 text-center whitespace-nowrap">
+                            <span
+                              className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                fac.statut === "REGLEE"
+                                  ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                  : "bg-amber-100 text-amber-800 border border-amber-300"
+                              }`}
+                            >
+                              {fac.statut === "REGLEE" ? "✓ RÉGLÉE" : "⏳ ÉMISE"}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-center whitespace-nowrap">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setFactureAffichee(fac)}
+                                className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors"
+                                title="Afficher la facture A4 certifiée avec QR Code"
+                              >
+                                <span>🖨️</span>
+                                <span>PDF A4 (QR Code)</span>
+                              </button>
+                              {fac.statut !== "REGLEE" && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleMarquerFactureReglee(fac.id)}
+                                  className="px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 font-bold text-xs transition-colors"
+                                  title="Marquer comme encaissée / réglée"
+                                >
+                                  ✓ Réglée
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* Modal Facture Officielle OHADA / Sénégal avec QR Code (Accessible universellement) */}
+      {factureAffichee && (
+        <FactureOfficielleModal
+          facture={factureAffichee}
+          onClose={() => setFactureAffichee(null)}
+          onMarquerReglee={handleMarquerFactureReglee}
+        />
       )}
     </div>
   );
