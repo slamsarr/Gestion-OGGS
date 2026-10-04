@@ -137,9 +137,13 @@ export default function Dashboard() {
         <div className="absolute inset-0 bg-gradient-to-t from-[#1F0626]/90 via-[#1F0626]/40 to-transparent flex flex-col justify-end p-4 sm:p-5 text-white">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className="flex items-center gap-2 mb-1">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
                 <span className="text-[10px] sm:text-xs font-black px-2.5 py-0.5 rounded-full bg-amber-500 text-slate-950 uppercase tracking-wide">
                   COCKPIT RÉSEAU STAR ENERGY
+                </span>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#102A43]/85 text-white border border-blue-400/40 backdrop-blur-xs">
+                  <img src="/branding/damel-energy/damel-energy-icon.svg" alt="DE" className="w-3 h-3 object-contain" />
+                  <span>Managed by DAMEL ENERGY</span>
                 </span>
                 <span className="text-xs text-amber-200 font-medium">· {fmtDate(today)}</span>
               </div>

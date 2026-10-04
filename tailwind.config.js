@@ -13,6 +13,13 @@ export default {
           lime: "#82B82C",
           magenta: "#B51772",
         },
+        damel: {
+          blue: "#0B4EA2",
+          red: "#E30620",
+          yellow: "#F9C400",
+          navy: "#102A43",
+          light: "#F0F5FA",
+        },
       },
     },
   },

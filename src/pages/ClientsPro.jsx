@@ -12,11 +12,17 @@ import {
   soldeClient,
   listBonsClient,
   reglerBonsClient,
+  listFactures,
+  saveFacture,
+  marquerFactureReglee,
+  nextSequenceFacture,
 } from "../lib/api";
 import { Section, Row, Num, Loading } from "../components/ui";
 import { F, fmtDate, n, T, todayISO, uuid } from "../lib/calcul";
 import { codeClientCanonique, listeClientsCredit } from "../lib/seed";
 import { peutAgirProfil } from "../lib/permissions";
+import FactureOfficielleModal from "../components/FactureOfficielleModal";
+import { calculerFactureFiscale, genererNumeroFacture, FISCAL_CONFIG } from "../lib/facturation";
 
 export default function ClientsPro() {
   const { profil, cloud } = useAuth();
@@ -48,6 +54,12 @@ export default function ClientsPro() {
     reference: "",
     allocations: {}, // { [bonId]: number }
   });
+
+  // Factures Officielles OHADA / Sénégal
+  const [facturesClient, setFacturesClient] = useState([]);
+  const [loadingFactures, setLoadingFactures] = useState(false);
+  const [factureAffichee, setFactureAffichee] = useState(null);
+  const [selectedBonsIds, setSelectedBonsIds] = useState(new Set());
 
   const clients = useMemo(() => {
     let list = listeClientsCredit(ref);
@@ -103,20 +115,25 @@ export default function ClientsPro() {
   const loadClientOps = async (code) => {
     setLoadingOps(true);
     setLoadingBons(true);
+    setLoadingFactures(true);
     try {
-      const [o, b, s] = await Promise.all([
+      const [o, b, s, facs] = await Promise.all([
         listOperationsCredit(code),
         listBonsClient(code, stationId),
         soldeClient(code),
+        listFactures({ client_code: code }),
       ]);
       setOps(o || []);
       setBonsClient(b || []);
       setSoldes((prev) => ({ ...prev, [code]: s }));
+      setFacturesClient(facs || []);
+      setSelectedBonsIds(new Set());
     } catch (err) {
       console.error("Erreur chargement données client:", err);
     } finally {
       setLoadingOps(false);
       setLoadingBons(false);
+      setLoadingFactures(false);
     }
   };
 
@@ -126,8 +143,112 @@ export default function ClientsPro() {
     } else {
       setOps([]);
       setBonsClient([]);
+      setFacturesClient([]);
+      setSelectedBonsIds(new Set());
     }
   }, [selected]);
+
+  // Sélection de bons pour facturation
+  const toggleSelectBon = (bonId) => {
+    setSelectedBonsIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(bonId)) next.delete(bonId);
+      else next.add(bonId);
+      return next;
+    });
+  };
+
+  const selectAllBonsImpayes = () => {
+    const impayes = bonsClient.filter((b) => n(b.reste_a_payer ?? b.montant) > 0);
+    setSelectedBonsIds(new Set(impayes.map((b) => b.id)));
+  };
+
+  // Génération d'une Facture Officielle conforme OHADA
+  const handleGenererFacture = async (bonsCibles = null) => {
+    if (!clientActif) return;
+
+    let bonsAFacturer = [];
+    if (bonsCibles && bonsCibles.length > 0) {
+      bonsAFacturer = bonsCibles;
+    } else if (selectedBonsIds.size > 0) {
+      bonsAFacturer = bonsClient.filter((b) => selectedBonsIds.has(b.id));
+    } else {
+      // Par défaut : tous les bons impayés ou partiels
+      bonsAFacturer = bonsClient.filter((b) => n(b.reste_a_payer ?? b.montant) > 0);
+    }
+
+    if (bonsAFacturer.length === 0) {
+      flash("⚠️ Aucun bon sélectionné ou disponible à facturer pour ce client.");
+      return;
+    }
+
+    try {
+      const station = (ref?.stations || []).find((s) => s.id === stationId) || ref?.stations?.[0] || { code: "HANN", nom: "HANN MARISTE" };
+      const seq = await nextSequenceFacture(station.code, todayISO());
+      const numeroFacture = genererNumeroFacture(station.code, todayISO(), seq);
+
+      // Construction des lignes de facture
+      const lignesBrutes = bonsAFacturer.map((b) => ({
+        designation: b.produit ? `Carburant ${b.produit}` : "Consommation carburant à la pompe",
+        bon_numero: b.numero_bon || b.id?.slice(0, 8),
+        immatriculation: b.immatriculation || b.matricule || "—",
+        quantite: n(b.volume_litres || (n(b.montant) > 0 ? Math.round(n(b.montant) / 990) : 1)),
+        prix_unitaire_ttc: n(b.prix_unitaire) > 0 ? n(b.prix_unitaire) : (n(b.montant) > 0 ? Math.round(n(b.montant) / Math.max(1, n(b.volume_litres || 1))) : 990),
+        montant_ttc: n(b.montant),
+        date: b.date || todayISO(),
+      }));
+
+      const calculFiscal = calculerFactureFiscale(lignesBrutes);
+
+      const nouvelleFacture = {
+        id: uuid(),
+        numero_facture: numeroFacture,
+        station_id: station.id || stationId,
+        station_nom: station.nom || "STAR ENERGY HANN MARISTE",
+        client_code: clientActif.code,
+        client_nom: clientActif.nom_entreprise || clientActif.nom,
+        client_ninea: clientActif.ninea || clientActif.rccm || "Non renseigné",
+        client_telephone: clientActif.telephone || "",
+        client_email: clientActif.email || "",
+        date_emission: todayISO(),
+        date_echeance: todayISO(), // Échéance à réception par défaut
+        objet: `Règlement des bons de carburant (${bonsAFacturer.length} bon(s)) — ${clientActif.nom_entreprise || clientActif.nom}`,
+        lignes: calculFiscal.lignes,
+        montant_ht: calculFiscal.totalHT,
+        montant_tva: calculFiscal.totalTVA,
+        montant_ttc: calculFiscal.totalTTC,
+        total_en_lettres: calculFiscal.totalEnLettres,
+        bons_ids: bonsAFacturer.map((b) => b.id),
+        statut: "EMISE",
+        created_at: new Date().toISOString(),
+      };
+
+      await saveFacture(nouvelleFacture);
+      setFacturesClient((prev) => [nouvelleFacture, ...prev]);
+      setFactureAffichee(nouvelleFacture);
+      setSelectedBonsIds(new Set());
+      flash(`✓ Facture officielle ${numeroFacture} générée avec succès (${F(calculFiscal.totalTTC)} FCFA)`);
+    } catch (e) {
+      flash("Erreur génération facture : " + (e.message || e));
+    }
+  };
+
+  const handleMarquerFactureReglee = async (factureId) => {
+    try {
+      const res = await marquerFactureReglee(factureId);
+      if (res.ok) {
+        setFacturesClient((prev) =>
+          prev.map((f) => (f.id === factureId ? { ...f, statut: "REGLEE", date_reglement: todayISO() } : f))
+        );
+        if (factureAffichee?.id === factureId) {
+          setFactureAffichee((prev) => ({ ...prev, statut: "REGLEE", date_reglement: todayISO() }));
+        }
+        flash("✓ Facture marquée comme réglée");
+      }
+    } catch (e) {
+      flash("Erreur règlement facture : " + (e.message || e));
+    }
+  };
 
   // Statistiques et filtres sur les bons
   const bonsImpayes = useMemo(() => bonsClient.filter((b) => n(b.reste_a_payer ?? b.montant) > 0 && n(b.montant_regle || 0) === 0), [bonsClient]);
@@ -484,6 +605,14 @@ export default function ClientsPro() {
               >
                 💳 Avance Libre
               </button>
+              <button
+                onClick={() => setSubTab("factures")}
+                className={`px-3 py-1.5 rounded-md transition-colors flex items-center gap-1.5 ${
+                  subTab === "factures" ? "bg-white shadow-xs text-blue-900 font-bold" : "text-blue-700 hover:bg-blue-50"
+                }`}
+              >
+                <span>📄 Factures OHADA ({facturesClient.length})</span>
+              </button>
             </div>
           </div>
 
@@ -544,13 +673,28 @@ export default function ClientsPro() {
                   </button>
                 </div>
 
-                <button
-                  onClick={() => openReglementModal()}
-                  className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-colors"
-                >
-                  <span>💳</span>
-                  <span>Encaisser un Règlement de Bons</span>
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => handleGenererFacture()}
+                    className="px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-colors"
+                    title="Générer une facture officielle conforme OHADA avec QR code"
+                  >
+                    <span>📄</span>
+                    <span>
+                      {selectedBonsIds.size > 0
+                        ? `Facturer ${selectedBonsIds.size} bon(s) sélectionné(s)`
+                        : `Établir Facture (${bonsImpayes.length + bonsPartiels.length} bon(s))`}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => openReglementModal()}
+                    className="px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-colors"
+                  >
+                    <span>💳</span>
+                    <span>Encaisser un Règlement</span>
+                  </button>
+                </div>
               </div>
 
               {/* Table des Bons */}
@@ -568,6 +712,16 @@ export default function ClientsPro() {
                   <table className="w-full text-xs">
                     <thead className="bg-gray-50 border-b text-gray-500 uppercase tracking-wider text-[10px]" style={{ borderColor: T.line }}>
                       <tr>
+                        <th className="py-2 px-2 text-center w-8">
+                          <input
+                            type="checkbox"
+                            aria-label="Sélectionner tous les bons"
+                            checked={bonsImpayes.length > 0 && selectedBonsIds.size === bonsImpayes.length}
+                            onChange={selectAllBonsImpayes}
+                            className="rounded text-blue-600 cursor-pointer"
+                            title="Sélectionner tous les bons impayés"
+                          />
+                        </th>
                         <th className="py-2 px-3 text-left">Date & Origine</th>
                         <th className="py-2 px-3 text-left">N° Bon</th>
                         <th className="py-2 px-3 text-left">Véhicule / Obs</th>
@@ -576,7 +730,7 @@ export default function ClientsPro() {
                         <th className="py-2 px-3 text-right">Réglé</th>
                         <th className="py-2 px-3 text-right">Reste Dû</th>
                         <th className="py-2 px-3 text-center">Statut</th>
-                        <th className="py-2 px-3 text-center">Action</th>
+                        <th className="py-2 px-3 text-center">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y" style={{ borderColor: T.line }}>
@@ -585,9 +739,19 @@ export default function ClientsPro() {
                         const regle = n(b.montant_regle || 0);
                         const isSolde = reste <= 0;
                         const isPartiel = regle > 0 && reste > 0;
+                        const isSelected = selectedBonsIds.has(b.id);
 
                         return (
-                          <tr key={b.id} className={isSolde ? "bg-white hover:bg-gray-50" : isPartiel ? "bg-amber-50/50 hover:bg-amber-50" : "bg-rose-50/40 hover:bg-rose-50/70"}>
+                          <tr key={b.id} className={isSelected ? "bg-blue-50/80 hover:bg-blue-100/80" : isSolde ? "bg-white hover:bg-gray-50" : isPartiel ? "bg-amber-50/50 hover:bg-amber-50" : "bg-rose-50/40 hover:bg-rose-50/70"}>
+                            <td className="py-2 px-2 text-center">
+                              <input
+                                type="checkbox"
+                                aria-label={`Sélectionner bon ${b.numero_bon || b.id}`}
+                                checked={isSelected}
+                                onChange={() => toggleSelectBon(b.id)}
+                                className="rounded text-blue-600 cursor-pointer"
+                              />
+                            </td>
                             <td className="py-2 px-3 text-gray-700">
                               <div className="font-bold tabular">{fmtDate(b.date)}</div>
                               <div className="text-[10px] text-gray-400 font-mono">
@@ -628,17 +792,27 @@ export default function ClientsPro() {
                                 {isSolde ? "✓ Soldé" : isPartiel ? "🟡 Partiel" : "🔴 Impayé"}
                               </span>
                             </td>
-                            <td className="py-2 px-3 text-center">
-                              {reste > 0 ? (
+                            <td className="py-2 px-3 text-center whitespace-nowrap">
+                              <div className="flex items-center justify-center gap-1">
                                 <button
-                                  onClick={() => openReglementModal(b.id)}
-                                  className="px-2.5 py-1 rounded bg-emerald-50 border border-emerald-300 text-emerald-800 hover:bg-emerald-100 font-bold text-[11px] shadow-xs transition-colors"
+                                  type="button"
+                                  onClick={() => handleGenererFacture([b])}
+                                  className="px-2 py-1 rounded bg-blue-50 border border-blue-200 text-blue-800 hover:bg-blue-100 font-bold text-[10.5px] transition-colors"
+                                  title="Générer une facture officielle pour ce bon"
                                 >
-                                  💳 Régler
+                                  📄 Facture
                                 </button>
-                              ) : (
-                                <span className="text-[11px] text-emerald-600 font-bold">✓ Réglé</span>
-                              )}
+                                {reste > 0 ? (
+                                  <button
+                                    onClick={() => openReglementModal(b.id)}
+                                    className="px-2 py-1 rounded bg-emerald-50 border border-emerald-300 text-emerald-800 hover:bg-emerald-100 font-bold text-[10.5px] shadow-xs transition-colors"
+                                  >
+                                    💳 Régler
+                                  </button>
+                                ) : (
+                                  <span className="text-[10px] text-emerald-600 font-bold">✓ Réglé</span>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         );
@@ -782,6 +956,130 @@ export default function ClientsPro() {
                   ✓ Enregistrer l'encaissement de {F(n(reglementForm.montant))} F
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* Onglet 4 : Factures Officielles OHADA / Sénégal */}
+          {subTab === "factures" && (
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-blue-50/50 border border-blue-100 p-4 rounded-xl">
+                <div>
+                  <h3 className="text-sm font-bold text-blue-950 flex items-center gap-2">
+                    <span>📄 Facturation Officielle Conforme OHADA & DGID</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-200/60 text-blue-800 font-extrabold">
+                      {facturesClient.length} facture(s)
+                    </span>
+                  </h3>
+                  <p className="text-xs text-blue-800/80 mt-0.5">
+                    Émission de factures numérotées, certifiées avec QR code fiscal et mention légale en toutes lettres.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleGenererFacture()}
+                  className="px-4 py-2 rounded-lg bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-colors shrink-0"
+                >
+                  <span>➕</span>
+                  <span>Générer Facture sur Bons</span>
+                </button>
+              </div>
+
+              {loadingFactures ? (
+                <p className="text-xs text-gray-400 py-6 text-center">Chargement des factures du client…</p>
+              ) : facturesClient.length === 0 ? (
+                <div className="border rounded-xl p-8 text-center bg-gray-50 text-xs text-gray-500 space-y-2">
+                  <span className="text-3xl block">📑</span>
+                  <p className="font-bold text-gray-800 text-sm">Aucune facture émise pour ce client pour le moment.</p>
+                  <p className="max-w-md mx-auto text-gray-500 text-[11px]">
+                    Vous pouvez sélectionner un ou plusieurs bons de carburant dans l'onglet « Bons Carburant » puis cliquer sur « Établir Facture Officielle OHADA ».
+                  </p>
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() => handleGenererFacture()}
+                      className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs inline-flex items-center gap-1.5"
+                    >
+                      <span>📄</span>
+                      <span>Établir une première facture</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="overflow-x-auto border rounded-xl" style={{ borderColor: T.line }}>
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50 border-b text-gray-500 uppercase tracking-wider text-[10px]" style={{ borderColor: T.line }}>
+                      <tr>
+                        <th className="py-2.5 px-3 text-left">N° Facture</th>
+                        <th className="py-2.5 px-3 text-left">Émission</th>
+                        <th className="py-2.5 px-3 text-left">Objet / Détail</th>
+                        <th className="py-2.5 px-3 text-right">Montant HT</th>
+                        <th className="py-2.5 px-3 text-right">Total TTC (FCFA)</th>
+                        <th className="py-2.5 px-3 text-center">Statut</th>
+                        <th className="py-2.5 px-3 text-center">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {facturesClient.map((fac) => (
+                        <tr key={fac.id} className="hover:bg-blue-50/30 transition-colors">
+                          <td className="py-2.5 px-3 font-mono font-bold text-blue-900">
+                            {fac.numero_facture}
+                          </td>
+                          <td className="py-2.5 px-3 text-gray-700 whitespace-nowrap">
+                            {fmtDate(fac.date_emission)}
+                          </td>
+                          <td className="py-2.5 px-3 text-gray-800">
+                            <div className="font-semibold">{fac.objet || "Consommation carburant"}</div>
+                            <div className="text-[10px] text-gray-400">
+                              {(fac.lignes || []).length} ligne(s) • Station : {fac.station_nom || "HANN"}
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono text-gray-600">
+                            {F(fac.montant_ht)} F
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono font-bold text-gray-900">
+                            {F(fac.montant_ttc)} F
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            <span
+                              className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                fac.statut === "REGLEE"
+                                  ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                  : "bg-blue-100 text-blue-800 border border-blue-300"
+                              }`}
+                            >
+                              {fac.statut === "REGLEE" ? "✓ RÉGLÉE" : "ÉMISE"}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setFactureAffichee(fac)}
+                                className="px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] flex items-center gap-1 transition-colors"
+                                title="Afficher et imprimer le PDF avec QR code"
+                              >
+                                <span>👁️</span>
+                                <span>Voir PDF</span>
+                              </button>
+                              {fac.statut !== "REGLEE" && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleMarquerFactureReglee(fac.id)}
+                                  className="px-2 py-1 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 font-bold text-[11px] transition-colors"
+                                  title="Marquer cette facture comme soldée/réglée"
+                                >
+                                  ✓
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 
@@ -1015,6 +1313,15 @@ export default function ClientsPro() {
                 </div>
               </div>
             </div>
+          )}
+
+          {/* Modal Facture Officielle OHADA / Sénégal avec QR Code */}
+          {factureAffichee && (
+            <FactureOfficielleModal
+              facture={factureAffichee}
+              onClose={() => setFactureAffichee(null)}
+              onMarquerReglee={handleMarquerFactureReglee}
+            />
           )}
         </div>
       )}

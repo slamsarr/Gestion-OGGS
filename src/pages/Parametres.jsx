@@ -9,11 +9,14 @@ import {
   createClientCredit, updateClientCredit,
   listCuves, saveCuve,
   getParametres, saveParametres, diagSync,
+  creerCollaborateur, listCollaborateurs, deleteCollaborateur,
 } from "../lib/api";
 import { setLocalRef } from "../lib/db";
 import { F, n, T, todayISO } from "../lib/calcul";
 import { Section, Row, Num, Loading } from "../components/ui";
 import { listeClientsCredit } from "../lib/seed";
+import { BRAND_CONFIG } from "../lib/branding";
+import { ROLE_LABELS } from "../lib/permissions";
 
 function AddForm({ label, children, onSubmit, show, setShow }) {
   if (!show) return <button onClick={() => setShow(true)} className="w-full py-2 my-2 rounded text-sm font-medium" style={{ border: `1px dashed ${T.petrol}`, color: T.petrol }}>+ {label}</button>;
@@ -59,6 +62,19 @@ export default function Parametres() {
   const [parametres, setParametres] = useState(null);
   const [diag, setDiag] = useState(null);
 
+  // Collaborateurs & Création automatique de comptes
+  const [collaborateurs, setCollaborateurs] = useState([]);
+  const [showCollabModal, setShowCollabModal] = useState(false);
+  const [collabForm, setCollabForm] = useState({
+    nom_complet: "",
+    role: "pompiste",
+    station_id: "",
+    telephone: "",
+    email: "",
+    password: "Star2026!",
+  });
+  const [createdCollabCreds, setCreatedCollabCreds] = useState(null);
+
   // Edit states
   const [editSt, setEditSt] = useState(null);
   const [editProd, setEditProd] = useState(null);
@@ -70,7 +86,12 @@ export default function Parametres() {
       const r = await loadReferentiel();
       setRef(r);
       if (cloud) { try { const u = await listProfilsCloud(); setUsers(u); } catch {} }
+      try {
+        const collabs = await listCollaborateurs();
+        setCollaborateurs(collabs || []);
+      } catch {}
       if (r.stations.length > 0) {
+        setCollabForm((prev) => ({ ...prev, station_id: r.stations[0].id }));
         const all = [];
         for (const st of r.stations) {
           const c = await listCuves(st.id);
@@ -195,6 +216,48 @@ export default function Parametres() {
     if (!res.error) { flash("Rôle mis à jour"); setUsers((u) => u.map((x) => x.id === userId ? { ...x, role } : x)); }
     else flash("Erreur");
   };
+
+  const onNomCollabChange = (val) => {
+    const clean = val.trim().toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]/g, ".");
+    setCollabForm((prev) => ({
+      ...prev,
+      nom_complet: val,
+      email: clean ? `${clean}@starenergy.sn` : prev.email,
+    }));
+  };
+
+  const handleCreerCollaborateur = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!collabForm.nom_complet.trim()) {
+      flash("Le nom complet est obligatoire");
+      return;
+    }
+    const res = await creerCollaborateur(collabForm);
+    if (res.ok) {
+      flash(`✓ Compte créé avec succès pour ${res.user.nom_complet} (${ROLE_LABELS[res.user.role] || res.user.role})`);
+      setCreatedCollabCreds(res.identifiants);
+      setCollaborateurs((prev) => [res.user, ...prev]);
+      setCollabForm({
+        nom_complet: "",
+        role: "pompiste",
+        station_id: ref?.stations?.[0]?.id || "",
+        telephone: "",
+        email: "",
+        password: "Star2026!",
+      });
+    } else {
+      flash("Erreur : " + (res.error || "Échec création"));
+    }
+  };
+
+  const handleDeleteCollaborateur = async (userId, nom) => {
+    if (!window.confirm(`Supprimer le compte de « ${nom} » ?`)) return;
+    await deleteCollaborateur(userId);
+    setCollaborateurs((prev) => prev.filter((u) => u.id !== userId));
+    flash("Collaborateur retiré");
+  };
   const editCuve = (id, capacite_l) => setCuves((list) => list.map((c) => c.id === id ? { ...c, capacite_l } : c));
   const saveCuves = async () => {
     let ok = 0;
@@ -236,6 +299,46 @@ export default function Parametres() {
           <button onClick={saveParams} className="w-full py-2 my-2 rounded text-sm font-medium" style={{ border: `1px dashed ${T.petrol}`, color: T.petrol }}>Enregistrer les paramètres</button>
         </Section>
       )}
+
+      {/* Architecture de Marque & Opérateur Réseau */}
+      <Section titre="🏛️ Gouvernance de Marque" aside="Enseigne vs Opérateur de gestion">
+        <div className="py-2 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+          {/* STAR ENERGY */}
+          <div className="p-3 rounded-xl border border-purple-200 bg-purple-50/40 space-y-2">
+            <div className="flex items-center gap-2">
+              <img src={BRAND_CONFIG.station.logo} alt="Star Energy" className="w-7 h-7 object-contain rounded" />
+              <div>
+                <div className="font-black text-xs text-[#56216C]">{BRAND_CONFIG.station.brandTitle}</div>
+                <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Enseigne Principale Station</div>
+              </div>
+            </div>
+            <p className="text-xs text-gray-600">
+              Chef de file visuel sur les stations-service, pistolets, cuves, bons et accueil client.
+            </p>
+            <div className="text-[11px] text-amber-800 font-semibold italic">
+              « {BRAND_CONFIG.station.slogan} »
+            </div>
+          </div>
+
+          {/* DAMEL ENERGY */}
+          <div className="p-3 rounded-xl border border-blue-200 bg-blue-50/40 space-y-2">
+            <div className="flex items-center gap-2">
+              <img
+                src={BRAND_CONFIG.operator.logos.logoJpeg}
+                alt="DAMEL ENERGY"
+                className="h-8 w-auto object-contain"
+                style={{ maxWidth: "100px" }}
+              />
+            </div>
+            <p className="text-xs text-gray-600">
+              Société de gestion, d'exploitation, de maintenance et d'optimisation de la performance énergétique.
+            </p>
+            <div className="text-[11px] text-[#0B4EA2] font-bold tracking-tight">
+              {BRAND_CONFIG.operator.signatures.management}
+            </div>
+          </div>
+        </div>
+      </Section>
 
       {/* Diagnostic synchronisation */}
       <Section titre="🔄 Synchronisation" aside={cloud ? "Cloud Supabase" : "Démo locale"}>
@@ -452,18 +555,281 @@ export default function Parametres() {
         {cuves.length === 0 && <p className="text-sm py-3" style={{ color: T.muted }}>Aucune cuve enregistrée.</p>}
       </Section>
 
-      {/* Users */}
-      {cloud && users.length > 0 && (
-        <Section titre="👤 Utilisateurs" aside={`${users.length}`}>
-          {users.map((u) => (
-            <Row key={u.id}><div><span className="font-medium">{u.nom_complet}</span><span className="text-xs ml-2" style={{ color: T.muted }}>{u.stations?.nom || "Réseau"}</span></div>
-              <select value={u.role} onChange={(e) => changeRole(u.id, e.target.value)} className="text-sm border rounded px-2 py-1" style={{ borderColor: T.line }}>
-                <option value="admin">Administrateur</option><option value="gerant">Gérant</option><option value="superviseur">Superviseur</option><option value="directeur">Directeur</option><option value="comptable">Comptable</option>
-              </select>
-            </Row>
-          ))}
-        </Section>
-      )}
+      {/* ───────────────────────────────────────────────────────────
+          ÉQUIPE & COLLABORATEURS (CRÉATION AUTOMATIQUE DE COMPTE)
+      ─────────────────────────────────────────────────────────── */}
+      <Section
+        titre="👥 Équipe & Collaborateurs du Réseau"
+        aside={`${collaborateurs.length} membre(s)`}
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b" style={{ borderColor: T.line }}>
+          <div>
+            <p className="text-xs text-gray-500">
+              Ajoutez un collaborateur suivant son profil métier (Pompiste, Lavage, Boutique, Stock, Maintenance, Gérance…).
+              Son compte d'accès sera <strong>automatiquement généré</strong> et immédiatement opérationnel.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowCollabModal(true)}
+            className="px-4 py-2 rounded-lg bg-[#56216C] hover:bg-[#4A1559] text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow-xs shrink-0"
+          >
+            <span>➕</span>
+            <span>Ajouter Collaborateur</span>
+          </button>
+        </div>
+
+        {/* Bannière de confirmation des identifiants nouvellement créés */}
+        {createdCollabCreds && (
+          <div className="mb-4 p-4 rounded-xl border border-emerald-300 bg-emerald-50/80 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="font-bold text-xs text-emerald-900 flex items-center gap-1.5">
+                <span>✓</span>
+                <span>Compte collaborateur créé avec succès pour {createdCollabCreds.nom} !</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCreatedCollabCreds(null)}
+                className="text-xs text-emerald-700 font-bold hover:text-emerald-900"
+              >
+                ✕ Fermer
+              </button>
+            </div>
+            <div className="text-xs text-emerald-800 grid grid-cols-1 sm:grid-cols-2 gap-2 bg-white/80 p-2.5 rounded-lg border border-emerald-200">
+              <div><strong>Identifiant (Email) :</strong> <code className="bg-emerald-100/70 px-1.5 py-0.5 rounded text-emerald-900 font-mono">{createdCollabCreds.email}</code></div>
+              <div><strong>Mot de passe initial :</strong> <code className="bg-emerald-100/70 px-1.5 py-0.5 rounded text-emerald-900 font-mono">{createdCollabCreds.password}</code></div>
+            </div>
+            <div className="text-[11px] text-emerald-700">
+              ℹ️ Communiquez ces identifiants au collaborateur pour qu'il puisse se connecter immédiatement à son interface ({ROLE_LABELS[createdCollabCreds.role] || createdCollabCreds.role}).
+            </div>
+          </div>
+        )}
+
+        {/* Modal d'ajout de collaborateur */}
+        {showCollabModal && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-gray-200 animate-in fade-in duration-200">
+              <div className="px-5 py-4 bg-[#56216C] text-white flex items-center justify-between">
+                <div className="font-bold text-sm flex items-center gap-2">
+                  <span>👤</span>
+                  <span>Nouveau Collaborateur &amp; Création de Compte</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowCollabModal(false)}
+                  className="text-white/80 hover:text-white font-bold"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <form onSubmit={handleCreerCollaborateur} className="p-5 space-y-3.5 text-xs">
+                <div>
+                  <label className="block text-gray-700 font-bold mb-1">Nom et Prénom *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="ex: Mamadou Ndiaye"
+                    value={collabForm.nom_complet}
+                    onChange={(e) => onNomCollabChange(e.target.value)}
+                    className="w-full border rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-purple-500 bg-white"
+                    style={{ borderColor: T.line }}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-gray-700 font-bold mb-1">Profil / Métier *</label>
+                    <select
+                      value={collabForm.role}
+                      onChange={(e) => setCollabForm({ ...collabForm, role: e.target.value })}
+                      className="w-full border rounded-lg px-3 py-2 text-xs bg-white font-medium"
+                      style={{ borderColor: T.line }}
+                    >
+                      <option value="pompiste">⛽ Pompiste (Piste &amp; Descente)</option>
+                      <option value="lavage">🚿 Agent de Lavage</option>
+                      <option value="boutique">🛍️ Vendeur Boutique</option>
+                      <option value="stock">📦 Responsable Stock</option>
+                      <option value="maintenance">🔧 Technicien Maintenance</option>
+                      <option value="gerant">📋 Gérant de Station</option>
+                      <option value="comptable">📊 Comptable</option>
+                      <option value="commercial">🤝 Commercial</option>
+                      <option value="superviseur">🛡️ Superviseur Réseau</option>
+                      <option value="directeur">🏢 Directeur</option>
+                      <option value="admin">👑 Administrateur</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-gray-700 font-bold mb-1">Station d'affectation</label>
+                    <select
+                      value={collabForm.station_id}
+                      onChange={(e) => setCollabForm({ ...collabForm, station_id: e.target.value })}
+                      className="w-full border rounded-lg px-3 py-2 text-xs bg-white font-medium"
+                      style={{ borderColor: T.line }}
+                    >
+                      <option value="">(Tout le Réseau / Siège)</option>
+                      {stations.map((st) => (
+                        <option key={st.id} value={st.id}>
+                          {st.nom} ({st.code})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-gray-700 font-bold mb-1">Numéro de Téléphone</label>
+                  <input
+                    type="tel"
+                    placeholder="ex: 77 123 45 67"
+                    value={collabForm.telephone}
+                    onChange={(e) => setCollabForm({ ...collabForm, telephone: e.target.value })}
+                    className="w-full border rounded-lg px-3 py-2 text-xs bg-white"
+                    style={{ borderColor: T.line }}
+                  />
+                </div>
+
+                <div className="pt-2 border-t space-y-2" style={{ borderColor: T.line }}>
+                  <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                    Identifiants de Connexion Automatiques
+                  </div>
+
+                  <div>
+                    <label className="block text-gray-600 font-medium mb-0.5">Adresse e-mail de connexion</label>
+                    <input
+                      type="email"
+                      required
+                      placeholder="prenom.nom@starenergy.sn"
+                      value={collabForm.email}
+                      onChange={(e) => setCollabForm({ ...collabForm, email: e.target.value })}
+                      className="w-full border rounded-lg px-3 py-2 text-xs font-mono bg-slate-50"
+                      style={{ borderColor: T.line }}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-gray-600 font-medium mb-0.5">Mot de passe temporaire</label>
+                    <input
+                      type="text"
+                      required
+                      value={collabForm.password}
+                      onChange={(e) => setCollabForm({ ...collabForm, password: e.target.value })}
+                      className="w-full border rounded-lg px-3 py-2 text-xs font-mono bg-slate-50"
+                      style={{ borderColor: T.line }}
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-3 flex items-center justify-end gap-2 border-t" style={{ borderColor: T.line }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowCollabModal(false)}
+                    className="px-4 py-2 rounded-lg border text-gray-700 font-bold hover:bg-gray-50"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 rounded-lg bg-[#56216C] hover:bg-[#4A1559] text-white font-bold shadow-xs transition-colors"
+                  >
+                    ✓ Créer le Collaborateur &amp; le Compte
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Tableau de l'équipe */}
+        <div className="overflow-x-auto border rounded-xl" style={{ borderColor: T.line }}>
+          <table className="w-full text-xs">
+            <thead className="bg-gray-50 border-b text-gray-500 uppercase tracking-wider text-[10px]" style={{ borderColor: T.line }}>
+              <tr>
+                <th className="py-2.5 px-3 text-left">Collaborateur</th>
+                <th className="py-2.5 px-3 text-left">Profil / Rôle</th>
+                <th className="py-2.5 px-3 text-left">Station</th>
+                <th className="py-2.5 px-3 text-left">Email de Connexion</th>
+                <th className="py-2.5 px-3 text-center">Statut</th>
+                <th className="py-2.5 px-3 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {collaborateurs.map((u) => {
+                const st = stations.find((s) => s.id === u.station_id);
+                const roleIcon =
+                  u.role === "pompiste" ? "⛽" :
+                  u.role === "lavage" ? "🚿" :
+                  u.role === "boutique" ? "🛍️" :
+                  u.role === "stock" ? "📦" :
+                  u.role === "maintenance" ? "🔧" :
+                  u.role === "gerant" ? "📋" :
+                  u.role === "comptable" ? "📊" :
+                  u.role === "commercial" ? "🤝" :
+                  u.role === "superviseur" ? "🛡️" :
+                  u.role === "directeur" ? "🏢" : "👑";
+
+                return (
+                  <tr key={u.id} className="hover:bg-purple-50/20 transition-colors">
+                    <td className="py-2.5 px-3">
+                      <div className="font-bold text-gray-900 flex items-center gap-1.5">
+                        <span>{roleIcon}</span>
+                        <span>{u.nom_complet}</span>
+                      </div>
+                      {u.telephone && <div className="text-[10px] text-gray-400">📞 {u.telephone}</div>}
+                    </td>
+
+                    <td className="py-2.5 px-3">
+                      <select
+                        value={u.role || "pompiste"}
+                        onChange={async (e) => {
+                          const newR = e.target.value;
+                          await changeRole(u.id, newR);
+                          setCollaborateurs((prev) => prev.map((x) => x.id === u.id ? { ...x, role: newR } : x));
+                        }}
+                        className="text-xs border rounded-lg px-2 py-1 bg-white font-medium"
+                        style={{ borderColor: T.line }}
+                      >
+                        {Object.entries(ROLE_LABELS).map(([k, label]) => (
+                          <option key={k} value={k}>{label}</option>
+                        ))}
+                      </select>
+                    </td>
+
+                    <td className="py-2.5 px-3 text-gray-700">
+                      <span className="font-semibold text-gray-800">{st ? st.nom : "Réseau global"}</span>
+                    </td>
+
+                    <td className="py-2.5 px-3 font-mono text-[11px] text-gray-600">
+                      <div>{u.email}</div>
+                      {u.password && (
+                        <div className="text-[9.5px] text-gray-400">MdP : {u.password}</div>
+                      )}
+                    </td>
+
+                    <td className="py-2.5 px-3 text-center">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        Actif
+                      </span>
+                    </td>
+
+                    <td className="py-2.5 px-3 text-center">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCollaborateur(u.id, u.nom_complet)}
+                        className="p-1 rounded text-rose-600 hover:bg-rose-50 text-xs font-bold"
+                        title="Supprimer ce collaborateur"
+                      >
+                        🗑️
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Section>
 
       <p className="text-xs mt-6 text-center" style={{ color: T.muted }}>{cloud ? "Mode cloud — synchronisé avec Supabase." : "Mode démonstration locale."}</p>
     </div>

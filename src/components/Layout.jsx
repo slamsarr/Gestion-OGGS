@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { flushQueue, listNotifications, marquerNotificationLue, getParametres } from "../lib/api";
 import { db } from "../lib/db";
 import { ROLE_LABELS, peutVoirNav } from "../lib/permissions";
+import { OperatorBadge, BrandDualFooter } from "./BrandingElements";
 
 const NAV_POLES = [
   {
@@ -176,12 +177,14 @@ export default function Layout() {
                 <img src="/star_energy_logo.jpg" alt="Star Energy" className="w-full h-full object-contain" />
               </div>
               <div>
-                <div className="font-black text-sm tracking-tight text-white flex items-center gap-1.5">
+                <div className="font-black text-sm tracking-tight text-white flex items-center gap-1.5 flex-wrap">
                   <span>{nomReseau}</span>
                   <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-amber-500 text-white shadow-xs">SÉNÉGAL</span>
+                  <OperatorBadge variant="dark" className="hidden lg:inline-flex ml-1 shadow-2xs" />
                 </div>
-                <div className="text-[10px] text-amber-200/90 font-medium truncate max-w-[200px] sm:max-w-none">
-                  {profil?.stations?.nom || (profil?.station_id ? `Station ${profil.station_id.replace("st-", "").toUpperCase()}` : "Réseau de 45 stations · Li nio ko mom !")}
+                <div className="text-[10px] text-amber-200/90 font-medium truncate max-w-[200px] sm:max-w-none flex items-center gap-1.5">
+                  <span>{profil?.stations?.nom || (profil?.station_id ? `Station ${profil.station_id.replace("st-", "").toUpperCase()}` : "Réseau de 45 stations · Li nio ko mom !")}</span>
+                  <span className="text-blue-300 font-bold hidden sm:inline lg:hidden">• Opéré par Damel Energy</span>
                 </div>
               </div>
             </NavLink>
@@ -382,7 +385,10 @@ export default function Layout() {
               ))}
             </div>
 
-            <div className="p-3 border-t bg-slate-50">
+            <div className="p-3 border-t bg-slate-50 space-y-2">
+              <div className="flex items-center justify-center">
+                <OperatorBadge variant="light" />
+              </div>
               <button
                 type="button"
                 onClick={async () => {
@@ -406,20 +412,8 @@ export default function Layout() {
         <Outlet />
       </main>
 
-      {/* PIED DE PAGE STAR ENERGY */}
-      <footer className="bg-white border-t border-slate-200 py-3.5 text-center text-[11px] text-slate-500 font-medium">
-        <div className="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <img src="/star_energy_logo.jpg" alt="Star Energy" className="w-5 h-5 object-contain rounded" />
-            <span className="font-extrabold text-[#56216C]">STAR ENERGY SÉNÉGAL</span>
-            <span className="text-gray-300 hidden sm:inline">•</span>
-            <span className="text-amber-700 font-semibold italic">« Une marque sénégalaise — Li nio ko mom ! »</span>
-          </div>
-          <div className="text-gray-400 text-[10px]">
-            Hann Mariste · Ndiakhirate · Système intégré de gestion
-          </div>
-        </div>
-      </footer>
+      {/* PIED DE PAGE DOUBLE MARQUE STAR ENERGY & DAMEL ENERGY */}
+      <BrandDualFooter />
     </div>
   );
 }

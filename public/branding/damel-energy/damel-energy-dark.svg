@@ -1,0 +1,23 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 120" width="480" height="120">
+  <rect width="480" height="120" fill="#102A43"/>
+  <defs>
+    <linearGradient id="dGradD" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1a6fd4"/>
+      <stop offset="100%" stop-color="#0B4EA2"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(4,8)">
+    <path d="M2 4 L2 88 L30 88 Q62 88 74 72 Q84 58 84 46 Q84 32 74 18 Q62 4 30 4 Z" fill="url(#dGradD)"/>
+    <path d="M20 20 L28 20 Q52 20 60 34 Q66 44 66 46 Q66 56 60 62 Q52 72 28 72 L20 72 Z" fill="#102A43"/>
+  </g>
+  <path d="M80 12 L130 4  L136 18 L86 26 Z" fill="#E30620"/>
+  <path d="M80 42 L130 34 L136 48 L86 56 Z" fill="#E30620"/>
+  <path d="M80 72 L130 64 L136 78 L86 86 Z" fill="#F9C400"/>
+  <text x="158" y="58" font-family="Manrope,Arial Black,sans-serif" font-size="40" font-weight="800" fill="white" letter-spacing="1">DAMEL</text>
+  <text font-family="Manrope,Arial Black,sans-serif" font-size="40" font-weight="800" letter-spacing="1">
+    <tspan x="158" y="100" fill="#E30620">E</tspan><tspan fill="white">N</tspan><tspan fill="#E30620">E</tspan><tspan fill="white">R</tspan><tspan fill="#F9C400">G</tspan><tspan fill="#E30620">Y</tspan>
+  </text>
+  <line x1="158" y1="110" x2="265" y2="110" stroke="#0B4EA2" stroke-width="2.5"/>
+  <polygon points="272,104 268,113 273,111 269,120 275,111 280,113" fill="#F9C400"/>
+  <line x1="282" y1="110" x2="390" y2="110" stroke="#F9C400" stroke-width="2.5"/>
+</svg>

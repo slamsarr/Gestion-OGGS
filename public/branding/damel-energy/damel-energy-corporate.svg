@@ -1,0 +1,12 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 120" width="480" height="120">
+  <g transform="translate(4,8)">
+    <path d="M2 4 L2 88 L30 88 Q62 88 74 72 Q84 58 84 46 Q84 32 74 18 Q62 4 30 4 Z" fill="#0B4EA2"/>
+    <path d="M20 20 L28 20 Q52 20 60 34 Q66 44 66 46 Q66 56 60 62 Q52 72 28 72 L20 72 Z" fill="white"/>
+  </g>
+  <path d="M80 12 L130 4  L136 18 L86 26 Z" fill="#0B4EA2"/>
+  <path d="M80 42 L130 34 L136 48 L86 56 Z" fill="#0B4EA2"/>
+  <path d="M80 72 L130 64 L136 78 L86 86 Z" fill="#0B4EA2"/>
+  <text x="158" y="58" font-family="Manrope,Arial Black,sans-serif" font-size="40" font-weight="800" fill="#0B4EA2" letter-spacing="1">DAMEL</text>
+  <text x="158" y="100" font-family="Manrope,Arial Black,sans-serif" font-size="40" font-weight="800" fill="#0B4EA2" letter-spacing="1">ENERGY</text>
+  <line x1="158" y1="110" x2="390" y2="110" stroke="#0B4EA2" stroke-width="2.5"/>
+</svg>

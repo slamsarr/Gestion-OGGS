@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { ensureLocalSeed, isCloudConfigured, isDemoModeEnabled } from "../lib/db";
+import { db, ensureLocalSeed, isCloudConfigured, isDemoModeEnabled } from "../lib/db";
 import { getSupabase } from "../lib/supabase";
 import { DEMO_USERS, SEED_STATIONS } from "../lib/seed";
 
@@ -92,9 +92,15 @@ export function AuthProvider({ children }) {
     loading: session === undefined,
     async login(email, password) {
       const cleanEmail = email.trim().toLowerCase();
-      const demoUser = isDemoModeEnabled() ? DEMO_USERS.find((x) => x.email === cleanEmail) : null;
+      let demoUser = isDemoModeEnabled() ? DEMO_USERS.find((x) => x.email === cleanEmail) : null;
+      if (!demoUser && isDemoModeEnabled()) {
+        try {
+          const localCreated = await db.users.toArray();
+          demoUser = localCreated.find((x) => (x.email || "").toLowerCase() === cleanEmail);
+        } catch {}
+      }
       if (demoUser) {
-        if (demoUser.password !== password) throw new Error("Mot de passe démo incorrect");
+        if (demoUser.password !== password) throw new Error("Mot de passe incorrect");
         await ensureLocalSeed();
         const { password: _p, ...safe } = demoUser;
         const st = SEED_STATIONS.find((s) => s.id === demoUser.station_id);

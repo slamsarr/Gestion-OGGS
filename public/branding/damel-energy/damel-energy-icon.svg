@@ -1,0 +1,15 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <defs>
+    <linearGradient id="dGradI" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1a6fd4"/>
+      <stop offset="100%" stop-color="#0B4EA2"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(2,2)">
+    <path d="M2 4 L2 88 L28 88 Q58 88 70 72 Q80 58 80 46 Q80 32 70 18 Q58 4 28 4 Z" fill="url(#dGradI)"/>
+    <path d="M18 20 L26 20 Q48 20 56 34 Q62 44 62 46 Q62 56 56 62 Q48 72 26 72 L18 72 Z" fill="white"/>
+  </g>
+  <path d="M76 10 L96 5  L98 17 L78 22 Z" fill="#E30620"/>
+  <path d="M76 40 L96 35 L98 47 L78 52 Z" fill="#E30620"/>
+  <path d="M76 68 L96 63 L98 75 L78 80 Z" fill="#F9C400"/>
+</svg>

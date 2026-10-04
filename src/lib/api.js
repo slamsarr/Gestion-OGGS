@@ -2093,4 +2093,157 @@ export async function listRecompensesFidelite() {
   return rows.sort((a, b) => (n(a.points_requis) || 0) - (n(b.points_requis) || 0));
 }
 
+export async function listFactures(filtres = {}) {
+  await ensureLocalSeed();
+  let rows = await db.factures.toArray();
+  if (filtres.client_code) {
+    rows = rows.filter((f) => f.client_code === filtres.client_code);
+  }
+  if (filtres.station_id) {
+    rows = rows.filter((f) => !f.station_id || f.station_id === filtres.station_id);
+  }
+  if (filtres.statut) {
+    rows = rows.filter((f) => f.statut === filtres.statut);
+  }
+  return rows.sort((a, b) => (b.date_emission || "").localeCompare(a.date_emission || ""));
+}
+
+export async function nextSequenceFacture(stationCode = "HANN", dateISO = todayISO()) {
+  await ensureLocalSeed();
+  const rows = await db.factures.toArray();
+  const annee = dateISO.slice(0, 4);
+  const mois = dateISO.slice(5, 7);
+  const prefix = `FAC-${annee}-${mois}`;
+  const facsDuMois = rows.filter((f) => (f.numero_facture || "").startsWith(prefix));
+  return facsDuMois.length + 1;
+}
+
+export async function saveFacture(facture) {
+  await ensureLocalSeed();
+  const fac = {
+    ...facture,
+    id: facture.id || uuid(),
+    statut: facture.statut || "EMISE",
+    created_at: facture.created_at || new Date().toISOString(),
+  };
+
+  await db.factures.put(fac);
+  return fac;
+}
+
+export async function marquerFactureReglee(factureId) {
+  await ensureLocalSeed();
+  const fac = await db.factures.get(factureId);
+  if (!fac) return { error: "Facture introuvable" };
+  const updated = {
+    ...fac,
+    statut: "REGLEE",
+    date_reglement: todayISO(),
+    maj_le: new Date().toISOString(),
+  };
+  await db.factures.put(updated);
+  return { ok: true, facture: updated };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GESTION DES COLLABORATEURS ET CRÉATION AUTOMATIQUE DE COMPTE PAR PROFIL
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function creerCollaborateur({ nom_complet, role = "pompiste", station_id = null, telephone = "", email = "", password = "" }) {
+  await ensureLocalSeed();
+  if (!nom_complet || !nom_complet.trim()) {
+    return { ok: false, error: "Le nom complet est obligatoire" };
+  }
+
+  // Génération automatique d'un email si non fourni
+  const cleanNom = nom_complet.trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, ".");
+
+  const generatedEmail = email && email.trim() ? email.trim().toLowerCase() : `${cleanNom}@starenergy.sn`;
+  const generatedPassword = password && password.trim() ? password.trim() : "Star2026!";
+  const userId = `u-${role}-${Date.now().toString(36)}`;
+
+  const newUser = {
+    id: userId,
+    email: generatedEmail,
+    password: generatedPassword,
+    nom_complet: nom_complet.trim(),
+    role: role || "pompiste",
+    station_id: station_id || null,
+    telephone: telephone ? telephone.trim() : "",
+    actif: true,
+    created_at: new Date().toISOString(),
+  };
+
+  // 1. Sauvegarde dans Dexie users
+  await db.users.put(newUser);
+
+  // 2. Si le rôle est pompiste, l'ajouter également à la table pompistes pour les descentes
+  if (role === "pompiste") {
+    try {
+      await db.pompistes.put({
+        id: `pomp-${userId}`,
+        nom: nom_complet.trim(),
+        station_id: station_id || "",
+        actif: true,
+        user_id: userId,
+      });
+    } catch {}
+  }
+
+  // 3. Si cloud est configuré, insérer dans Supabase profils
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      await sb.from("profils").upsert({
+        id: userId,
+        nom_complet: nom_complet.trim(),
+        role: role,
+        station_id: station_id || null,
+        telephone: telephone ? telephone.trim() : "",
+        actif: true,
+      });
+    } catch (e) {
+      console.warn("Synchro cloud profil:", e);
+    }
+  }
+
+  return {
+    ok: true,
+    user: newUser,
+    identifiants: {
+      email: generatedEmail,
+      password: generatedPassword,
+      role: role,
+      nom: nom_complet.trim(),
+    },
+  };
+}
+
+export async function listCollaborateurs(stationId = null) {
+  await ensureLocalSeed();
+  let localUsers = await db.users.toArray().catch(() => []);
+  if (localUsers.length === 0) {
+    localUsers = [...DEMO_USERS];
+  }
+  if (stationId) {
+    localUsers = localUsers.filter((u) => !u.station_id || u.station_id === stationId);
+  }
+  return localUsers;
+}
+
+export async function deleteCollaborateur(userId) {
+  await ensureLocalSeed();
+  await db.users.delete(userId);
+  try {
+    const p = await db.pompistes.toArray();
+    const toDel = p.find((x) => x.user_id === userId);
+    if (toDel) await db.pompistes.delete(toDel.id);
+  } catch {}
+  return { ok: true };
+}
+
+
+
 

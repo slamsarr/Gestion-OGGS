@@ -106,12 +106,24 @@ export function genererWorkbookExcel(r, c, stations) {
   put("N40", "MARGE");
   put("M41", c.caGaz);
   put("N41", c.margeGaz);
+  // Q1 : mention opérateur en position libre (non utilisée par les données métier)
+  put("Q1", "Operated by DAMEL ENERGY — Energy & Station Management");
   const ws = XLSX.utils.aoa_to_sheet(g);
   const wsDep = XLSX.utils.aoa_to_sheet([
     ["DATE", "CATEGORIE", "LIBELLE", "MONTANT"],
     ...r.depenses.map((d) => [fmtDate(r.date), d.categorie, d.libelle, n(d.montant)]),
   ]);
   const wb = XLSX.utils.book_new();
+  // Métadonnées du classeur — identité de gestion DAMEL ENERGY
+  wb.Props = {
+    Title: `Journal de caisse — STAR ENERGY ${S.nom.toUpperCase()}`,
+    Subject: "Rapport journalier de caisse station-service",
+    Author: "DAMEL ENERGY — Energy & Station Management",
+    Company: "DAMEL ENERGY",
+    Keywords: "STAR ENERGY SÉNÉGAL",
+    LastAuthor: "DAMEL ENERGY OGSS Réseau",
+    CreatedDate: new Date(),
+  };
   XLSX.utils.book_append_sheet(wb, ws, "JOURNAL");
   XLSX.utils.book_append_sheet(wb, wsDep, "DEPENSES");
   return wb;
@@ -126,6 +138,13 @@ export function exporterExcel(r, c, stations) {
 export function genererWorkbookCsv(rows) {
   const ws = XLSX.utils.aoa_to_sheet(rows);
   const wb = XLSX.utils.book_new();
+  // Métadonnées — identité de gestion DAMEL ENERGY
+  wb.Props = {
+    Author: "DAMEL ENERGY — Energy & Station Management",
+    Company: "DAMEL ENERGY",
+    Keywords: "STAR ENERGY SÉNÉGAL SYSCOHADA",
+    CreatedDate: new Date(),
+  };
   XLSX.utils.book_append_sheet(wb, ws, "EXPORT");
   return wb;
 }

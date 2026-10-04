@@ -117,7 +117,16 @@ export default function Finance() {
 
   return (
     <div>
-      <h1 className="text-xl font-bold mb-1" style={{ color: T.petrol }}>Suivi financier</h1>
+      <div className="flex items-center gap-2 flex-wrap mb-1">
+        <h1 className="text-xl font-bold" style={{ color: T.petrol }}>Suivi financier</h1>
+        <span
+          className="inline-flex items-center gap-1 text-[10px] font-semibold tracking-wide px-2 py-0.5 rounded-full"
+          style={{ background: "#0B4EA215", color: "#0B4EA2", border: "1px solid #0B4EA230" }}
+        >
+          <span style={{ color: "#E30620", fontWeight: 900 }}>DE</span>
+          <span>Operated by DAMEL ENERGY</span>
+        </span>
+      </div>
       <p className="text-sm mb-4" style={{ color: T.muted }}>{valides.length} rapports validés</p>
       {msg && <div className="rounded px-3 py-2 mb-3 text-sm" style={{ background: "#E3F4EA", color: T.ok }}>{msg}</div>}
 

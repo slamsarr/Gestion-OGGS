@@ -127,6 +127,15 @@ export default function Login() {
               <p className="text-xs text-gray-500 font-medium">
                 Progiciel de gestion réseau — Hann Mariste · Ndiakhirate
               </p>
+              <div className="mt-1.5 flex items-center gap-2">
+                <img
+                  src="/branding/damel-energy/logo-damel-energy.jpeg"
+                  alt="DAMEL ENERGY"
+                  className="h-5 w-auto object-contain"
+                  style={{ maxWidth: "90px" }}
+                />
+                <span className="text-[10px] text-gray-400 font-medium hidden sm:inline">Station & Energy Management</span>
+              </div>
             </div>
           </div>
 
@@ -216,6 +225,14 @@ export default function Login() {
               )}
             </>
           )}
+        </div>
+        {/* Pied de carte d'authentification */}
+        <div className="bg-slate-50 border-t px-6 py-3 flex items-center justify-between text-[11px] text-gray-500" style={{ borderColor: T.line }}>
+          <span className="font-bold text-[#56216C]">STAR ENERGY SÉNÉGAL</span>
+          <span className="flex items-center gap-1.5 text-[10px] text-slate-600 font-medium">
+            <span>Operated by</span>
+            <span className="text-[#0B4EA2] font-black tracking-wide">DAMEL ENERGY</span>
+          </span>
         </div>
       </div>
     </div>
