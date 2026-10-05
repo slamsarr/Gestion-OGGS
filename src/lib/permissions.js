@@ -101,9 +101,13 @@ const ENTITES = {
     valider: ["admin", "gerant", "superviseur", "directeur"],
   },
   lavage: {
-    creer: ["admin", "gerant", "superviseur", "directeur", "lavage"],
-    annuler: ["admin", "gerant", "superviseur", "directeur"],
+    creer:         ["admin", "gerant", "superviseur", "directeur", "lavage"],
+    annuler:       ["admin", "gerant", "superviseur", "directeur"],
+    configurer:    ["admin", "gerant", "superviseur", "directeur"],
+    voir_rapports: ["admin", "gerant", "superviseur", "directeur", "comptable"],
+    gerer_bays:    ["admin", "gerant", "superviseur", "directeur"],
   },
+
 };
 
 export function peutAgir(role, entite, action, scope = null, roleScope = null) {

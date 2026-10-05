@@ -1,436 +1,505 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
-import { loadReferentiel, createPrestationLavage, listPrestationsLavage, deletePrestationLavage } from "../lib/api";
-import { F, fmtDate, n, T, todayISO } from "../lib/calcul";
-import { Section, Row, Num, Loading, InputComptable } from "../components/ui";
+
+import {
+  listCommandesLavage,
+  createCommandeLavage,
+  deletePrestationLavage,
+  listWashPacks,
+  listWashServices,
+  listWashBays,
+  listWashPricing,
+  getWashPriceMap,
+  listWashPromotions,
+  listWashBons,
+  applyCodePromo,
+} from "../lib/api";
 import { peutAgirProfil } from "../lib/permissions";
+import { SEED_WASH_TYPES_VEHICULE, SEED_WASH_PACK_INCLUSIONS } from "../lib/seed";
+import WashPackCard from "../components/lavage/WashPackCard";
+import WashQueue from "../components/lavage/WashQueue";
+import WashConfigPanel from "../components/lavage/WashConfigPanel";
+import WashTicket from "../components/lavage/WashTicket";
+
+const F = (v) => Number(v || 0).toLocaleString("fr-FR");
+const TODAY = () => new Date().toISOString().slice(0, 10);
+const MODES_PAIEMENT = ["ESPECES", "WAVE", "OM", "TPE", "CREDIT", "BON_LAVAGE"];
+
+// Calcul points fidélité : 1 pt par tranche 500 FCFA
+const calcPoints = (montant) => Math.floor(Number(montant || 0) / 500);
 
 export default function Lavage() {
   const { profil } = useAuth();
-  const stationId = profil?.station_id || "st-hann";
-  const isManager = peutAgirProfil(profil, "lavage", "annuler");
-  const peutEncaisser = peutAgirProfil(profil, "lavage", "creer");
-  const [tarifs, setTarifs] = useState([]);
-  const [prestations, setPrestations] = useState([]);
+  const stationId = profil?.station_id;
+  const stationNom = profil?.station_nom || "Star Energy";
+  const canConfig = peutAgirProfil(profil, "lavage", "configurer");
+  const canDelete = peutAgirProfil(profil, "lavage", "annuler");
+
+  // ─── Onglet actif ────────────────────────────────────────────────────────
+  const [tab, setTab] = useState("caisse");
+
+  // ─── Données chargées ────────────────────────────────────────────────────
+  const [commandes, setCommandes] = useState([]);
+  const [packs, setPacks] = useState([]);
+  const [services, setServices] = useState([]);
+  const [bays, setBays] = useState([]);
+  const [priceMap, setPriceMap] = useState({});
+  const [promos, setPromos] = useState([]);
+  const [bons, setBons] = useState([]);
+  const [pricing, setPricing] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [msg, setMsg] = useState("");
+  const [date, setDate] = useState(TODAY());
 
-  // Formulaire d'encaissement direct d'un lavage
-  const [date, setDate] = useState(todayISO());
-  const [typeVehicule, setTypeVehicule] = useState("BERLINE");
-  const [immatriculation, setImmatriculation] = useState("");
-  const [quantite, setQuantite] = useState(1);
-  const [modePaiement, setModePaiement] = useState("ESPECES");
-  const [agent, setAgent] = useState(profil?.nom_complet || "Agent Lavage");
-  const [ticketModal, setTicketModal] = useState(null);
-
-  const flash = (t) => { setMsg(t); setTimeout(() => setMsg(""), 3500); };
-
-  const buildLavageReceiptText = (p) => {
-    const dateStr = fmtDate(p.date || todayISO());
-    const heureStr = p.created_at ? new Date(p.created_at).toLocaleTimeString().slice(0, 5) : new Date().toLocaleTimeString().slice(0, 5);
-    return `*🚿 TICKET DE LAVAGE AUTOMOBILE - STATION ${stationId.replace("st-", "").toUpperCase()}*
-----------------------------------------
-📅 *Date :* ${dateStr} à ${heureStr}
-🚗 *Véhicule :* ${p.libelle_vehicule || p.type_vehicule}
-🔢 *Immatriculation :* ${p.immatriculation || "N/A"}
-----------------------------------------
-💰 *Tarif Unitaire :* ${F(p.tarif_unitaire)} FCFA
-📦 *Quantité :* ${p.quantite || 1}
-👉 *MONTANT RÉGLÉ :* *${F(p.montant_total)} FCFA*
-💳 *Règlement :* ${p.mode_paiement}
-👤 *Opérateur :* ${p.agent || "Agent Lavage"}
-----------------------------------------
-✨ *Merci de votre visite et bonne route !*`;
-  };
-
-  const shareLavageWhatsApp = (p) => {
-    const text = buildLavageReceiptText(p);
-    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, "_blank");
-  };
-
-  const loadData = async () => {
+  const load = useCallback(async () => {
+    setLoading(true);
     try {
-      const ref = await loadReferentiel();
-      const tfs = ref?.tarifs_lavage || [];
-      setTarifs(tfs);
-      if (tfs.length > 0 && !typeVehicule) {
-        setTypeVehicule(tfs[0].code);
-      }
-      const p = await listPrestationsLavage(stationId, date);
-      setPrestations(p || []);
+      const [cmds, pks, svcs, bys, pm, prs, bns, prc] = await Promise.all([
+        listCommandesLavage(stationId, date).catch(() => []),
+        listWashPacks(stationId).catch(() => []),
+        listWashServices(stationId).catch(() => []),
+        listWashBays(stationId).catch(() => []),
+        getWashPriceMap(stationId).catch(() => ({})),
+        listWashPromotions(stationId).catch(() => []),
+        listWashBons(stationId).catch(() => []),
+        listWashPricing(stationId).catch(() => []),
+      ]);
+      setCommandes(cmds);
+      setPacks(pks);
+      setServices(svcs);
+      setBays(bys);
+      setPriceMap(pm);
+      setPromos(prs);
+      setBons(bns);
+      setPricing(prc);
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    loadData();
   }, [stationId, date]);
 
-  if (loading) return <Loading label="Chargement du module Lavage automobile..." />;
+  useEffect(() => { load(); }, [load]);
 
-  const currentTarifObj = tarifs.find((t) => t.code === typeVehicule) || tarifs[0] || { tarif: 0, libelle: "" };
-  const tarifUnitaire = currentTarifObj?.tarif || 0;
-  const montantTotal = (n(quantite) || 1) * tarifUnitaire;
+  // ─── KPIs jour ───────────────────────────────────────────────────────────
+  const kpis = useMemo(() => {
+    const ca = commandes.reduce((s, c) => s + Number(c.montant_total || c.montant || 0), 0);
+    const nb = commandes.length;
+    const livres = commandes.filter((c) => c.statut === "LIVRE").length;
+    const enCours = commandes.filter((c) => c.statut && c.statut !== "LIVRE" && c.statut !== "EN_ATTENTE").length;
+    return { ca, nb, livres, enCours };
+  }, [commandes]);
 
-  const handleEnregistrer = async (e) => {
-    e.preventDefault();
-    if (!peutEncaisser) return flash("Tu n'as pas le droit d'encaisser un lavage.");
-    const qte = n(quantite) || 1;
-    const payload = {
-      station_id: stationId,
-      date,
-      agent,
-      type_vehicule: typeVehicule,
-      libelle_vehicule: currentTarifObj?.libelle,
-      immatriculation: immatriculation.trim().toUpperCase() || "NON RENSEIGNÉE",
-      quantite: qte,
-      tarif_unitaire: tarifUnitaire,
-      montant_total: montantTotal,
-      mode_paiement: modePaiement,
-    };
+  // ─── Formulaire nouvelle commande ────────────────────────────────────────
+  const initForm = {
+    type_vehicule: "BERLINE",
+    immatriculation: "",
+    pack_id: null,
+    addons: [],
+    mode_paiement: "ESPECES",
+    client_nom: "",
+    client_tel: "",
+    baie_id: "",
+    code_promo: "",
+    reduction_promo: 0,
+    bon_lavage_id: null,
+    membre_fidelite_id: null,
+  };
+  const [form, setForm] = useState(initForm);
+  const [promoMsg, setPromoMsg] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [ticket, setTicket] = useState(null);
+  const [err, setErr] = useState(null);
 
-    const res = await createPrestationLavage(payload);
-    if (res.ok) {
-      flash("Prestation de lavage enregistrée ! Reçu généré — formulaire vidé pour le prochain véhicule.");
-      setTicketModal(payload);
-      setImmatriculation("");
-      setQuantite(1);
-      setModePaiement("ESPECES");
-      setTypeVehicule(tarifs[0]?.code || "BERLINE");
-      setAgent(profil?.nom_complet || "Agent Lavage");
-      if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
-      loadData();
+  // Tarif pack sélectionné
+  const tarifPack = form.pack_id && form.type_vehicule
+    ? (priceMap[`${form.pack_id}_${form.type_vehicule}`] || 0)
+    : 0;
+
+  // Addons sélectionnés
+  const addonServices = services.filter((s) => s.categorie === "ADDON" && s.actif !== false);
+  const montantAddons = form.addons.reduce((s, a) => s + (a.prix_unitaire || 0), 0);
+  const montantTotal = Math.max(0, tarifPack + montantAddons - form.reduction_promo);
+  const pointsGagnes = calcPoints(montantTotal);
+
+  // Inclusions du pack sélectionné
+  const packInclusions = useMemo(() => {
+    if (!form.pack_id) return [];
+    const codes = SEED_WASH_PACK_INCLUSIONS[form.pack_id] || [];
+    return codes.map((c) => services.find((s) => s.code === c)?.nom || c);
+  }, [form.pack_id, services]);
+
+  const toggleAddon = (svc) => {
+    const already = form.addons.find((a) => a.service_id === svc.id);
+    if (already) {
+      setForm((f) => ({ ...f, addons: f.addons.filter((a) => a.service_id !== svc.id) }));
     } else {
-      flash("Erreur lors de l'enregistrement");
+      setForm((f) => ({
+        ...f,
+        addons: [...f.addons, { service_id: svc.id, service_nom: svc.nom, prix_unitaire: svc.prix_unitaire || 0 }],
+      }));
     }
   };
 
-  const handleSupprimer = async (id) => {
-    if (!isManager) {
-      return flash("Seul le gérant de la station peut annuler une prestation enregistrée.", "error");
+  const handleApplyPromo = async () => {
+    if (!form.code_promo) return;
+    const res = await applyCodePromo(stationId, form.code_promo, montantTotal);
+    if (res.ok) {
+      setForm((f) => ({ ...f, reduction_promo: res.reduction }));
+      setPromoMsg({ ok: true, txt: `✓ Réduction de ${F(res.reduction)} FCFA appliquée` });
+    } else {
+      setPromoMsg({ ok: false, txt: res.message });
     }
-    if (!confirm("Annuler cette prestation ?")) return;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setErr(null);
+    if (!form.pack_id) { setErr("Veuillez sélectionner un pack."); return; }
+    if (!form.type_vehicule) { setErr("Veuillez choisir un type de véhicule."); return; }
+    setSaving(true);
+    try {
+      const selectedPack = packs.find((p) => p.id === form.pack_id);
+      const res = await createCommandeLavage({
+        station_id: stationId,
+        date,
+        agent: profil?.nom_complet || profil?.email || "—",
+        type_vehicule: form.type_vehicule,
+        immatriculation: form.immatriculation,
+        pack_id: form.pack_id,
+        pack_nom: selectedPack?.nom || "",
+        addons: form.addons,
+        montant_pack: tarifPack,
+        montant_addons: montantAddons,
+        reduction_promo: form.reduction_promo,
+        code_promo: form.code_promo,
+        mode_paiement: form.mode_paiement,
+        client_nom: form.client_nom,
+        client_tel: form.client_tel,
+        baie_id: form.baie_id || null,
+        bon_lavage_id: form.bon_lavage_id || null,
+        membre_fidelite_id: form.membre_fidelite_id || null,
+        points_gagnes: pointsGagnes,
+        statut: "EN_ATTENTE",
+        heure: new Date().toTimeString().slice(0, 5),
+      });
+      if (res.ok) {
+        setTicket({ ...res.commande, pack_nom: selectedPack?.nom, heure: new Date().toTimeString().slice(0, 5), points_gagnes: pointsGagnes });
+        setForm(initForm);
+        setPromoMsg(null);
+        load();
+      }
+    } catch (ex) {
+      setErr(ex.message || "Erreur lors de l'enregistrement.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!confirm("Supprimer cette prestation ?")) return;
     await deletePrestationLavage(id);
-    flash("Prestation supprimée par le gérant");
-    loadData();
+    load();
   };
 
-  // Statistiques du jour
-  const totalRecetteJour = prestations.reduce((sum, p) => sum + (n(p.montant_total) || 0), 0);
-  const totalVehiculesJour = prestations.reduce((sum, p) => sum + (n(p.quantite) || 1), 0);
-
-  const parMode = prestations.reduce((acc, p) => {
-    const m = p.mode_paiement || "ESPECES";
-    acc[m] = (acc[m] || 0) + (n(p.montant_total) || 0);
-    return acc;
-  }, {});
+  const TABS = [
+    { id: "caisse",   label: "🧾 Caisse",         always: true },
+    { id: "queue",    label: "📋 File d'attente",  always: true },
+    { id: "config",   label: "⚙️ Configuration",   always: false, cond: canConfig },
+  ].filter((t) => t.always || t.cond);
 
   return (
-    <div className="max-w-4xl mx-auto py-4 px-3">
-      {/* En-tête */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 pb-2 border-b" style={{ borderColor: T.line }}>
-        <div>
-          <h1 className="text-xl font-bold" style={{ color: T.petrol }}>
-            🚿 Lavage Automobile
-          </h1>
-          <p className="text-xs" style={{ color: T.muted }}>
-            Enregistrement des prestations, encaissement au tarif unitaire et suivi des recettes
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-medium" style={{ color: T.muted }}>Date :</label>
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="text-xs border rounded px-2 py-1 bg-white"
-            style={{ borderColor: T.line }}
-          />
-        </div>
-      </div>
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-blue-700 to-cyan-500 px-4 py-5 text-white">
+        <div className="max-w-6xl mx-auto">
+          <h1 className="text-2xl font-bold">🚿 Centre de Lavage</h1>
+          <p className="text-blue-100 text-sm mt-0.5">{stationNom} · {date}</p>
 
-      {msg && (
-        <div className="mb-3 p-2.5 text-xs rounded font-medium" style={{ background: "#E3F4EA", color: T.ok }}>
-          {msg}
-        </div>
-      )}
+          {/* KPIs */}
+          <div className="grid grid-cols-4 gap-3 mt-4">
+            {[
+              { label: "CA du jour", val: `${F(kpis.ca)} F`, icon: "💰" },
+              { label: "Lavages", val: kpis.nb, icon: "🚗" },
+              { label: "Livrés", val: kpis.livres, icon: "✅" },
+              { label: "En cours", val: kpis.enCours, icon: "⏳" },
+            ].map((k) => (
+              <div key={k.label} className="bg-white/15 rounded-xl p-3 text-center backdrop-blur-sm">
+                <div className="text-xl">{k.icon}</div>
+                <div className="font-bold text-lg leading-tight">{k.val}</div>
+                <div className="text-blue-200 text-xs">{k.label}</div>
+              </div>
+            ))}
+          </div>
 
-      {/* Cartes KPI du jour */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
-        <div className="bg-white rounded-lg p-3 border shadow-sm" style={{ borderColor: T.line }}>
-          <span className="text-[11px] font-medium text-gray-500 block">Total Véhicules Lavés</span>
-          <span className="text-xl font-extrabold text-blue-900 tabular">{totalVehiculesJour}</span>
-        </div>
-        <div className="bg-white rounded-lg p-3 border shadow-sm" style={{ borderColor: T.line }}>
-          <span className="text-[11px] font-medium text-gray-500 block">Recette Lavage du Jour</span>
-          <span className="text-xl font-extrabold text-emerald-700 tabular">{F(totalRecetteJour)} FCFA</span>
-        </div>
-        <div className="bg-white rounded-lg p-3 border shadow-sm col-span-2 sm:col-span-1" style={{ borderColor: T.line }}>
-          <span className="text-[11px] font-medium text-gray-500 block">Ventilation Paiements</span>
-          <div className="text-[11px] text-gray-600 mt-0.5 space-y-0.5">
-            <div>Espèces : <strong className="tabular">{F(parMode.ESPECES || 0)} F</strong></div>
-            <div>Wave / OM : <strong className="tabular">{F((parMode.WAVE || 0) + (parMode.ORANGE_MONEY || 0))} F</strong></div>
+          {/* Date + Onglets */}
+          <div className="flex items-center justify-between mt-4">
+            <div className="flex gap-2">
+              {TABS.map((t) => (
+                <button key={t.id} onClick={() => setTab(t.id)}
+                  className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${tab === t.id ? "bg-white text-blue-700 shadow" : "text-blue-100 hover:bg-white/20"}`}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+              className="bg-white/20 border border-white/30 text-white rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:bg-white/30" />
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Formulaire de saisie rapide */}
-        <div className="md:col-span-1">
-          <form onSubmit={handleEnregistrer} className="bg-white rounded-lg border p-4 shadow-sm" style={{ borderColor: T.line }}>
-            <h2 className="text-sm font-bold mb-3" style={{ color: T.petrol }}>
-              + Nouveau Lavage
-            </h2>
+      {/* Contenu principal */}
+      <div className="max-w-6xl mx-auto px-4 py-6">
 
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Catégorie Véhicule</label>
-                <select
-                  value={typeVehicule}
-                  onChange={(e) => setTypeVehicule(e.target.value)}
-                  className="w-full text-xs border rounded p-2 bg-white"
-                  style={{ borderColor: T.line }}
-                >
-                  {tarifs.map((t) => (
-                    <option key={t.code} value={t.code}>
-                      {t.libelle} ({F(t.tarif)} F)
-                    </option>
-                  ))}
-                </select>
+        {/* ══ ONGLET CAISSE ══════════════════════════════════════════════════ */}
+        {tab === "caisse" && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+            {/* Formulaire */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="bg-gradient-to-r from-blue-50 to-cyan-50 px-5 py-4 border-b border-gray-100">
+                <h2 className="font-bold text-gray-800 text-base">Nouvelle prestation</h2>
               </div>
+              <form onSubmit={handleSubmit} className="p-5 space-y-5">
 
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Immatriculation (optionnel)</label>
-                <input
-                  type="text"
-                  placeholder="ex: AA-123-BB"
-                  value={immatriculation}
-                  onChange={(e) => setImmatriculation(e.target.value)}
-                  className="w-full text-xs border rounded p-2 uppercase"
-                  style={{ borderColor: T.line }}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <InputComptable
-                  label="Quantité"
-                  value={quantite}
-                  onChange={(v) => setQuantite(Math.max(1, parseInt(v) || 1))}
-                  unit="véh."
-                  placeholder="1"
-                  min={1}
-                />
+                {/* Client */}
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Paiement</label>
-                  <select
-                    value={modePaiement}
-                    onChange={(e) => setModePaiement(e.target.value)}
-                    className="w-full text-xs border rounded p-2 bg-white"
-                    style={{ borderColor: T.line }}
-                  >
-                    <option value="ESPECES">💵 Espèces</option>
-                    <option value="WAVE">📲 Wave</option>
-                    <option value="ORANGE_MONEY">🍊 Orange Money</option>
-                    <option value="CARTE">💳 Carte bancaire</option>
-                    <option value="BON_LAVAGE">📝 Bon / Crédit</option>
-                  </select>
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">👤 Identification client</h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <input value={form.client_nom} onChange={(e) => setForm({ ...form, client_nom: e.target.value })}
+                      placeholder="Nom client (optionnel)"
+                      className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-blue-400 focus:outline-none" />
+                    <input value={form.client_tel} onChange={(e) => setForm({ ...form, client_tel: e.target.value })}
+                      placeholder="Téléphone (optionnel)"
+                      className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-blue-400 focus:outline-none" />
+                  </div>
                 </div>
-              </div>
 
-              <div className="p-2.5 rounded bg-blue-50 border border-blue-100 flex items-center justify-between">
-                <span className="text-xs font-semibold text-blue-900">Montant à encaisser :</span>
-                <span className="text-base font-extrabold text-blue-900 tabular">{F(montantTotal)} FCFA</span>
-              </div>
+                {/* Véhicule */}
+                <div>
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">🚗 Véhicule</h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <select value={form.type_vehicule}
+                      onChange={(e) => setForm({ ...form, type_vehicule: e.target.value })}
+                      className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-blue-400 focus:outline-none">
+                      {SEED_WASH_TYPES_VEHICULE.map((t) => (
+                        <option key={t.code} value={t.code}>{t.libelle}</option>
+                      ))}
+                    </select>
+                    <input value={form.immatriculation}
+                      onChange={(e) => setForm({ ...form, immatriculation: e.target.value.toUpperCase() })}
+                      placeholder="Immatriculation"
+                      className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-blue-400 focus:outline-none uppercase" />
+                  </div>
+                </div>
 
-              <button
-                type="submit"
-                className="w-full py-2.5 rounded-lg text-xs font-bold text-gray-900 shadow-sm transition-opacity hover:opacity-90"
-                style={{ background: T.gold }}
-              >
-                ✓ Encaisser et Enregistrer
-              </button>
+                {/* Sélection Pack */}
+                <div>
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">📦 Sélection du pack</h3>
+                  {packs.length === 0 ? (
+                    <p className="text-sm text-gray-400 text-center py-4 border-2 border-dashed border-gray-200 rounded-xl">
+                      Aucun pack configuré. <br />{canConfig && <span>Configurez des packs dans l'onglet ⚙️.</span>}
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-3">
+                      {packs.map((pack) => {
+                        const tarif = priceMap[`${pack.id}_${form.type_vehicule}`];
+                        const inclusions = (SEED_WASH_PACK_INCLUSIONS[pack.id] || [])
+                          .map((c) => services.find((s) => s.code === c)?.nom || c);
+                        return (
+                          <WashPackCard
+                            key={pack.id}
+                            pack={pack}
+                            tarif={tarif}
+                            selected={form.pack_id === pack.id}
+                            onSelect={(p) => setForm((f) => ({ ...f, pack_id: p.id }))}
+                            inclusions={inclusions}
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Add-ons */}
+                {addonServices.length > 0 && (
+                  <div>
+                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">➕ Options complémentaires</h3>
+                    <div className="space-y-2">
+                      {addonServices.map((svc) => {
+                        const checked = form.addons.some((a) => a.service_id === svc.id);
+                        return (
+                          <label key={svc.id} className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer border transition-colors ${checked ? "border-blue-300 bg-blue-50" : "border-gray-200 bg-white hover:border-gray-300"}`}>
+                            <input type="checkbox" checked={checked} onChange={() => toggleAddon(svc)} className="w-4 h-4 accent-blue-600" />
+                            <span className="flex-1 text-sm text-gray-800">{svc.nom}</span>
+                            <span className="text-sm font-semibold text-blue-700">+{F(svc.prix_unitaire)} F</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Baie + Paiement */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-gray-500 block mb-1">🅱️ Baie</label>
+                    <select value={form.baie_id} onChange={(e) => setForm({ ...form, baie_id: e.target.value })}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-blue-400 focus:outline-none">
+                      <option value="">— Non attribuée</option>
+                      {bays.map((b) => <option key={b.id} value={b.code_baie}>{b.nom_baie || b.code_baie}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 block mb-1">💳 Paiement</label>
+                    <select value={form.mode_paiement} onChange={(e) => setForm({ ...form, mode_paiement: e.target.value })}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-blue-400 focus:outline-none">
+                      {MODES_PAIEMENT.map((m) => <option key={m}>{m}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Code promo */}
+                <div>
+                  <label className="text-xs text-gray-500 block mb-1">🏷️ Code promo</label>
+                  <div className="flex gap-2">
+                    <input value={form.code_promo}
+                      onChange={(e) => { setForm({ ...form, code_promo: e.target.value.toUpperCase(), reduction_promo: 0 }); setPromoMsg(null); }}
+                      placeholder="Code promo"
+                      className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-blue-400 focus:outline-none uppercase" />
+                    <button type="button" onClick={handleApplyPromo}
+                      className="px-4 py-2 bg-amber-100 text-amber-700 rounded-xl text-sm font-medium hover:bg-amber-200 transition-colors">
+                      Appliquer
+                    </button>
+                  </div>
+                  {promoMsg && (
+                    <p className={`text-xs mt-1 ${promoMsg.ok ? "text-green-600" : "text-red-500"}`}>{promoMsg.txt}</p>
+                  )}
+                </div>
+
+                {/* Récap total */}
+                <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl p-4 border border-blue-100">
+                  <div className="space-y-1 text-sm">
+                    {form.pack_id && <div className="flex justify-between"><span className="text-gray-600">Pack</span><span className="font-semibold">{F(tarifPack)} F</span></div>}
+                    {montantAddons > 0 && <div className="flex justify-between"><span className="text-gray-600">Options</span><span className="font-semibold">+{F(montantAddons)} F</span></div>}
+                    {form.reduction_promo > 0 && <div className="flex justify-between text-green-600"><span>Réduction promo</span><span>-{F(form.reduction_promo)} F</span></div>}
+                    <div className="border-t border-blue-200 pt-1 mt-1 flex justify-between text-lg font-bold text-blue-700">
+                      <span>TOTAL</span><span>{F(montantTotal)} FCFA</span>
+                    </div>
+                    {pointsGagnes > 0 && <div className="text-xs text-yellow-600 text-center">⭐ +{pointsGagnes} points fidélité</div>}
+                  </div>
+                </div>
+
+                {err && <p className="text-red-500 text-sm bg-red-50 rounded-lg p-2">{err}</p>}
+
+                <button type="submit" disabled={saving || !form.pack_id}
+                  className="w-full bg-gradient-to-r from-blue-600 to-cyan-500 text-white font-bold py-3 rounded-xl hover:from-blue-700 hover:to-cyan-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-base">
+                  {saving ? "⏳ Enregistrement..." : `✓ Enregistrer — ${F(montantTotal)} FCFA`}
+                </button>
+              </form>
             </div>
-          </form>
-        </div>
 
-        {/* Tableau des prestations de la journée */}
-        <div className="md:col-span-2">
-          <div className="bg-white rounded-lg border shadow-sm p-4" style={{ borderColor: T.line }}>
-            <h2 className="text-sm font-bold mb-3" style={{ color: T.petrol }}>
-              Prestations du {fmtDate(date)} ({prestations.length})
-            </h2>
-
-            {prestations.length === 0 ? (
-              <p className="text-xs text-gray-500 py-6 text-center">Aucun lavage enregistré pour cette date.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b text-gray-500 text-left" style={{ borderColor: T.line }}>
-                      <th className="pb-2">Heure / Véhicule</th>
-                      <th className="pb-2">Immatriculation</th>
-                      <th className="pb-2">Paiement</th>
-                      <th className="pb-2 text-right">Montant</th>
-                      <th className="pb-2 text-center">Reçu / Ticket</th>
-                      <th className="pb-2 text-center">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y" style={{ borderColor: T.line }}>
-                    {prestations.map((p) => (
-                      <tr key={p.id} className="hover:bg-gray-50">
-                        <td className="py-2.5">
-                          <div className="font-semibold">{p.libelle_vehicule || p.type_vehicule}</div>
-                          <div className="text-[10px] text-gray-400">
-                            {p.created_at ? new Date(p.created_at).toLocaleTimeString().slice(0, 5) : "--:--"} · {p.agent}
-                          </div>
-                        </td>
-                        <td className="py-2.5 font-mono text-gray-700">{p.immatriculation}</td>
-                        <td className="py-2.5">
-                          <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-gray-100">
-                            {p.mode_paiement}
-                          </span>
-                        </td>
-                        <td className="py-2.5 text-right font-bold tabular">{F(p.montant_total)} F</td>
-                        <td className="py-2.5 text-center">
-                          <div className="inline-flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => setTicketModal(p)}
-                              className="px-2 py-0.5 rounded text-[11px] font-semibold border bg-white text-gray-700 hover:bg-gray-50 shadow-xs"
-                              style={{ borderColor: T.line }}
-                              title="Voir / Imprimer le reçu"
-                            >
-                              🧾 Reçu
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => shareLavageWhatsApp(p)}
-                              className="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-600 text-white hover:bg-emerald-700 shadow-xs"
-                              title="Envoyer le reçu sur WhatsApp"
-                            >
-                              📲 WhatsApp
-                            </button>
-                          </div>
-                        </td>
-                        {isManager ? (
-                          <td className="py-2.5 text-center">
-                            <button
-                              type="button"
-                              onClick={() => handleSupprimer(p.id)}
-                              className="text-red-500 hover:text-red-700 font-bold px-1.5 py-0.5 rounded hover:bg-red-50 transition-colors"
-                              title="Annuler cette prestation (Droits Gérant)"
-                            >
-                              ✕
-                            </button>
-                          </td>
-                        ) : (
-                          <td className="py-2.5 text-center text-gray-400 text-xs">
-                            ✓
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            {/* Tableau du jour */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="bg-gradient-to-r from-gray-50 to-gray-100 px-5 py-4 border-b border-gray-100 flex justify-between items-center">
+                <h2 className="font-bold text-gray-800 text-base">📋 Prestations du {date}</h2>
+                <span className="text-sm text-gray-500">{commandes.length} lavage{commandes.length > 1 ? "s" : ""}</span>
               </div>
+              {loading ? (
+                <div className="p-8 text-center text-gray-400">Chargement...</div>
+              ) : commandes.length === 0 ? (
+                <div className="p-8 text-center text-gray-400">Aucune prestation enregistrée.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
+                      <tr>
+                        <th className="py-3 px-4 text-left">Heure</th>
+                        <th className="py-3 px-4 text-left">Pack / Type</th>
+                        <th className="py-3 px-4 text-left">Véhicule</th>
+                        <th className="py-3 px-4 text-left">Paiement</th>
+                        <th className="py-3 px-4 text-right">Montant</th>
+                        {canDelete && <th className="py-3 px-4"></th>}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {commandes.map((c) => (
+                        <tr key={c.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="py-3 px-4 text-gray-500 text-xs">
+                            {c.created_at ? c.created_at.slice(11, 16) : "--:--"}
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="font-medium text-gray-800">{c.pack_nom || c.type_prestation || "Lavage"}</div>
+                            <div className="text-xs text-gray-500">{c.type_vehicule}</div>
+                          </td>
+                          <td className="py-3 px-4 text-gray-700 font-mono text-xs">{c.immatriculation || c.client_nom || "—"}</td>
+                          <td className="py-3 px-4">
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${c.mode_paiement === "ESPECES" ? "bg-green-100 text-green-700" : c.mode_paiement === "CREDIT" ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700"}`}>
+                              {c.mode_paiement}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-right font-bold text-gray-800">
+                            {F(c.montant_total || c.montant)} F
+                          </td>
+                          {canDelete && (
+                            <td className="py-3 px-4 text-right">
+                              <button onClick={() => handleDelete(c.id)} className="text-red-400 hover:text-red-600 text-xs">🗑️</button>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="bg-gray-50 border-t border-gray-200">
+                      <tr>
+                        <td colSpan={canDelete ? 4 : 4} className="py-3 px-4 text-sm font-semibold text-gray-600">Total du jour</td>
+                        <td className="py-3 px-4 text-right font-bold text-blue-700 text-base">{F(kpis.ca)} F</td>
+                        {canDelete && <td />}
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ══ ONGLET FILE D'ATTENTE ══════════════════════════════════════════ */}
+        {tab === "queue" && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="font-bold text-gray-800 text-lg">📋 File d'attente — {date}</h2>
+              <button onClick={load} className="text-sm text-blue-600 hover:text-blue-800 font-medium">🔄 Actualiser</button>
+            </div>
+            {loading ? (
+              <div className="text-center text-gray-400 py-8">Chargement...</div>
+            ) : (
+              <WashQueue commandes={commandes} onRefresh={load} />
             )}
           </div>
-        </div>
+        )}
+
+        {/* ══ ONGLET CONFIG (gérant/admin seulement) ════════════════════════ */}
+        {tab === "config" && canConfig && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+            <h2 className="font-bold text-gray-800 text-lg mb-6">⚙️ Configuration du Centre de Lavage</h2>
+            <WashConfigPanel
+              stationId={stationId}
+              packs={packs}
+              services={services}
+              pricing={pricing}
+              bays={bays}
+              promos={promos}
+              bons={bons}
+              onRefresh={load}
+            />
+          </div>
+        )}
       </div>
 
-      {/* MODAL REÇU CLIENT LAVAGE */}
-      {ticketModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-3 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-sm w-full shadow-2xl overflow-hidden border border-gray-200">
-            <div className="p-3 bg-blue-900 text-white flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span>🚿</span>
-                <span className="font-bold text-xs">Reçu de Caisse Lavage</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setTicketModal(null)}
-                className="text-blue-200 hover:text-white text-base px-2"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="p-5 font-mono text-xs text-gray-800 space-y-3 bg-[#FCFCFC]" id="lavage-ticket">
-              <div className="text-center border-b pb-2 border-dashed border-gray-300">
-                <div className="text-sm font-black tracking-wider">STATION SERVICE {stationId.replace("st-", "").toUpperCase()}</div>
-                <div className="text-[10px] text-gray-500">SERVICE LAVAGE AUTOMOBILE HAUTE PRESSION</div>
-                <div className="text-[11px] font-bold mt-1">REÇU DE PAIEMENT CLIENT</div>
-                <div className="text-[10px] text-gray-400">
-                  {fmtDate(ticketModal.date || todayISO())} · {ticketModal.created_at ? new Date(ticketModal.created_at).toLocaleTimeString() : new Date().toLocaleTimeString()}
-                </div>
-              </div>
-
-              <div className="space-y-1 border-b pb-2 border-dashed border-gray-300 text-[11px]">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Véhicule :</span>
-                  <span className="font-bold">{ticketModal.libelle_vehicule || ticketModal.type_vehicule}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Immatriculation :</span>
-                  <span className="font-bold">{ticketModal.immatriculation || "NON RENSEIGNÉE"}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Agent :</span>
-                  <span>{ticketModal.agent || "Agent Lavage"}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Paiement :</span>
-                  <span className="font-semibold">{ticketModal.mode_paiement}</span>
-                </div>
-              </div>
-
-              <div className="space-y-1 text-xs pt-1 border-b pb-2 border-dashed border-gray-300">
-                <div className="flex justify-between text-gray-600">
-                  <span>Prestation Lavage (x{ticketModal.quantite || 1}) :</span>
-                  <span className="tabular">{F(ticketModal.tarif_unitaire)} F</span>
-                </div>
-                <div className="flex justify-between font-black text-blue-950 text-sm pt-1">
-                  <span>TOTAL RÉGLÉ :</span>
-                  <span className="tabular">{F(ticketModal.montant_total)} FCFA</span>
-                </div>
-              </div>
-
-              <div className="text-center text-[10px] text-gray-500 pt-1">
-                Merci pour votre fidélité ! Bonne route !
-              </div>
-            </div>
-
-            <div className="p-3 bg-gray-50 border-t flex flex-col sm:flex-row gap-2">
-              <button
-                type="button"
-                onClick={() => setTicketModal(null)}
-                className="py-2.5 px-4 rounded-xl bg-gray-800 hover:bg-gray-900 font-bold text-xs text-white flex items-center justify-center gap-1.5 shadow-sm transition order-last sm:order-first"
-                title="Fermer cette fenêtre"
-              >
-                ✕ Fermer le reçu
-              </button>
-              <div className="flex gap-2 flex-1">
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="flex-1 py-2.5 rounded-xl border border-gray-300 bg-white font-bold text-xs text-gray-800 hover:bg-gray-100 flex items-center justify-center gap-1.5 shadow-sm"
-                >
-                  🖨️ Imprimer
-                </button>
-                <button
-                  type="button"
-                  onClick={() => shareLavageWhatsApp(ticketModal)}
-                  className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 font-bold text-xs text-white flex items-center justify-center gap-1.5 shadow-sm"
-                >
-                  📲 WhatsApp
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* Modal ticket */}
+      {ticket && (
+        <WashTicket
+          commande={ticket}
+          stationNom={stationNom}
+          onClose={() => setTicket(null)}
+        />
       )}
     </div>
   );

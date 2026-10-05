@@ -100,4 +100,26 @@ describe("Permissions rôles", () => {
     expect(rolesRoute(undefined, "/rapport")).toBe(false);
     expect(peutVoirNav("", "/")).toBe(false);
   });
+
+  it("lavage pro — actions configurer, voir_rapports, gerer_bays", () => {
+    // configurer : uniquement gerant/admin/superviseur/directeur
+    expect(peutAgir("admin", "lavage", "configurer")).toBe(true);
+    expect(peutAgir("gerant", "lavage", "configurer")).toBe(true);
+    expect(peutAgir("directeur", "lavage", "configurer")).toBe(true);
+    expect(peutAgir("lavage", "lavage", "configurer")).toBe(false);
+    expect(peutAgir("pompiste", "lavage", "configurer")).toBe(false);
+    // voir_rapports : inclut comptable
+    expect(peutAgir("comptable", "lavage", "voir_rapports")).toBe(true);
+    expect(peutAgir("gerant", "lavage", "voir_rapports")).toBe(true);
+    expect(peutAgir("lavage", "lavage", "voir_rapports")).toBe(false);
+    // gerer_bays : uniquement direction+gerant
+    expect(peutAgir("gerant", "lavage", "gerer_bays")).toBe(true);
+    expect(peutAgir("lavage", "lavage", "gerer_bays")).toBe(false);
+    expect(peutAgir("boutique", "lavage", "gerer_bays")).toBe(false);
+    // creer et annuler restent inchangés
+    expect(peutAgir("lavage", "lavage", "creer")).toBe(true);
+    expect(peutAgir("lavage", "lavage", "annuler")).toBe(false);
+    expect(peutAgir("gerant", "lavage", "annuler")).toBe(true);
+  });
 });
+

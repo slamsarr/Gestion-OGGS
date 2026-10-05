@@ -1599,7 +1599,296 @@ export async function deletePrestationLavage(id) {
   return deleteMetierRow("prestations_lavage", id);
 }
 
-// ── VAGUE 2 : CRUD Boutique & POS (§2 & §37) ──
+// ── LAVAGE PRO (VAGUE 4) — Packs, Services, Baies, Workflow, Promotions, Bons ──
+
+/** Retourne tous les packs actifs pour une station (ou globaux) */
+export async function listWashPacks(stationId) {
+  await ensureLocalSeed();
+  let rows = await db.wash_packs.toArray();
+  if (!rows || rows.length === 0) {
+    const ref = await getLocalRef();
+    const defaults = (ref.wash_packs || []).map((p) => ({
+      ...p,
+      station_id: stationId || null,
+    }));
+    await db.wash_packs.bulkPut(defaults);
+    rows = defaults;
+  }
+  if (stationId) rows = rows.filter((p) => !p.station_id || p.station_id === stationId);
+  return rows.filter((p) => p.actif !== false).sort((a, b) => (a.ordre || 0) - (b.ordre || 0));
+}
+
+export async function saveWashPack(pack) {
+  const res = await saveOpRow("wash_packs", pack);
+  return { ok: true, pack: res.row, pending: res.pending };
+}
+
+export async function deleteWashPack(id) {
+  return deleteMetierRow("wash_packs", id);
+}
+
+/** Retourne tous les services/prestations du catalogue */
+export async function listWashServices(stationId) {
+  await ensureLocalSeed();
+  let rows = await db.wash_services.toArray();
+  if (!rows || rows.length === 0) {
+    const ref = await getLocalRef();
+    const defaults = (ref.wash_services || []).map((s) => ({
+      ...s,
+      station_id: stationId || null,
+    }));
+    await db.wash_services.bulkPut(defaults);
+    rows = defaults;
+  }
+  if (stationId) rows = rows.filter((s) => !s.station_id || s.station_id === stationId);
+  return rows.filter((s) => s.actif !== false);
+}
+
+export async function saveWashService(svc) {
+  const res = await saveOpRow("wash_services", svc);
+  return { ok: true, service: res.row, pending: res.pending };
+}
+
+/** Retourne la matrice de prix pack × type_véhicule */
+export async function listWashPricing(stationId) {
+  await ensureLocalSeed();
+  let rows = await db.wash_vehicle_pricing.toArray();
+  if (!rows || rows.length === 0) {
+    const ref = await getLocalRef();
+    const defaults = (ref.wash_vehicle_pricing || []).map((r) => ({
+      ...r,
+      station_id: stationId || null,
+    }));
+    await db.wash_vehicle_pricing.bulkPut(defaults);
+    rows = defaults;
+  }
+  if (stationId) rows = rows.filter((r) => !r.station_id || r.station_id === stationId);
+  return rows;
+}
+
+export async function saveWashPricing(rows) {
+  for (const r of rows) {
+    await saveOpRow("wash_vehicle_pricing", r);
+  }
+  return { ok: true };
+}
+
+/** Retourne un objet { packId_typeVehicule: tarif } pour affichage rapide */
+export async function getWashPriceMap(stationId) {
+  const pricing = await listWashPricing(stationId);
+  const map = {};
+  for (const r of pricing) {
+    map[`${r.pack_id}_${r.type_vehicule}`] = r.tarif;
+  }
+  return map;
+}
+
+/** Baies de lavage */
+export async function listWashBays(stationId) {
+  await ensureLocalSeed();
+  let rows = await db.wash_bays.toArray();
+  if (!rows || rows.length === 0) {
+    const ref = await getLocalRef();
+    const defaults = (ref.wash_bays || []).filter((b) =>
+      !stationId || b.station_id === stationId
+    );
+    await db.wash_bays.bulkPut(defaults);
+    rows = defaults;
+  }
+  if (stationId) rows = rows.filter((b) => b.station_id === stationId);
+  return rows.filter((b) => b.actif !== false);
+}
+
+export async function saveWashBay(bay) {
+  const res = await saveOpRow("wash_bays", bay);
+  return { ok: true, bay: res.row, pending: res.pending };
+}
+
+export async function deleteWashBay(id) {
+  return deleteMetierRow("wash_bays", id);
+}
+
+/**
+ * Créer une commande de lavage (enrichie) — compatible backward avec prestations_lavage.
+ * Les anciens consommateurs (BilanJournalierSite, Finance) lisent :
+ *   montant_total | montant, mode_paiement, agent, type_vehicule
+ * On s'assure que tous ces champs sont toujours présents.
+ */
+export async function createCommandeLavage(data) {
+  const {
+    station_id, date, agent, type_vehicule, immatriculation = "",
+    pack_id = null, pack_nom = null,
+    addons = [], // [{ service_id, service_nom, prix_unitaire }]
+    montant_pack = 0, montant_addons = 0,
+    mode_paiement = "ESPECES",
+    client_nom = "", client_tel = "", client_id = null,
+    membre_fidelite_id = null, points_gagnes = 0,
+    baie_id = null, operateur_id = null,
+    bon_lavage_id = null,
+    code_promo = null, reduction_promo = 0,
+    statut = "EN_ATTENTE",
+    type_prestation = null,
+  } = data;
+
+  const montant_total = montant_pack + montant_addons - reduction_promo;
+
+  // Champs backward-compat obligatoires
+  const row = {
+    id: data.id || `lav-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    station_id,
+    date,
+    agent,
+    type_vehicule,
+    immatriculation,
+    // Backward-compat : montant et montant_total
+    montant: montant_total,
+    montant_total,
+    mode_paiement,
+    // Champs pro enrichis
+    pack_id,
+    pack_nom,
+    montant_pack,
+    montant_addons,
+    reduction_promo,
+    code_promo,
+    client_nom,
+    client_tel,
+    client_id,
+    membre_fidelite_id,
+    points_gagnes,
+    baie_id,
+    operateur_id,
+    bon_lavage_id,
+    statut,
+    type_prestation: type_prestation || pack_nom || type_vehicule,
+    prestation: type_prestation || pack_nom || type_vehicule,
+    created_at: new Date().toISOString(),
+  };
+
+  const res = await saveOpRow("prestations_lavage", row);
+
+  // Addons : enregistrer dans wash_addons
+  if (addons.length > 0) {
+    for (const addon of addons) {
+      await saveOpRow("wash_addons", {
+        commande_id: row.id,
+        service_id: addon.service_id,
+        service_nom: addon.service_nom,
+        prix_unitaire: addon.prix_unitaire,
+        station_id,
+        created_at: row.created_at,
+      });
+    }
+  }
+
+  // Fidélité : créditer les points si membre identifié
+  if (membre_fidelite_id && points_gagnes > 0) {
+    try {
+      const membre = await db.membres_fidelite.get(membre_fidelite_id);
+      if (membre) {
+        const nouveauSolde = (membre.points_solde || 0) + points_gagnes;
+        const nouveauxCumules = (membre.points_cumules || 0) + points_gagnes;
+        await db.membres_fidelite.update(membre_fidelite_id, {
+          points_solde: nouveauSolde,
+          points_cumules: nouveauxCumules,
+        });
+        await saveOpRow("transactions_fidelite", {
+          membre_id: membre_fidelite_id,
+          station_id,
+          date_op: date,
+          type: "CREDIT_LAVAGE",
+          points: points_gagnes,
+          montant_achat: montant_total,
+          reference_id: row.id,
+          created_at: row.created_at,
+        });
+      }
+    } catch (_) { /* fidélité optionnelle, ne pas bloquer */ }
+  }
+
+  // Bon de lavage B2B : marquer comme utilisé
+  if (bon_lavage_id) {
+    try {
+      await db.wash_bons.update(bon_lavage_id, {
+        statut: "UTILISE",
+        commande_id: row.id,
+        date_utilisation: date,
+      });
+    } catch (_) { /* non bloquant */ }
+  }
+
+  return { ok: true, commande: res.row, pending: res.pending };
+}
+
+/** Changer le statut d'une commande (workflow) */
+export async function updateStatutCommandeLavage(id, statut) {
+  await db.prestations_lavage.update(id, { statut, updated_at: new Date().toISOString() });
+  return { ok: true };
+}
+
+/** Lister les commandes du jour (alias de listPrestationsLavage + champs enrichis) */
+export async function listCommandesLavage(stationId, date) {
+  return listPrestationsLavage(stationId, date);
+}
+
+/** Promotions */
+export async function listWashPromotions(stationId) {
+  await ensureLocalSeed();
+  let rows = await db.wash_promotions.toArray();
+  if (stationId) rows = rows.filter((p) => !p.station_id || p.station_id === stationId);
+  return rows;
+}
+
+export async function saveWashPromotion(promo) {
+  const res = await saveOpRow("wash_promotions", promo);
+  return { ok: true, promo: res.row, pending: res.pending };
+}
+
+export async function deleteWashPromotion(id) {
+  return deleteMetierRow("wash_promotions", id);
+}
+
+/** Appliquer un code promo et retourner la réduction */
+export async function applyCodePromo(stationId, codePromo, montantBase) {
+  const today = new Date().toISOString().slice(0, 10);
+  const promos = await listWashPromotions(stationId);
+  const promo = promos.find(
+    (p) =>
+      p.actif &&
+      p.code_promo?.toUpperCase() === codePromo?.toUpperCase() &&
+      (!p.date_debut || p.date_debut <= today) &&
+      (!p.date_fin || p.date_fin >= today)
+  );
+  if (!promo) return { ok: false, message: "Code promo invalide ou expiré" };
+  const reduction =
+    promo.type_reduction === "POURCENTAGE"
+      ? Math.round((montantBase * (promo.valeur || 0)) / 100)
+      : (promo.valeur || 0);
+  return { ok: true, promo, reduction: Math.min(reduction, montantBase) };
+}
+
+/** Bons de lavage B2B */
+export async function listWashBons(stationId) {
+  await ensureLocalSeed();
+  let rows = await db.wash_bons.toArray();
+  if (stationId) rows = rows.filter((b) => !b.station_id || b.station_id === stationId);
+  return rows.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+}
+
+export async function createWashBon(bon) {
+  const id = bon.id || `wbon-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const numero = bon.numero_bon || `BL-${Date.now().toString().slice(-6)}`;
+  const res = await saveOpRow("wash_bons", {
+    ...bon,
+    id,
+    numero_bon: numero,
+    statut: bon.statut || "ACTIF",
+    created_at: bon.created_at || new Date().toISOString(),
+  });
+  return { ok: true, bon: res.row, pending: res.pending };
+}
+
+
 export async function listProduitsBoutique(stationId) {
   await ensureLocalSeed();
   let rows = await db.produits_boutique.toArray();

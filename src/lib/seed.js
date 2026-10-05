@@ -236,6 +236,27 @@ export function referentielFromSeed() {
       code, nom_entreprise: societe, contact, telephone: tel, email: email_, station_id: st.id, plafond_credit: plafondsMap[code] || 1000000, actif: true,
     }))
   );
+  // Baies lavage : dupliquer par station
+  const wash_bays = SEED_STATIONS.flatMap((st) =>
+    SEED_WASH_BAYS.map((b) => ({
+      id: `${st.id}-${b.code_baie}`,
+      station_id: st.id,
+      code_baie: b.code_baie,
+      nom_baie: b.nom_baie,
+      actif: b.actif,
+    }))
+  );
+  // Packs lavage : partagés (station_id null = référentiel global)
+  const wash_packs = SEED_WASH_PACKS;
+  // Services lavage
+  const wash_services = SEED_WASH_SERVICES;
+  // Matrice prix
+  const wash_vehicle_pricing = SEED_WASH_PRICING;
+  // Types véhicule
+  const wash_types_vehicule = SEED_WASH_TYPES_VEHICULE;
+  // Inclusions de services par pack
+  const wash_pack_inclusions = SEED_WASH_PACK_INCLUSIONS;
+
   return {
     stations: SEED_STATIONS,
     prix: SEED_PRIX,
@@ -268,8 +289,16 @@ export function referentielFromSeed() {
     produits_boutique: SEED_PRODUITS_BOUTIQUE,
     recompenses_fidelite: SEED_RECOMPENSES_FIDELITE,
     membres_fidelite: SEED_MEMBRES_FIDELITE,
+    // ── Lavage Pro ─────────────────────────────────────────────────────────
+    wash_packs,
+    wash_services,
+    wash_vehicle_pricing,
+    wash_bays,
+    wash_types_vehicule,
+    wash_pack_inclusions,
   };
 }
+
 
 export const SEED_RECOMPENSES_FIDELITE = [
   { id: "rec-1", code: "BON-CARB-5000", titre: "Bon Carburant 5 000 FCFA", description: "Valable sur Gasoil et Super", points_requis: 500, valeur_fcfa: 5000, categorie: "CARBURANT", actif: true, ordre: 1 },
@@ -285,4 +314,75 @@ export const SEED_MEMBRES_FIDELITE = [
   { id: "mem-3", station_id: "st-hann", numero_carte: "FID-1003", nom_complet: "Moussa Traoré (Flotte BTP)", telephone: "76 789 01 23", email: "moussa@btp-dakar.sn", immatriculation: "SD-3301-AA", points_solde: 4200, points_cumules: 6500, statut: "PLATINE", volume_total_l: 6500, depense_totale: 4907500, date_adhesion: "2026-01-02", actif: true },
   { id: "mem-4", station_id: "st-ndia", numero_carte: "FID-2001", nom_complet: "Ousmane Diallo", telephone: "77 888 99 00", email: "diallo.ousmane@gmail.com", immatriculation: "DK-1204-CD", points_solde: 1600, points_cumules: 2100, statut: "GOLD", volume_total_l: 2100, depense_totale: 1585500, date_adhesion: "2026-03-01", actif: true },
 ];
+
+// ── LAVAGE PRO — Référentiels ────────────────────────────────────────────────
+
+export const SEED_WASH_PACKS = [
+  { id: "pack-basique",   code: "BASIQUE",   nom: "Basique",          description: "Lavage extérieur haute pression",                          couleur: "#60a5fa", emoji: "🚿", ordre: 1, actif: true },
+  { id: "pack-standard",  code: "STANDARD",  nom: "Standard",         description: "Extérieur + nettoyage jantes + essuyage",                  couleur: "#34d399", emoji: "✨", ordre: 2, actif: true },
+  { id: "pack-premium",   code: "PREMIUM",   nom: "Premium",          description: "Standard + aspiration intérieur + produit vitres",         couleur: "#f59e0b", emoji: "⭐", ordre: 3, actif: true },
+  { id: "pack-vip",       code: "VIP",       nom: "VIP / Full Detail", description: "Premium + cire carrosserie + désodorisant + lustrage",    couleur: "#8b5cf6", emoji: "👑", ordre: 4, actif: true },
+];
+
+export const SEED_WASH_SERVICES = [
+  // Services inclus dans les packs (peuvent aussi être vendus à l'unité)
+  { id: "ws-ext-hp",    code: "EXT_HP",       nom: "Lavage extérieur haute pression",  categorie: "EXTERRIEUR", prix_unitaire: null, actif: true },
+  { id: "ws-jantes",    code: "JANTES",       nom: "Nettoyage jantes",                 categorie: "EXTERRIEUR", prix_unitaire: null, actif: true },
+  { id: "ws-essuyage",  code: "ESSUYAGE",     nom: "Essuyage carrosserie",             categorie: "EXTERRIEUR", prix_unitaire: null, actif: true },
+  { id: "ws-asp-int",   code: "ASPIRATION",   nom: "Aspiration intérieur",             categorie: "INTERIEUR",  prix_unitaire: null, actif: true },
+  { id: "ws-vitres",    code: "VITRES",       nom: "Produit traitement vitres",        categorie: "INTERIEUR",  prix_unitaire: null, actif: true },
+  { id: "ws-cire",      code: "CIRE",         nom: "Cire carrosserie",                 categorie: "FINITION",   prix_unitaire: null, actif: true },
+  { id: "ws-desod",     code: "DESODORISANT", nom: "Désodorisant habitacle",           categorie: "FINITION",   prix_unitaire: null, actif: true },
+  { id: "ws-lustrage",  code: "LUSTRAGE",     nom: "Lustrage / polish",                categorie: "FINITION",   prix_unitaire: null, actif: true },
+  // Options payantes (add-ons)
+  { id: "ws-moteur",    code: "MOTEUR",       nom: "Nettoyage moteur",                 categorie: "ADDON",      prix_unitaire: 3000, actif: true },
+  { id: "ws-cuir",      code: "CUIR",         nom: "Traitement cuir intérieur",        categorie: "ADDON",      prix_unitaire: 5000, actif: true },
+  { id: "ws-nano",      code: "NANO_CERAMIC", nom: "Traitement nano-céramique",        categorie: "ADDON",      prix_unitaire: 15000, actif: true },
+];
+
+// Matrice prix : pack × type_véhicule (en FCFA)
+// Structure : { pack_id, type_vehicule, tarif }
+export const SEED_WASH_PRICING = [
+  // Pack BASIQUE
+  { id: "wp-bas-moto",  pack_id: "pack-basique",  type_vehicule: "MOTO",    tarif: 1000 },
+  { id: "wp-bas-berl",  pack_id: "pack-basique",  type_vehicule: "BERLINE", tarif: 2000 },
+  { id: "wp-bas-4x4",   pack_id: "pack-basique",  type_vehicule: "4X4_SUV", tarif: 3000 },
+  { id: "wp-bas-cam",   pack_id: "pack-basique",  type_vehicule: "CAMION",  tarif: 5000 },
+  // Pack STANDARD
+  { id: "wp-std-moto",  pack_id: "pack-standard", type_vehicule: "MOTO",    tarif: 1500 },
+  { id: "wp-std-berl",  pack_id: "pack-standard", type_vehicule: "BERLINE", tarif: 3000 },
+  { id: "wp-std-4x4",   pack_id: "pack-standard", type_vehicule: "4X4_SUV", tarif: 5000 },
+  { id: "wp-std-cam",   pack_id: "pack-standard", type_vehicule: "CAMION",  tarif: 8000 },
+  // Pack PREMIUM
+  { id: "wp-pre-moto",  pack_id: "pack-premium",  type_vehicule: "MOTO",    tarif: 2000 },
+  { id: "wp-pre-berl",  pack_id: "pack-premium",  type_vehicule: "BERLINE", tarif: 5000 },
+  { id: "wp-pre-4x4",   pack_id: "pack-premium",  type_vehicule: "4X4_SUV", tarif: 8000 },
+  { id: "wp-pre-cam",   pack_id: "pack-premium",  type_vehicule: "CAMION",  tarif: 12000 },
+  // Pack VIP
+  { id: "wp-vip-moto",  pack_id: "pack-vip",      type_vehicule: "MOTO",    tarif: 3500 },
+  { id: "wp-vip-berl",  pack_id: "pack-vip",      type_vehicule: "BERLINE", tarif: 8000 },
+  { id: "wp-vip-4x4",   pack_id: "pack-vip",      type_vehicule: "4X4_SUV", tarif: 12000 },
+  { id: "wp-vip-cam",   pack_id: "pack-vip",      type_vehicule: "CAMION",  tarif: 20000 },
+];
+
+// Services inclus par pack (liste des codes)
+export const SEED_WASH_PACK_INCLUSIONS = {
+  "pack-basique":  ["EXT_HP"],
+  "pack-standard": ["EXT_HP", "JANTES", "ESSUYAGE"],
+  "pack-premium":  ["EXT_HP", "JANTES", "ESSUYAGE", "ASPIRATION", "VITRES"],
+  "pack-vip":      ["EXT_HP", "JANTES", "ESSUYAGE", "ASPIRATION", "VITRES", "CIRE", "DESODORISANT", "LUSTRAGE"],
+};
+
+export const SEED_WASH_BAYS = [
+  { code_baie: "B1", nom_baie: "Baie 1", actif: true },
+  { code_baie: "B2", nom_baie: "Baie 2", actif: true },
+];
+
+export const SEED_WASH_TYPES_VEHICULE = [
+  { code: "MOTO",    libelle: "Moto / Deux-roues" },
+  { code: "BERLINE", libelle: "Voiture / Berline / Citadine" },
+  { code: "4X4_SUV", libelle: "4x4 / SUV / Pick-up" },
+  { code: "CAMION",  libelle: "Camion / Minibus / Utilitaire" },
+];
+
 
