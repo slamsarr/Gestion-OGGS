@@ -198,19 +198,31 @@ export default function TableauBordGerant() {
   return (
     <div className="space-y-4 max-w-6xl mx-auto pb-12">
       {/* ── BANDEAU COCKPIT GÉRANT ── */}
-      <div className="bg-gradient-to-r from-[#2A0932] via-[#431454] to-[#1E0624] text-white rounded-2xl p-4 sm:p-5 shadow-lg border-2 border-amber-500/80">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-purple-800/80">
+      <div className="bg-gradient-to-r from-[#102A43] via-[#0B4EA2] to-[#08336D] text-white rounded-2xl p-4 sm:p-5 shadow-lg border-2 border-amber-400">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-blue-900/80">
           <div>
+            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+              <div className="h-6 px-2 bg-white rounded-md flex items-center justify-center">
+                <img src="/branding/damel-energy/damel-energy-logo.svg" alt="DAMEL ENERGY" className="h-3.5 w-auto object-contain" />
+              </div>
+              <span className="text-[10px] font-black px-2 py-0.5 rounded bg-blue-500 text-white uppercase tracking-wider">
+                DAMEL STATION MANAGEMENT
+              </span>
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-black/40 text-amber-300 px-2 py-0.5 rounded-full border border-purple-400/40">
+                <img src="/star_energy_logo.jpg" alt="Star Energy" className="w-3 h-3 object-contain rounded-xs" />
+                <span>Réseau Star Energy</span>
+              </span>
+            </div>
             <div className="flex items-center gap-2">
               <span className="text-2xl">🏪</span>
               <div>
                 <h1 className="text-lg sm:text-xl font-black tracking-tight text-white flex items-center gap-2">
                   <span>Poste de Commande — {stationNom}</span>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-black bg-amber-500 text-slate-950 uppercase">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-black bg-amber-400 text-slate-950 uppercase">
                     Gérant Site
                   </span>
                 </h1>
-                <p className="text-xs text-amber-200/90 font-medium">
+                <p className="text-xs text-blue-200/90 font-medium">
                   Supervision en direct des descentes, des bons carburant, du lavage et de la boutique
                 </p>
               </div>

@@ -274,6 +274,62 @@ db.version(9).stores({
   wash_bons: "id, station_id, client_code, numero_bon, statut, created_at",
 });
 
+// VAGUE 5 — Entretien & Baie de Service Automobile, Vidange & Pièces/Lubrifiants
+db.version(10).stores({
+  meta: "key",
+  users: "id, email",
+  rapports: "id, station, date, statut, maj_le, client_uuid, [station+date]",
+  mouvements: "++id, station_id, produit_id, date_mvt, rapport_id",
+  livraisons: "id, station_id, date_livraison",
+  jauges: "++id, station_id, date_jauge, produit",
+  operations_credit: "++id, client_code, station_id, date_op",
+  pompistes: "id, station_id, nom",
+  quarts: "++id, date, rapport_id, pompiste_id",
+  queue: "++id, created_at",
+
+  clients_pro: "++id, code, nom_entreprise, station_id, telephone, email, created_at",
+  vehicules: "++id, client_id, station_id, immatriculation, marque, modele, type_vehicule, carburant, created_at",
+  fournisseurs: "++id, nom_fournisseur, station_id, telephone, email, created_at",
+  achats: "++id, fournisseur_id, station_id, date_achat, statut, montant_total, created_at",
+  depenses: "++id, station_id, categorie_depense, montant, date_depense, statut, created_at",
+  equipements: "++id, station_id, type_equipement, nom_equipement, date_installation, etat_equipement, created_at",
+  maintenances: "++id, equipement_id, station_id, date_maintenance, cout_maintenance, prestataire, statut_maintenance, created_at",
+  incidents: "++id, equipement_id, station_id, description_incident, priorite, statut_resolution, created_at",
+  sessions_urssaf: "++id, station_id, date_session, pompiste_id, caisse_ouverte, caisse_cloturee, statut_session, created_at",
+  audit_logs: "++id, user_id, user_role, action, module, objet_id, ancienne_valeur, nouvelle_valeur, station_id, created_at",
+  notifications: "++id, station_id, type_notif, message, lu, created_at",
+
+  descentes: "id, station_id, date, pompiste_id, statut, created_at",
+  prestations_lavage: "id, station_id, date, agent, type_vehicule, statut, pack_id, baie_id, client_id, created_at",
+  tarifs_lavage: "id, station_id, code",
+  ventes_boutique: "id, station_id, date, vendeur, created_at",
+  produits_boutique: "id, station_id, code, categorie, actif",
+  cuves_stock: "id, station_id, code_cuve, produit",
+  jauges_cuves: "id, station_id, date, cuve_id, produit, created_at",
+  pompes_station: "id, station_id, code_pompe",
+
+  rapports_depotage: "id, station_id, date_depotage, produit, numero_bl, created_at",
+  membres_fidelite: "id, station_id, numero_carte, telephone, nom_complet, statut, created_at",
+  transactions_fidelite: "++id, membre_id, station_id, date_op, type, created_at",
+  recompenses_fidelite: "id, code, categorie, points_requis, actif",
+  bons_carburant: "id, station_id, client_code, numero_bon, date, statut_paiement, created_at",
+
+  factures: "id, station_id, client_code, numero_facture, date_emission, statut, created_at",
+
+  wash_packs: "id, station_id, code, nom, actif",
+  wash_services: "id, station_id, code, nom, categorie, actif",
+  wash_vehicle_pricing: "id, pack_id, type_vehicule, station_id",
+  wash_bays: "id, station_id, code_baie, nom_baie, actif",
+  wash_addons: "++id, commande_id, service_id, station_id, created_at",
+  wash_promotions: "id, station_id, code_promo, actif, date_debut, date_fin",
+  wash_bons: "id, station_id, client_code, numero_bon, statut, created_at",
+
+  // ── Module Entretien Automobile & Baie de Service ──
+  prestations_entretien: "id, station_id, date, immatriculation, statut, technicien, mode_paiement, created_at",
+  services_entretien: "id, station_id, code, nom, categorie, actif",
+  baies_entretien: "id, station_id, code_baie, nom_baie, actif",
+});
+
 export async function ensureLocalSeed() {
   const seeded = await db.meta.get("seeded");
   const users = DEMO_USERS.map(({ password: _p, ...u }) => u);
@@ -300,6 +356,8 @@ export async function getLocalRef() {
     "wash_types_vehicule",
     "wash_pack_inclusions",
     "recompenses_fidelite",
+    "services_entretien",
+    "baies_entretien",
   ];
 
   for (const k of keysToCheck) {

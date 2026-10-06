@@ -2213,11 +2213,14 @@ export default function DescentePompiste() {
             <div className="p-5 font-mono text-xs text-gray-800 space-y-3 bg-[#FDFDFD]" id="ticket-print-area">
               <div className="text-center border-b pb-2 border-dashed border-gray-300">
                 <div className="flex items-center justify-center gap-1.5 mb-1">
-                  <img src="/star_energy_logo.jpg" alt="Star Energy" className="w-5 h-5 object-contain rounded" />
-                  <span className="text-sm font-black tracking-wider uppercase text-[#56216C]">STAR ENERGY</span>
+                  <img src="/branding/damel-energy/damel-energy-icon.svg" alt="DAMEL ENERGY" className="w-5 h-5 object-contain" />
+                  <span className="text-sm font-black tracking-wider uppercase text-[#0B4EA2]">DAMEL ENERGY</span>
                 </div>
-                <div className="text-[10px] text-amber-700 font-bold uppercase">STATION {stationCode} · SÉNÉGAL</div>
-                <div className="text-[9px] text-gray-500 italic">« Li nio ko mom ! »</div>
+                <div className="flex items-center justify-center gap-1 text-[10px] text-[#56216C] font-extrabold uppercase">
+                  <img src="/star_energy_logo.jpg" alt="Star Energy" className="w-3.5 h-3.5 object-contain rounded-xs" />
+                  <span>RÉSEAU STAR ENERGY · SÉNÉGAL</span>
+                </div>
+                <div className="text-[10px] text-amber-700 font-bold uppercase mt-0.5">STATION {stationCode}</div>
                 <div className="text-[11px] font-bold mt-1">TICKET DE PASSATION DE QUART</div>
                 <div className="text-[10px] text-gray-500">
                   {fmtDate(ticketModal.date)} ·{" "}

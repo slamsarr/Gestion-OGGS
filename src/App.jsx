@@ -15,6 +15,7 @@ import Pompistes from "./pages/Pompistes";
 import Parametres from "./pages/Parametres";
 import DescentePompiste from "./pages/DescentePompiste";
 import Lavage from "./pages/Lavage";
+import Entretien from "./pages/Entretien";
 import Boutique from "./pages/Boutique";
 import CuvesCarburant from "./pages/CuvesCarburant";
 import Maintenance from "./pages/Maintenance";
@@ -47,6 +48,7 @@ function HomeRouter() {
   if (role === "gerant") return <Navigate to="/gerant" replace />;
   if (role === "pompiste") return <Navigate to="/descente" replace />;
   if (role === "lavage") return <Navigate to="/lavage" replace />;
+  if (role === "mecanicien") return <Navigate to="/entretien" replace />;
   if (role === "boutique") return <Navigate to="/boutique" replace />;
   if (role === "stock") return <Navigate to="/cuves" replace />;
   if (role === "maintenance") return <Navigate to="/maintenance" replace />;
@@ -75,6 +77,7 @@ export default function App() {
         <Route path="/cuves" element={<RequireRole path="/cuves"><CuvesCarburant /></RequireRole>} />
         <Route path="/fidelite" element={<RequireRole path="/fidelite"><Fidelite /></RequireRole>} />
         <Route path="/lavage" element={<RequireRole path="/lavage"><Lavage /></RequireRole>} />
+        <Route path="/entretien" element={<RequireRole path="/entretien"><Entretien /></RequireRole>} />
         <Route path="/boutique" element={<RequireRole path="/boutique"><Boutique /></RequireRole>} />
         <Route path="/maintenance" element={<RequireRole path="/maintenance"><Maintenance /></RequireRole>} />
         <Route path="/incidents" element={<RequireRole path="/incidents"><Navigate to="/maintenance" replace /></RequireRole>} />

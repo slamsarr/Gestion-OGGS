@@ -1,7 +1,7 @@
 import { db, ensureLocalSeed, getLocalRef, isCloudConfigured, setLocalRef } from "./db";
 import { getSupabase } from "./supabase";
 import { calculer, n, todayISO, uuid, F } from "./calcul";
-import { codeClientCanonique, codesClientEquivalents, listeClientsCredit, referentielFromSeed, SEED_WASH_PACKS, SEED_WASH_SERVICES, SEED_WASH_PRICING, SEED_WASH_BAYS } from "./seed";
+import { codeClientCanonique, codesClientEquivalents, listeClientsCredit, referentielFromSeed, SEED_WASH_PACKS, SEED_WASH_SERVICES, SEED_WASH_PRICING, SEED_WASH_BAYS, SEED_SERVICES_ENTRETIEN, SEED_BAIES_ENTRETIEN } from "./seed";
 import {
   TABLES_CLOUD_METIER,
   TABLES_META_METIER,
@@ -1982,6 +1982,248 @@ export async function createWashBon(bon) {
   return { ok: true, bon: res.row, pending: res.pending };
 }
 
+// ── ENTRETIEN & BAIE DE SERVICE RAPIDE (VAGUE 5) ──────────────────────────────
+
+/** Catalogue des prestations d'entretien automobile */
+export async function listServicesEntretien(stationId) {
+  try {
+    await ensureLocalSeed();
+    let rows = await db.services_entretien.toArray().catch(() => []);
+    if (!rows || rows.length === 0) {
+      const ref = await getLocalRef();
+      const source = (ref.services_entretien && ref.services_entretien.length > 0)
+        ? ref.services_entretien
+        : SEED_SERVICES_ENTRETIEN;
+      const defaults = (source || []).map((s) => ({
+        ...s,
+        station_id: null,
+      }));
+      if (defaults.length > 0) {
+        await db.services_entretien.bulkPut(defaults).catch(() => {});
+        rows = defaults;
+      }
+    }
+    let filtered = rows;
+    if (stationId) {
+      const matched = rows.filter((s) => !s.station_id || s.station_id === stationId);
+      if (matched.length > 0) filtered = matched;
+      else filtered = rows.filter((s) => !s.station_id);
+    }
+    const result = (filtered && filtered.length > 0 ? filtered : SEED_SERVICES_ENTRETIEN)
+      .filter((s) => s.actif !== false)
+      .sort((a, b) => (a.ordre || 0) - (b.ordre || 0));
+    return result;
+  } catch (err) {
+    console.warn("listServicesEntretien fallback:", err);
+    return SEED_SERVICES_ENTRETIEN.filter((s) => s.actif !== false);
+  }
+}
+
+export async function saveServiceEntretien(srv) {
+  const res = await saveOpRow("services_entretien", srv);
+  return { ok: true, service: res.row, pending: res.pending };
+}
+
+export async function deleteServiceEntretien(id) {
+  return deleteMetierRow("services_entretien", id);
+}
+
+/** Baies & ponts d'entretien */
+export async function listBaiesEntretien(stationId) {
+  try {
+    await ensureLocalSeed();
+    let rows = await db.baies_entretien.toArray().catch(() => []);
+    if (!rows || rows.length === 0) {
+      const ref = await getLocalRef();
+      const source = (ref.baies_entretien && ref.baies_entretien.length > 0)
+        ? ref.baies_entretien
+        : (SEED_BAIES_ENTRETIEN || []).map((b) => ({
+            id: `${stationId || "st"}-${b.code_baie.toLowerCase()}`,
+            station_id: stationId || null,
+            code_baie: b.code_baie,
+            nom_baie: b.nom_baie,
+            type: b.type,
+            actif: b.actif,
+          }));
+      if (source.length > 0) {
+        await db.baies_entretien.bulkPut(source).catch(() => {});
+        rows = source;
+      }
+    }
+    let filtered = rows;
+    if (stationId) {
+      const matched = rows.filter((b) => !b.station_id || b.station_id === stationId);
+      if (matched.length > 0) filtered = matched;
+      else filtered = rows;
+    }
+    const result = (filtered && filtered.length > 0 ? filtered : SEED_BAIES_ENTRETIEN).filter((b) => b.actif !== false);
+    return result;
+  } catch (err) {
+    console.warn("listBaiesEntretien fallback:", err);
+    return SEED_BAIES_ENTRETIEN.filter((b) => b.actif !== false);
+  }
+}
+
+export async function saveBaieEntretien(bay) {
+  const res = await saveOpRow("baies_entretien", bay);
+  return { ok: true, baie: res.row, pending: res.pending };
+}
+
+export async function deleteBaieEntretien(id) {
+  return deleteMetierRow("baies_entretien", id);
+}
+
+/** Prestations / Ordres de Réparation d'entretien */
+export async function listPrestationsEntretien(stationId, date) {
+  await ensureLocalSeed();
+  let rows = await db.prestations_entretien.toArray().catch(() => []);
+  if (stationId) rows = rows.filter((p) => p.station_id === stationId);
+  if (date) rows = rows.filter((p) => p.date === date);
+  return rows.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+}
+
+/** Créer un Ordre de Réparation / Prestation d'entretien (avec pièces & lubrifiants) */
+export async function createPrestationEntretien(data) {
+  const {
+    station_id,
+    date = todayISO(),
+    heure = new Date().toTimeString().slice(0, 5),
+    immatriculation = "",
+    marque_modele = "",
+    kilometrage = null,
+    type_vehicule = "BERLINE",
+    client_nom = "",
+    client_tel = "",
+    client_pro_id = null,
+    technicien = "Ousmane Sow",
+    baie_id = null,
+    services = [],
+    produits = [],
+    montant_services = 0,
+    montant_produits = 0,
+    reduction_promo = 0,
+    code_promo = "",
+    mode_paiement = "ESPECES",
+    notes_diagnostic = "",
+    statut = "EN_ATTENTE",
+    points_gagnes = 0,
+    membre_fidelite_id = null,
+  } = data;
+
+  const montant_total = Math.max(0, Number(montant_services) + Number(montant_produits) - Number(reduction_promo));
+  const id = `ent-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const numero_or = `OR-${Date.now().toString().slice(-6)}`;
+
+  const row = {
+    id,
+    numero_or,
+    station_id,
+    date,
+    heure,
+    immatriculation: (immatriculation || "").toUpperCase(),
+    marque_modele,
+    kilometrage: kilometrage ? Number(kilometrage) : null,
+    type_vehicule,
+    client_nom: client_nom || "Client Passage",
+    client_tel,
+    client_pro_id,
+    technicien,
+    baie_id,
+    services,
+    produits,
+    montant_services: Number(montant_services),
+    montant_produits: Number(montant_produits),
+    reduction_promo: Number(reduction_promo),
+    code_promo,
+    montant_total,
+    mode_paiement,
+    notes_diagnostic,
+    statut,
+    points_gagnes,
+    membre_fidelite_id,
+    created_at: new Date().toISOString(),
+  };
+
+  const res = await saveOpRow("prestations_entretien", row);
+
+  // Décrémenter le stock des produits et lubrifiants consommés si présents
+  if (Array.isArray(produits) && produits.length > 0) {
+    for (const item of produits) {
+      if (item.code && item.quantite > 0) {
+        try {
+          const p = await db.produits_boutique.get(item.code);
+          if (p && typeof p.stock === "number") {
+            const nouveauStock = Math.max(0, p.stock - Number(item.quantite));
+            await db.produits_boutique.update(item.code, { stock: nouveauStock });
+          }
+        } catch (_) { /* non bloquant */ }
+      }
+    }
+  }
+
+  // Crédit fidélité
+  if (membre_fidelite_id && points_gagnes > 0) {
+    try {
+      const membre = await db.membres_fidelite.get(membre_fidelite_id);
+      if (membre) {
+        const nouveauSolde = (membre.points_solde || 0) + points_gagnes;
+        const nouveauxCumules = (membre.points_cumules || 0) + points_gagnes;
+        await db.membres_fidelite.update(membre_fidelite_id, {
+          points_solde: nouveauSolde,
+          points_cumules: nouveauxCumules,
+        });
+        await saveOpRow("transactions_fidelite", {
+          membre_id: membre_fidelite_id,
+          station_id,
+          date_op: date,
+          type: "CREDIT_ENTRETIEN",
+          points: points_gagnes,
+          montant_achat: montant_total,
+          reference_id: row.id,
+          created_at: row.created_at,
+        });
+      }
+    } catch (_) { /* non bloquant */ }
+  }
+
+  return { ok: true, prestation: res.row, pending: res.pending };
+}
+
+export async function updateStatutPrestationEntretien(id, statut) {
+  await db.prestations_entretien.update(id, { statut, updated_at: new Date().toISOString() });
+  return { ok: true };
+}
+
+export async function deletePrestationEntretien(id) {
+  return deleteMetierRow("prestations_entretien", id);
+}
+
+/** Obtenir tous les lubrifiants et consommables disponibles pour la baie d'entretien */
+export async function listCatalogueLubrifiantsEtProduits(stationId) {
+  await ensureLocalSeed();
+  const boutique = await listProduitsBoutique(stationId);
+  const ref = await getLocalRef();
+  const lubs = (ref.lubrifiants || []).map((l) => ({
+    code: l.code || l.id,
+    designation: l.designation,
+    prix_vente: l.prix_vente,
+    categorie: "LUBRIFIANT",
+    stock: 99,
+  }));
+
+  const map = new Map();
+  for (const l of lubs) map.set(l.code, l);
+  for (const b of boutique) {
+    map.set(b.code, {
+      code: b.code,
+      designation: b.designation || b.nom,
+      prix_vente: b.prix_vente || b.prix,
+      categorie: b.categorie || "PRODUIT",
+      stock: b.stock != null ? b.stock : 10,
+    });
+  }
+  return Array.from(map.values());
+}
 
 export async function listProduitsBoutique(stationId) {
   await ensureLocalSeed();

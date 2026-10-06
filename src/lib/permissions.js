@@ -12,6 +12,7 @@ export const ROLE_LABELS = {
   boutique: "Vendeur Boutique",
   stock: "Responsable Stock",
   maintenance: "Technicien Maintenance",
+  mecanicien: "Technicien Entretien & Baie",
   superviseur: "Superviseur",
   commercial: "Commercial",
   client_pro: "Client Professionnel",
@@ -22,7 +23,7 @@ export const ALL_ROLES = Object.keys(ROLE_LABELS);
 // Rôles « direction » : voient toutes les stations.
 export const DIRECTION = ["admin", "directeur", "superviseur"];
 // Rôles opérationnels liés à une station (uniquement les clés de ROLE_LABELS).
-export const OPERATIONNELS = ["gerant", "pompiste", "lavage", "boutique", "stock", "maintenance", "comptable", "commercial", "client_pro"];
+export const OPERATIONNELS = ["gerant", "pompiste", "lavage", "mecanicien", "boutique", "stock", "maintenance", "comptable", "commercial", "client_pro"];
 export const ROLES_COCKPIT_RESEAU = ["admin", "superviseur", "directeur", "comptable"];
 export const ROLES_CORRECTION_DESCENTE = ["gerant", "admin", "superviseur", "directeur"];
 
@@ -34,9 +35,9 @@ const ENTITES = {
     consulter: ["admin", "gerant", "superviseur", "directeur", "comptable"],
   },
   vente: {
-    creer: ["admin", "gerant", "superviseur", "directeur", "pompiste", "boutique", "stock"],
+    creer: ["admin", "gerant", "superviseur", "directeur", "pompiste", "boutique", "stock", "mecanicien"],
     annuler: ["admin", "gerant", "superviseur", "directeur", "comptable"],
-    consulter: ["admin", "gerant", "superviseur", "directeur", "comptable", "commercial"],
+    consulter: ["admin", "gerant", "superviseur", "directeur", "comptable", "commercial", "mecanicien"],
   },
   paiement: {
     creer: ["admin", "gerant", "superviseur", "directeur", "comptable", "pompiste"],
@@ -90,8 +91,8 @@ const ENTITES = {
     resoudre: ["admin", "superviseur", "directeur", "maintenance"],
   },
   fidelite: {
-    consulter: ["admin", "gerant", "superviseur", "directeur", "commercial", "pompiste", "boutique", "lavage"],
-    crediter: ["admin", "gerant", "superviseur", "directeur", "commercial", "pompiste", "boutique", "lavage"],
+    consulter: ["admin", "gerant", "superviseur", "directeur", "commercial", "pompiste", "boutique", "lavage", "mecanicien"],
+    crediter: ["admin", "gerant", "superviseur", "directeur", "commercial", "pompiste", "boutique", "lavage", "mecanicien"],
     debiter: ["admin", "gerant", "superviseur", "directeur", "commercial"],
     gerer: ["admin", "gerant", "superviseur", "directeur"],
   },
@@ -106,6 +107,12 @@ const ENTITES = {
     configurer:    ["admin", "gerant", "superviseur", "directeur"],
     voir_rapports: ["admin", "gerant", "superviseur", "directeur", "comptable"],
     gerer_bays:    ["admin", "gerant", "superviseur", "directeur"],
+  },
+  entretien: {
+    creer:         ["admin", "gerant", "superviseur", "directeur", "mecanicien"],
+    annuler:       ["admin", "gerant", "superviseur", "directeur"],
+    configurer:    ["admin", "gerant", "superviseur", "directeur"],
+    voir_rapports: ["admin", "gerant", "superviseur", "directeur", "comptable"],
   },
 
 };
@@ -145,12 +152,12 @@ export function peutCorrigerDescente(role, statut) {
 
 // ── Accès aux routes UI selon le rôle ───────────────────────────────────────
 const ROUTES = {
-  "/": ["admin", "gerant", "superviseur", "directeur", "comptable", "pompiste", "stock", "maintenance", "commercial", "lavage", "boutique", "client_pro"],
+  "/": ["admin", "gerant", "superviseur", "directeur", "comptable", "pompiste", "stock", "maintenance", "commercial", "lavage", "mecanicien", "boutique", "client_pro"],
   "/historique": ["admin", "gerant", "superviseur", "directeur", "comptable"],
   "/rapport": ["admin", "gerant", "superviseur", "directeur"],
   "/gerant": ["admin", "gerant", "superviseur", "directeur"],
   "/bilan-site": ["admin", "gerant", "superviseur", "directeur", "comptable"],
-  "/stocks": ["admin", "gerant", "superviseur", "directeur", "comptable", "stock"],
+  "/stocks": ["admin", "gerant", "superviseur", "directeur", "comptable", "stock", "mecanicien"],
   "/fournisseurs": ["admin", "gerant", "superviseur", "directeur", "comptable"],
   "/depenses": ["admin", "gerant", "superviseur", "directeur", "comptable"],
   "/pistolets": ["admin", "gerant", "superviseur", "directeur"],
@@ -158,13 +165,14 @@ const ROUTES = {
   "/cuves": ["admin", "gerant", "superviseur", "directeur", "stock"],
   "/descente": ["admin", "gerant", "superviseur", "directeur", "pompiste"],
   "/lavage": ["admin", "gerant", "superviseur", "directeur", "lavage"],
+  "/entretien": ["admin", "gerant", "superviseur", "directeur", "mecanicien"],
   "/boutique": ["admin", "gerant", "superviseur", "directeur", "boutique", "stock"],
   "/maintenance": ["admin", "gerant", "superviseur", "directeur", "maintenance", "pompiste"],
   "/incidents": ["admin", "gerant", "superviseur", "directeur", "maintenance", "pompiste"],
   "/clients-pro": ["admin", "gerant", "superviseur", "directeur", "commercial", "comptable", "client_pro"],
   "/finance": ["admin", "superviseur", "directeur", "comptable"],
   "/parametres": ["admin", "directeur", "superviseur"],
-  "/fidelite": ["admin", "gerant", "superviseur", "directeur", "commercial", "pompiste", "boutique", "lavage"],
+  "/fidelite": ["admin", "gerant", "superviseur", "directeur", "commercial", "pompiste", "boutique", "lavage", "mecanicien"],
 };
 
 export function rolesRoute(role, route) {

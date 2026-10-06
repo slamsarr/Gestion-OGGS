@@ -208,10 +208,22 @@ export default function Lavage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-gradient-to-r from-blue-700 to-cyan-500 px-4 py-5 text-white">
+      <div className="bg-gradient-to-r from-[#102A43] via-[#0B4EA2] to-[#0284C7] px-4 py-5 text-white border-b-2 border-amber-400">
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-2xl font-bold">🚿 Centre de Lavage</h1>
-          <p className="text-blue-100 text-sm mt-0.5">{stationNom} · {date}</p>
+          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+            <div className="h-6 px-2 bg-white rounded-md flex items-center justify-center">
+              <img src="/branding/damel-energy/damel-energy-logo.svg" alt="DAMEL ENERGY" className="h-3.5 w-auto object-contain" />
+            </div>
+            <span className="text-[10px] font-black px-2 py-0.5 rounded bg-blue-500 text-white uppercase tracking-wider">
+              DAMEL CAR WASH SERVICES
+            </span>
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-black/40 text-amber-300 px-2 py-0.5 rounded-full border border-purple-400/40">
+              <img src="/star_energy_logo.jpg" alt="Star Energy" className="w-3 h-3 object-contain rounded-xs" />
+              <span>Station {stationNom}</span>
+            </span>
+          </div>
+          <h1 className="text-2xl font-bold">🚿 Centre de Lavage Haute Pression</h1>
+          <p className="text-blue-100 text-sm mt-0.5">Services de lavage automobile Damel Energy · {date}</p>
 
           {/* KPIs */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mt-4">

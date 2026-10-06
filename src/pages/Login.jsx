@@ -92,49 +92,67 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-8" style={{ background: "linear-gradient(135deg, #F5F8F2 0%, #EDE5F0 100%)" }}>
       <div className="w-full max-w-lg bg-white rounded-2xl shadow-xl overflow-hidden border" style={{ borderColor: T.line }}>
-        {/* Bannière Officielle Star Energy */}
-        <div className="relative w-full overflow-hidden bg-[#76A628]">
-          <img
-            src="/star_energy_cover.jpg"
-            alt="Star Energy Sénégal Cover"
-            className="w-full h-auto object-cover max-h-36 sm:max-h-44"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent flex items-end p-3">
-            <span className="text-[11px] font-bold text-white bg-black/40 backdrop-blur-xs px-2.5 py-0.5 rounded-full">
-              🇸🇳 Une marque sénégalaise — Li nio ko mom !
-            </span>
+        {/* Bannière Officielle Damel Energy (Services & Gestion) */}
+        <div className="relative w-full overflow-hidden bg-gradient-to-r from-[#102A43] via-[#0B4EA2] to-[#08336D] p-5 sm:p-6 text-white border-b-2 border-amber-400">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-11 px-3 rounded-xl bg-white shadow-md flex items-center justify-center">
+                <img
+                  src="/branding/damel-energy/damel-energy-logo.svg"
+                  alt="DAMEL ENERGY"
+                  className="h-7 w-auto object-contain"
+                />
+              </div>
+              <div>
+                <span className="text-[10px] font-black px-2 py-0.5 rounded bg-blue-500 text-white uppercase tracking-wider block w-fit">
+                  SERVICES ÉNERGÉTIQUES &amp; GESTION
+                </span>
+                <span className="text-xs text-blue-100 font-medium">Plateforme d'Exploitation &amp; Réseau</span>
+              </div>
+            </div>
+            {/* Logo Star Energy au second plan */}
+            <div className="flex items-center gap-1.5 bg-black/30 border border-white/20 px-2.5 py-1 rounded-xl">
+              <img
+                src="/star_energy_logo.jpg"
+                alt="Star Energy"
+                className="w-5 h-5 object-contain rounded"
+              />
+              <span className="text-[10px] text-amber-300 font-bold hidden sm:inline">Réseau Star Energy</span>
+            </div>
           </div>
+          <p className="text-[11px] text-blue-100 font-medium mt-3 italic">
+            « ENERGY • OPERATIONS • PERFORMANCE »
+          </p>
         </div>
 
         <div className="p-6">
-          {/* Logo et En-tête */}
+          {/* Logo et En-tête de connexion */}
           <div className="flex items-center gap-3 mb-4 pb-3 border-b" style={{ borderColor: T.line }}>
-            <img
-              src="/star_energy_logo.jpg"
-              alt="Star Energy Logo"
-              className="w-12 h-12 object-contain rounded-xl border p-1 shadow-xs bg-white"
-              style={{ borderColor: T.line }}
-            />
+            <div className="h-12 px-2.5 rounded-xl border border-blue-200 bg-slate-50 flex items-center justify-center shadow-xs">
+              <img
+                src="/branding/damel-energy/damel-energy-icon.svg"
+                alt="DAMEL ENERGY"
+                className="w-8 h-8 object-contain"
+              />
+            </div>
             <div className="flex-1">
               <div className="flex items-center justify-between">
-                <h1 className="text-lg font-black tracking-tight" style={{ color: T.petrol }}>
-                  STAR ENERGY SÉNÉGAL
+                <h1 className="text-lg font-black tracking-tight text-[#0B4EA2]">
+                  PORTAIL DAMEL ENERGY
                 </h1>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: cloud ? "#EBF3FC" : "#F3F4F6", color: cloud ? T.petrol : T.muted }}>
                   {cloud ? "Supabase Cloud" : "Mode local"}
                 </span>
               </div>
               <p className="text-xs text-gray-500 font-medium">
-                Progiciel de gestion réseau — Hann Mariste · Ndiakhirate
+                Gestion stations-service &amp; services affiliés · Hann Mariste · Ndiakhirate
               </p>
-              <div className="mt-1.5 flex items-center gap-2">
-                <img
-                  src="/branding/damel-energy/logo-damel-energy.jpeg"
-                  alt="DAMEL ENERGY"
-                  className="h-5 w-auto object-contain"
-                  style={{ maxWidth: "90px" }}
-                />
-                <span className="text-[10px] text-gray-400 font-medium hidden sm:inline">Station & Energy Management</span>
+              <div className="mt-1 flex items-center gap-2">
+                <span className="text-[10px] text-gray-400 font-medium">Enseigne déployée :</span>
+                <span className="inline-flex items-center gap-1 text-[10px] text-[#56216C] font-black">
+                  <img src="/star_energy_logo.jpg" alt="Star Energy" className="w-3.5 h-3.5 object-contain rounded-xs" />
+                  STAR ENERGY SÉNÉGAL
+                </span>
               </div>
             </div>
           </div>
@@ -180,9 +198,9 @@ export default function Login() {
                 <button
                   disabled={busy}
                   className="py-2.5 rounded-lg font-bold text-sm text-white shadow-md transition-all hover:opacity-95 mt-1"
-                  style={{ background: `linear-gradient(to right, ${T.purple}, ${T.orange})` }}
+                  style={{ background: "linear-gradient(to right, #0B4EA2, #102A43)" }}
                 >
-                  {busy ? "Connexion en cours…" : mode === "signup" ? "Créer le compte" : mode === "reset" ? "Envoyer le lien" : "Se connecter à Star Energy"}
+                  {busy ? "Connexion en cours…" : mode === "signup" ? "Créer le compte" : mode === "reset" ? "Envoyer le lien" : "Se connecter à la plateforme DAMEL ENERGY"}
                 </button>
               </form>
 
@@ -199,14 +217,14 @@ export default function Login() {
                         type="button"
                         disabled={busy}
                         onClick={() => handleQuickLogin(u)}
-                        className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs border flex items-center justify-between hover:bg-amber-50 hover:border-amber-400 transition-colors"
+                        className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs border flex items-center justify-between hover:bg-blue-50 hover:border-blue-400 transition-colors"
                         style={{ borderColor: T.line }}
                       >
                         <div className="truncate pr-1">
                           <span className="font-semibold text-gray-900 block truncate">{u.nom_complet || u.role}</span>
                           <span className="text-gray-400 text-[10px] uppercase font-bold">{u.role}</span>
                         </div>
-                        <span className="text-xs font-black text-amber-600">→</span>
+                        <span className="text-xs font-black text-[#0B4EA2]">→</span>
                       </button>
                     ))}
                   </div>
@@ -215,7 +233,7 @@ export default function Login() {
 
               {cloud && (
                 <div className="mt-3 flex justify-between text-xs pt-2 border-t" style={{ borderColor: T.line }}>
-                  <button type="button" style={{ color: T.petrol }} onClick={() => setMode(mode === "signup" ? "login" : "signup")}>
+                  <button type="button" style={{ color: "#0B4EA2" }} onClick={() => setMode(mode === "signup" ? "login" : "signup")}>
                     {mode === "signup" ? "Connexion existante" : "Créer un compte"}
                   </button>
                   <button type="button" style={{ color: T.muted }} onClick={() => setMode(mode === "reset" ? "login" : "reset")}>
@@ -228,10 +246,14 @@ export default function Login() {
         </div>
         {/* Pied de carte d'authentification */}
         <div className="bg-slate-50 border-t px-6 py-3 flex items-center justify-between text-[11px] text-gray-500" style={{ borderColor: T.line }}>
-          <span className="font-bold text-[#56216C]">STAR ENERGY SÉNÉGAL</span>
+          <span className="flex items-center gap-1.5 font-bold text-[#0B4EA2]">
+            <img src="/branding/damel-energy/damel-energy-icon.svg" alt="DE" className="w-4 h-4 object-contain" />
+            <span>DAMEL ENERGY</span>
+          </span>
           <span className="flex items-center gap-1.5 text-[10px] text-slate-600 font-medium">
-            <span>Operated by</span>
-            <span className="text-[#0B4EA2] font-black tracking-wide">DAMEL ENERGY</span>
+            <span>Réseau affilié :</span>
+            <img src="/star_energy_logo.jpg" alt="Star Energy" className="w-3.5 h-3.5 object-contain rounded-xs" />
+            <span className="text-[#56216C] font-black">STAR ENERGY</span>
           </span>
         </div>
       </div>

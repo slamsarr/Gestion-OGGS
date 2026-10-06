@@ -1481,19 +1481,22 @@ export default function CuvesCarburant() {
 
             {/* Document Imprimable */}
             <div className="border p-5 rounded-xl space-y-4 print:border-none print:p-0">
-              {/* En-tête officiel STAR ENERGY */}
+              {/* En-tête officiel DAMEL ENERGY / STAR ENERGY */}
               <div className="flex justify-between items-start border-b pb-4" style={{ borderColor: T.line }}>
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl overflow-hidden bg-white p-1 shadow-xs border border-amber-400 shrink-0 flex items-center justify-center">
-                    <img src="/star_energy_logo.jpg" alt="Star Energy" className="w-full h-full object-contain" />
+                  <div className="h-12 px-3 rounded-xl bg-white shadow-xs border border-blue-400 shrink-0 flex items-center justify-center">
+                    <img src="/branding/damel-energy/damel-energy-logo.svg" alt="DAMEL ENERGY" className="h-7 w-auto object-contain" />
                   </div>
                   <div>
-                    <div className="text-[10px] font-black text-[#56216C] uppercase tracking-widest flex items-center gap-1.5">
-                      <span>STAR ENERGY SÉNÉGAL</span>
-                      <span className="text-[9px] text-amber-700 italic font-semibold">« Li nio ko mom ! »</span>
+                    <div className="text-[10px] font-black text-[#0B4EA2] uppercase tracking-widest flex items-center gap-2">
+                      <span>DAMEL ENERGY MANAGEMENT</span>
+                      <span className="inline-flex items-center gap-1 text-[9px] text-[#56216C] font-extrabold bg-purple-50 px-1.5 py-0.2 rounded border border-purple-200">
+                        <img src="/star_energy_logo.jpg" alt="Star Energy" className="w-3 h-3 object-contain rounded-xs" />
+                        <span>Réseau : STAR ENERGY</span>
+                      </span>
                     </div>
                     <h2 className="text-base font-black text-gray-900 mt-0.5">
-                      PROCÈS-VERBAL DE RÉCEPTION & DÉPOTAGE
+                      PROCÈS-VERBAL DE RÉCEPTION &amp; DÉPOTAGE CITERNE
                     </h2>
                     <div className="text-xs text-gray-600">
                       Station : <strong>{profil?.station_nom || "Station Hann Maristes"}</strong> (Code: {stationId})

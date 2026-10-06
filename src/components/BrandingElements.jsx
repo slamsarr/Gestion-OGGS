@@ -93,42 +93,48 @@ export function OperatorBadge({
 
 /**
  * Pied de page double marque :
- * STAR ENERGY (Enseigne station) + DAMEL ENERGY (Opérateur de gestion)
+ * DAMEL ENERGY (Services & Opérateur principal) + STAR ENERGY (Réseau & Enseigne 2nd plan)
  */
 export function BrandDualFooter() {
   return (
-    <footer className="bg-white border-t border-slate-200 py-3.5 text-[11px] text-slate-500 font-medium">
+    <footer className="bg-white border-t border-slate-200 py-3 text-[11px] text-slate-500 font-medium">
       <div className="max-w-6xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-3">
-        {/* Enseigne Station Star Energy */}
-        <div className="flex items-center gap-2">
+        {/* Services Principaux DAMEL ENERGY */}
+        <div className="flex items-center gap-2.5">
+          <img
+            src={BRAND_CONFIG.operator.logos.icon}
+            alt="Damel Energy"
+            className="w-5 h-5 object-contain"
+          />
+          <div className="flex items-center gap-2">
+            <span className="font-black text-[#0B4EA2] tracking-wide text-xs">
+              DAMEL ENERGY
+            </span>
+            <span className="text-slate-300 hidden sm:inline">•</span>
+            <span className="text-slate-600 font-bold text-[10.5px]">
+              {BRAND_CONFIG.operator.role}
+            </span>
+            <span className="text-slate-300 hidden md:inline">•</span>
+            <span className="text-[#0B4EA2] font-semibold text-[10px] hidden md:inline">
+              « {BRAND_CONFIG.operator.promiseFr} »
+            </span>
+          </div>
+        </div>
+
+        {/* Enseigne réseau affiliée au 2nd plan : Star Energy */}
+        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg">
+          <span className="text-[10px] text-gray-500">Enseigne déployée :</span>
           <img
             src={BRAND_CONFIG.station.logo}
             alt={BRAND_CONFIG.station.name}
-            className="w-5 h-5 object-contain rounded shadow-2xs"
+            className="w-4 h-4 object-contain rounded opacity-80"
           />
-          <span className="font-extrabold text-[#56216C] tracking-tight">
-            {BRAND_CONFIG.station.brandTitle}
-          </span>
-          <span className="text-gray-300 hidden sm:inline">•</span>
-          <span className="text-amber-700 font-semibold italic text-[10.5px]">
-            « {BRAND_CONFIG.station.slogan} »
-          </span>
-        </div>
-
-        {/* Opérateur de gestion Damel Energy */}
-        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/80 px-2.5 py-1 rounded-lg">
-          <img
-            src={BRAND_CONFIG.operator.logos.icon}
-            alt="DE"
-            className="w-4 h-4 object-contain"
-          />
-          <span className="text-gray-500 text-[10px]">Operated by</span>
-          <span className="font-black text-[#0B4EA2] text-[10.5px] tracking-wide">
-            DAMEL ENERGY
+          <span className="font-extrabold text-[#56216C] text-[10.5px] opacity-90">
+            {BRAND_CONFIG.station.name}
           </span>
           <span className="text-slate-300">•</span>
-          <span className="text-[10px] text-slate-600 font-semibold uppercase tracking-wider hidden sm:inline">
-            Energy &amp; Station Management
+          <span className="text-[10px] text-amber-700 italic hidden sm:inline">
+            « {BRAND_CONFIG.station.slogan} »
           </span>
         </div>
       </div>

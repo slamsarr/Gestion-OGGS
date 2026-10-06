@@ -356,40 +356,45 @@ export default function Parametres() {
       )}
 
       {/* Architecture de Marque & Opérateur Réseau */}
-      <Section titre="🏛️ Gouvernance de Marque" aside="Enseigne vs Opérateur de gestion">
+      <Section titre="🏛️ Gouvernance de Marque" aside="Opérateur de gestion principal vs Enseigne affiliée">
         <div className="py-2 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-          {/* STAR ENERGY */}
-          <div className="p-3 rounded-xl border border-purple-200 bg-purple-50/40 space-y-2">
-            <div className="flex items-center gap-2">
-              <img src={BRAND_CONFIG.station.logo} alt="Star Energy" className="w-7 h-7 object-contain rounded" />
+          {/* DAMEL ENERGY (1er Plan - Opérateur & Services) */}
+          <div className="p-3.5 rounded-xl border border-blue-300 bg-blue-50/60 space-y-2 shadow-xs">
+            <div className="flex items-center gap-2.5">
+              <div className="h-8 px-2 bg-white rounded-lg border border-blue-200 flex items-center justify-center">
+                <img
+                  src={BRAND_CONFIG.operator.logos.principal}
+                  alt="DAMEL ENERGY"
+                  className="h-5 w-auto object-contain"
+                />
+              </div>
               <div>
-                <div className="font-black text-xs text-[#56216C]">{BRAND_CONFIG.station.brandTitle}</div>
-                <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Enseigne Principale Station</div>
+                <div className="font-black text-xs text-[#0B4EA2]">{BRAND_CONFIG.operator.brandTitle}</div>
+                <div className="text-[10px] text-blue-700 font-extrabold uppercase tracking-wider">Services Principaux &amp; Exploitation</div>
               </div>
             </div>
-            <p className="text-xs text-gray-600">
-              Chef de file visuel sur les stations-service, pistolets, cuves, bons et accueil client.
+            <p className="text-xs text-gray-700">
+              Société de gestion, de maintenance technique, d'approvisionnement et d'optimisation de la performance énergétique.
             </p>
-            <div className="text-[11px] text-amber-800 font-semibold italic">
-              « {BRAND_CONFIG.station.slogan} »
+            <div className="text-[11px] text-[#0B4EA2] font-bold tracking-tight">
+              « {BRAND_CONFIG.operator.promiseFr} »
             </div>
           </div>
 
-          {/* DAMEL ENERGY */}
-          <div className="p-3 rounded-xl border border-blue-200 bg-blue-50/40 space-y-2">
+          {/* STAR ENERGY (2nd Plan - Enseigne Réseau Déployée) */}
+          <div className="p-3.5 rounded-xl border border-purple-200 bg-purple-50/40 space-y-2 opacity-95">
             <div className="flex items-center gap-2">
-              <img
-                src={BRAND_CONFIG.operator.logos.logoJpeg}
-                alt="DAMEL ENERGY"
-                className="h-8 w-auto object-contain"
-                style={{ maxWidth: "100px" }}
-              />
+              <img src={BRAND_CONFIG.station.logo} alt="Star Energy" className="w-7 h-7 object-contain rounded opacity-80" />
+              <div>
+                <div className="font-black text-xs text-[#56216C]">{BRAND_CONFIG.station.brandTitle}</div>
+                <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Enseigne Réseau au 2nd Plan</div>
+              </div>
             </div>
             <p className="text-xs text-gray-600">
-              Société de gestion, d'exploitation, de maintenance et d'optimisation de la performance énergétique.
+              Identité de marque déployée sur le terrain des stations affiliées, bornes de pompage et accueil automobiliste.
             </p>
-            <div className="text-[11px] text-[#0B4EA2] font-bold tracking-tight">
-              {BRAND_CONFIG.operator.signatures.management}
+            <div className="text-[11px] text-amber-800 font-semibold italic">
+              « {BRAND_CONFIG.station.slogan} »
             </div>
           </div>
         </div>

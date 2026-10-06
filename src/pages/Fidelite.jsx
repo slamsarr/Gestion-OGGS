@@ -592,20 +592,21 @@ export default function Fidelite() {
 
             {/* Carte Visuelle Haute Définition de l'adhérent sélectionné */}
             {selectedMembre && (
-              <div className="bg-gradient-to-tr from-[#25082E] via-[#431454] to-[#1E0624] text-white rounded-xl p-4 shadow-lg border-2 border-amber-500/60 relative overflow-hidden">
+              <div className="bg-gradient-to-tr from-[#102A43] via-[#0B4EA2] to-[#08336D] text-white rounded-xl p-4 shadow-lg border-2 border-amber-400 relative overflow-hidden">
                 <div className="absolute right-[-20px] top-[-20px] w-28 h-28 bg-amber-400/10 rounded-full blur-xl pointer-events-none" />
 
                 <div className="flex justify-between items-start mb-3">
                   <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg overflow-hidden bg-white p-0.5 shadow-sm border border-amber-400 shrink-0 flex items-center justify-center">
-                      <img src="/star_energy_logo.jpg" alt="Star Energy" className="w-full h-full object-contain" />
+                    <div className="h-8 px-2 rounded-lg bg-white shadow-sm border border-blue-200 shrink-0 flex items-center justify-center">
+                      <img src="/branding/damel-energy/damel-energy-logo.svg" alt="DAMEL ENERGY" className="h-4.5 w-auto object-contain" />
                     </div>
                     <div>
-                      <div className="text-[9px] tracking-widest uppercase text-amber-400 font-bold">
-                        STAR ENERGY • CARTE PRIVILÈGE
+                      <div className="text-[9px] tracking-widest uppercase text-amber-300 font-black flex items-center gap-1.5">
+                        <span>DAMEL ENERGY • CARTE PRIVILÈGE</span>
+                        <span className="text-[8px] px-1 py-0.2 bg-purple-950 text-white rounded opacity-80">Star Energy</span>
                       </div>
                       <div className="text-base font-extrabold text-white mt-0.5">{selectedMembre.nom}</div>
-                      <div className="text-xs text-purple-200">📞 {selectedMembre.telephone}</div>
+                      <div className="text-xs text-blue-200">📞 {selectedMembre.telephone}</div>
                     </div>
                   </div>
                   <div className="text-right">
@@ -1061,16 +1062,19 @@ export default function Fidelite() {
           </div>
 
           {/* Affiche imprimable Grand Format */}
-          <div className="max-w-md mx-auto p-6 rounded-2xl border-4 border-amber-500 bg-gradient-to-b from-[#2A0932] via-[#3B0E47] to-[#1E0624] text-white text-center shadow-xl space-y-4 print:border-black print:text-black">
-            <div className="flex items-center justify-center gap-2">
-              <div className="w-10 h-10 rounded-xl overflow-hidden bg-white p-1 shadow-sm border border-amber-400 shrink-0 flex items-center justify-center">
-                <img src="/star_energy_logo.jpg" alt="Star Energy" className="w-full h-full object-contain" />
+          <div className="max-w-md mx-auto p-6 rounded-2xl border-4 border-amber-400 bg-gradient-to-b from-[#102A43] via-[#0B4EA2] to-[#08336D] text-white text-center shadow-xl space-y-4 print:border-black print:text-black">
+            <div className="flex items-center justify-center gap-2.5">
+              <div className="h-10 px-3 rounded-xl bg-white p-1 shadow-sm border border-blue-300 shrink-0 flex items-center justify-center">
+                <img src="/branding/damel-energy/damel-energy-logo.svg" alt="DAMEL ENERGY" className="h-6 w-auto object-contain" />
               </div>
               <div className="text-left">
-                <div className="text-[10px] tracking-widest uppercase font-extrabold text-amber-400">
-                  STAR ENERGY SÉNÉGAL
+                <div className="text-[10px] tracking-widest uppercase font-extrabold text-blue-200">
+                  SERVICES DAMEL ENERGY
                 </div>
-                <div className="text-xs text-purple-200 italic font-semibold">« Li nio ko mom ! »</div>
+                <div className="flex items-center gap-1 text-[10px] text-amber-300 font-bold">
+                  <img src="/star_energy_logo.jpg" alt="Star Energy" className="w-3.5 h-3.5 object-contain rounded-xs" />
+                  <span>Réseau Star Energy</span>
+                </div>
               </div>
             </div>
 

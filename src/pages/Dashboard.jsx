@@ -121,45 +121,45 @@ export default function Dashboard() {
     { label: "Cuves & Dépotage", sub: "Jauge & PV citerne", icon: "🛢️", to: "/cuves", color: "from-amber-500 to-orange-600" },
     { label: "Fidélité Clients", sub: "Cartes & Récompenses", icon: "🎁", to: "/fidelite", color: "from-purple-600 to-pink-600" },
     { label: "Lavage Auto", sub: "Encaissement client", icon: "🚿", to: "/lavage", color: "from-emerald-500 to-teal-600" },
+    { label: "Entretien & Baie", sub: "Vidange & Mécanique", icon: "🔧", to: "/entretien", color: "from-amber-600 to-orange-600" },
     { label: "Shop Boutique", sub: "Vente & Caisse POS", icon: "🛒", to: "/boutique", color: "from-amber-600 to-amber-700" },
     { label: "Rapport Jour", sub: "Bordereau & Clôture", icon: "📋", to: "/rapport", color: "from-slate-700 to-slate-900" },
   ];
 
   return (
     <div className="space-y-5">
-      {/* BANNIÈRE OFFICIELLE STAR ENERGY */}
-      <div className="rounded-2xl overflow-hidden shadow-lg border border-purple-900/30 relative">
-        <img
-          src="/star_energy_cover.jpg"
-          alt="Star Energy Sénégal — Une marque sénégalaise, li nio ko mom !"
-          className="w-full h-auto object-cover max-h-48 sm:max-h-56 w-full"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#1F0626]/90 via-[#1F0626]/40 to-transparent flex flex-col justify-end p-4 sm:p-5 text-white">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+      {/* BANNIÈRE OFFICIELLE DAMEL ENERGY & GESTION RÉSEAU */}
+      <div className="rounded-2xl overflow-hidden shadow-lg border border-blue-900/30 relative bg-gradient-to-r from-[#102A43] via-[#0B4EA2] to-[#08336D]">
+        <div className="p-5 sm:p-6 text-white relative">
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <div className="flex items-center gap-2 mb-1 flex-wrap">
-                <span className="text-[10px] sm:text-xs font-black px-2.5 py-0.5 rounded-full bg-amber-500 text-slate-950 uppercase tracking-wide">
-                  COCKPIT RÉSEAU STAR ENERGY
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
+                <div className="h-7 px-2.5 rounded-lg bg-white shadow-xs flex items-center justify-center">
+                  <img src="/branding/damel-energy/damel-energy-logo.svg" alt="DAMEL ENERGY" className="h-4.5 w-auto object-contain" />
+                </div>
+                <span className="text-[10px] sm:text-xs font-black px-2.5 py-0.5 rounded-full bg-blue-500 text-white uppercase tracking-wide">
+                  COCKPIT EXPLOITATION &amp; GESTION
                 </span>
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#102A43]/85 text-white border border-blue-400/40 backdrop-blur-xs">
-                  <img src="/branding/damel-energy/damel-energy-icon.svg" alt="DE" className="w-3 h-3 object-contain" />
-                  <span>Managed by DAMEL ENERGY</span>
+                {/* Logo Star Energy au second plan */}
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-black/40 text-amber-300 border border-purple-400/40 backdrop-blur-xs">
+                  <img src="/star_energy_logo.jpg" alt="Star Energy" className="w-3.5 h-3.5 object-contain rounded" />
+                  <span>Enseigne : STAR ENERGY</span>
                 </span>
-                <span className="text-xs text-amber-200 font-medium">· {fmtDate(today)}</span>
+                <span className="text-xs text-blue-200 font-medium">· {fmtDate(today)}</span>
               </div>
               <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
                 Bonjour, {profil?.nom_complet || "Chef de Station"} 👋
               </h1>
-              <p className="text-xs text-purple-200 mt-0.5">
-                {profil?.stations?.nom || "Station Hann Mariste"} · 45 stations-service au Sénégal
+              <p className="text-xs text-blue-200 mt-0.5">
+                {profil?.stations?.nom || "Station Hann Mariste"} · Réseau national sous contrat de gestion DAMEL ENERGY
               </p>
             </div>
-            <div className="text-right bg-black/40 backdrop-blur-sm px-4 py-2 rounded-xl border border-white/10">
+            <div className="text-right bg-black/40 backdrop-blur-sm px-4 py-2.5 rounded-xl border border-white/10">
               <div className="text-[10px] text-amber-300 uppercase font-bold">Chiffre d'Affaires Global Jour</div>
               <div className="text-xl sm:text-2xl font-black tabular text-white">
                 {F(caJ)} <span className="text-xs font-normal text-amber-300">FCFA</span>
               </div>
-              <div className="text-[10px] text-emerald-400 font-semibold">✓ Station opérationnelle</div>
+              <div className="text-[10px] text-emerald-400 font-semibold">✓ Exploitation sous contrôle Damel Energy</div>
             </div>
           </div>
         </div>

@@ -27,6 +27,7 @@ const NAV_POLES = [
       { to: "/stocks", label: "Stocks Produits & Cuves", icon: "📦" },
       { to: "/fidelite", label: "Fidélité Clients", icon: "🎁" },
       { to: "/lavage", label: "Lavage Auto", icon: "🚿" },
+      { to: "/entretien", label: "Entretien & Baie Rapide", icon: "🔧" },
       { to: "/boutique", label: "Boutique / Shop", icon: "🛒" },
       { to: "/maintenance", label: "Maintenance", icon: "🛠️" },
     ],
@@ -160,7 +161,7 @@ export default function Layout() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans">
       {/* HEADER SUPÉRIEUR */}
-      <header className="sticky top-0 z-40 bg-gradient-to-r from-[#2A0932] via-[#431454] to-[#1E0624] text-white shadow-md border-b-2 border-amber-500">
+      <header className="sticky top-0 z-40 bg-gradient-to-r from-[#102A43] via-[#0B4EA2] to-[#08336D] text-white shadow-md border-b-2 border-amber-400">
         <div className="max-w-6xl mx-auto px-3 sm:px-4 py-2.5 flex items-center justify-between gap-3">
           {/* Logo & Identité Station */}
           <div className="flex items-center gap-3">
@@ -173,18 +174,22 @@ export default function Layout() {
               <span className="text-lg">☰</span>
             </button>
             <NavLink to="/" className="flex items-center gap-2.5 group">
-              <div className="w-9 h-9 rounded-xl overflow-hidden bg-white p-0.5 shadow-sm border border-amber-400/40 shrink-0 flex items-center justify-center group-hover:scale-105 transition-transform">
-                <img src="/star_energy_logo.jpg" alt="Star Energy" className="w-full h-full object-contain" />
+              <div className="h-9 px-2 rounded-xl bg-white shadow-sm border border-blue-400/50 shrink-0 flex items-center justify-center group-hover:scale-105 transition-transform">
+                <img src="/branding/damel-energy/damel-energy-logo.svg" alt="DAMEL ENERGY" className="h-6 w-auto object-contain" />
               </div>
               <div>
                 <div className="font-black text-sm tracking-tight text-white flex items-center gap-1.5 flex-wrap">
-                  <span>{nomReseau}</span>
-                  <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-amber-500 text-white shadow-xs">SÉNÉGAL</span>
-                  <OperatorBadge variant="dark" className="hidden lg:inline-flex ml-1 shadow-2xs" />
+                  <span className="text-white tracking-wide">DAMEL ENERGY</span>
+                  <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-blue-500 text-white shadow-xs">SERVICES &amp; GESTION</span>
+                  {/* Logo et enseigne Star Energy au second plan */}
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-950/90 text-amber-300 border border-purple-500/50 ml-1">
+                    <img src="/star_energy_logo.jpg" alt="Star Energy" className="w-3.5 h-3.5 object-contain rounded-xs" />
+                    <span>{nomReseau}</span>
+                  </span>
                 </div>
-                <div className="text-[10px] text-amber-200/90 font-medium truncate max-w-[200px] sm:max-w-none flex items-center gap-1.5">
-                  <span>{profil?.stations?.nom || (profil?.station_id ? `Station ${profil.station_id.replace("st-", "").toUpperCase()}` : "Réseau de 45 stations · Li nio ko mom !")}</span>
-                  <span className="text-blue-300 font-bold hidden sm:inline lg:hidden">• Opéré par Damel Energy</span>
+                <div className="text-[10px] text-blue-200/90 font-medium truncate max-w-[200px] sm:max-w-none flex items-center gap-1.5">
+                  <span>{profil?.stations?.nom || (profil?.station_id ? `Station ${profil.station_id.replace("st-", "").toUpperCase()}` : "Réseau de stations-service affiliées")}</span>
+                  <span className="text-amber-300 font-bold hidden sm:inline lg:hidden">• Station {nomReseau}</span>
                 </div>
               </div>
             </NavLink>
@@ -282,7 +287,7 @@ export default function Layout() {
 
         {/* NIVEAU 1 : SÉLECTEUR DE PÔLES MÉTIER (Desktop) */}
         {availablePoles.length > 1 && (
-          <div className="hidden md:flex max-w-6xl mx-auto px-4 gap-1 border-t border-purple-900/60 text-xs bg-[#240A2C]">
+          <div className="hidden md:flex max-w-6xl mx-auto px-4 gap-1 border-t border-blue-900/60 text-xs bg-[#0C2338]">
             {availablePoles.map((pole) => {
               const isSelected = pole.id === selectedPoleId;
               return (
@@ -292,12 +297,12 @@ export default function Layout() {
                   onClick={() => setSelectedPoleId(pole.id)}
                   className={`px-4 py-2 font-bold transition-all border-b-2 flex items-center gap-1.5 ${
                     isSelected
-                      ? "border-amber-400 text-white bg-purple-900/50"
-                      : "border-transparent text-purple-200/70 hover:text-white hover:bg-purple-900/20"
+                      ? "border-amber-400 text-white bg-blue-900/50"
+                      : "border-transparent text-blue-200/70 hover:text-white hover:bg-blue-900/20"
                   }`}
                 >
                   <span>{pole.label}</span>
-                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-purple-950 text-amber-300 border border-purple-800">
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-blue-950 text-amber-300 border border-blue-800">
                     {pole.items.length}
                   </span>
                 </button>
@@ -307,7 +312,7 @@ export default function Layout() {
         )}
 
         {/* NIVEAU 2 : SOUS-NAVIGATION DU PÔLE ACTIF */}
-        <nav className="max-w-6xl mx-auto px-3 sm:px-4 flex overflow-x-auto gap-1.5 py-2 bg-[#1A0620] border-t border-purple-950 no-scrollbar">
+        <nav className="max-w-6xl mx-auto px-3 sm:px-4 flex overflow-x-auto gap-1.5 py-2 bg-[#091A2A] border-t border-blue-950 no-scrollbar">
           {activePole?.items.map((item) => {
             const isRoot = item.to === "/";
             return (
@@ -319,7 +324,7 @@ export default function Layout() {
                   `px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap flex items-center gap-1.5 transition-all shadow-xs ${
                     isActive
                       ? "bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 shadow-md font-bold ring-1 ring-amber-300"
-                      : "bg-purple-950/70 text-purple-100 hover:bg-purple-900/80 hover:text-white border border-purple-900/40"
+                      : "bg-blue-950/70 text-blue-100 hover:bg-blue-900/80 hover:text-white border border-blue-900/40"
                   }`
                 }
               >
@@ -335,14 +340,19 @@ export default function Layout() {
       {mobileMenuOpen && (
         <div className="fixed inset-0 z-50 md:hidden bg-black/70 backdrop-blur-xs flex">
           <div className="w-4/5 max-w-sm bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-left duration-200">
-            <div className="p-4 bg-gradient-to-r from-[#2A0932] to-[#431454] text-white flex items-center justify-between border-b-2 border-amber-500">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg overflow-hidden bg-white p-0.5 shadow-sm border border-amber-400 shrink-0 flex items-center justify-center">
-                  <img src="/star_energy_logo.jpg" alt="Star Energy" className="w-full h-full object-contain" />
+            <div className="p-4 bg-gradient-to-r from-[#102A43] via-[#0B4EA2] to-[#08336D] text-white flex items-center justify-between border-b-2 border-amber-400">
+              <div className="flex items-center gap-2.5">
+                <div className="h-8 px-2 rounded-lg bg-white shadow-sm border border-blue-400 shrink-0 flex items-center justify-center">
+                  <img src="/branding/damel-energy/damel-energy-logo.svg" alt="DAMEL ENERGY" className="h-5 w-auto object-contain" />
                 </div>
                 <div>
-                  <div className="font-extrabold text-sm">{nomReseau}</div>
-                  <div className="text-[10px] text-amber-300 font-medium">{profil?.nom_complet} ({ROLE_LABELS[role] || role})</div>
+                  <div className="font-extrabold text-sm flex items-center gap-1.5">
+                    <span>DAMEL ENERGY</span>
+                    <span className="text-[9px] px-1 py-0.2 bg-purple-900 text-amber-300 rounded font-bold">
+                      {nomReseau}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-blue-200 font-medium">{profil?.nom_complet} ({ROLE_LABELS[role] || role})</div>
                 </div>
               </div>
               <button

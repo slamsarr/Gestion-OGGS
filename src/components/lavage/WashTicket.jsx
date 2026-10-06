@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+import { useState } from "react";
 
 const F = (v) => Number(v || 0).toLocaleString("fr-FR");
 
@@ -47,7 +47,9 @@ export default function WashTicket({ commande, onClose, stationNom = "Star Energ
     h2{text-align:center;font-size:15px;margin:4px 0}.center{text-align:center}
     .sep{border-top:1px dashed #000;margin:6px 0}.total{font-size:15px;font-weight:bold}
     .small{font-size:11px;color:#555}</style></head><body>
-    <h2>🚿 ${stationNom}</h2><p class="center small">TICKET DE LAVAGE</p>
+    <h2>DAMEL ENERGY</h2>
+    <p class="center small">CAR WASH SERVICES · STATION ${stationNom}</p>
+    <p class="center small">Réseau affilié : Star Energy Sénégal</p>
     <div class="sep"></div><p>📅 ${date}  ⏰ ${heure}</p><p>👤 ${client}</p>
     ${immat ? `<p>🚗 ${immat}</p>` : ""}${type ? `<p>🏷️ ${type}</p>` : ""}
     <div class="sep"></div><p>📦 ${pack} — ${F(montantPack)} FCFA</p>

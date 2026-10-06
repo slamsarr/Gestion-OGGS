@@ -19,6 +19,7 @@ export const TABLES_CLOUD_METIER = {
 export const TABLES_OPS_CLOUD = {
   descentes: "descentes_pompistes",
   prestations_lavage: "prestations_lavage",
+  prestations_entretien: "prestations_entretien",
   ventes_boutique: "ventes_boutique",
   jauges_cuves: "jauges_cuves_ops",
   produits_boutique: "produits_boutique",
@@ -36,6 +37,7 @@ export const TABLES_META_METIER = {
   sessions_caisse: { champCle: "id", station: "station_id" },
   descentes: { champCle: "id", station: "station_id" },
   prestations_lavage: { champCle: "id", station: "station_id" },
+  prestations_entretien: { champCle: "id", station: "station_id" },
   ventes_boutique: { champCle: "id", station: "station_id" },
   jauges_cuves: { champCle: "id", station: "station_id" },
   produits_boutique: { champCle: "code", station: "station_id" },

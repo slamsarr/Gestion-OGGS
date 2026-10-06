@@ -202,6 +202,13 @@ export const SEED_PRODUITS_BOUTIQUE = [
   { code: "CHIFFON-MICROFIBRE", designation: "Chiffon Microfibre Finition", categorie: "Accessoires", prix_vente: 1000, prix_achat: 500, stock: 25, seuil_alerte: 5 },
   { code: "HUILE-FREIN-DOT4", designation: "Liquide de frein DOT 4 (500ml)", categorie: "Entretien", prix_vente: 2500, prix_achat: 1600, stock: 18, seuil_alerte: 4 },
   { code: "LIQUIDE-REFROIDISSEMENT", designation: "Liquide de refroidissement 4L", categorie: "Entretien", prix_vente: 4500, prix_achat: 3000, stock: 12, seuil_alerte: 3 },
+  { code: "BATTERIE-12V-60AH", designation: "Batterie Automobile 12V 60Ah Sans Entretien", categorie: "Entretien", prix_vente: 45000, prix_achat: 35000, stock: 8, seuil_alerte: 2 },
+  { code: "BATTERIE-12V-75AH", designation: "Batterie Automobile 12V 75Ah Renforcée", categorie: "Entretien", prix_vente: 58000, prix_achat: 45000, stock: 5, seuil_alerte: 2 },
+  { code: "PLAQUETTES-FREIN-AV", designation: "Jeu Plaquettes de Frein Avant Universel", categorie: "Entretien", prix_vente: 15000, prix_achat: 10000, stock: 12, seuil_alerte: 3 },
+  { code: "PLAQUETTES-FREIN-AR", designation: "Jeu Plaquettes de Frein Arrière Universel", categorie: "Entretien", prix_vente: 13000, prix_achat: 8500, stock: 10, seuil_alerte: 3 },
+  { code: "FILTRE-HUILE-STD", designation: "Filtre à Huile Moteur Cartouche Standard", categorie: "Entretien", prix_vente: 4000, prix_achat: 2500, stock: 25, seuil_alerte: 5 },
+  { code: "FILTRE-AIR-STD", designation: "Filtre à Air Moteur Haute Filtration", categorie: "Entretien", prix_vente: 6000, prix_achat: 3800, stock: 20, seuil_alerte: 4 },
+  { code: "BOUGIE-ALLUMAGE", designation: "Bougie d'Allumage Nickel Standard (Unité)", categorie: "Entretien", prix_vente: 2500, prix_achat: 1500, stock: 32, seuil_alerte: 8 },
 ];
 
 export const DEMO_USERS = [
@@ -212,6 +219,7 @@ export const DEMO_USERS = [
   { id: "u-compta", email: "comptable@ogss.demo", password: "Compta2026!", nom_complet: "Comptable OGSS", role: "comptable", station_id: null },
   { id: "u-pompiste-hann", email: "pompiste@ogss.demo", password: "Pompe2026!", nom_complet: "Modou Fall (Pompiste)", role: "pompiste", station_id: "st-hann" },
   { id: "u-lavage-hann", email: "lavage@ogss.demo", password: "Lavage2026!", nom_complet: "Aliou Diop (Lavage)", role: "lavage", station_id: "st-hann" },
+  { id: "u-mecanicien-hann", email: "entretien@ogss.demo", password: "Meca2026!", nom_complet: "Ousmane Sow (Technicien Entretien & Baie)", role: "mecanicien", station_id: "st-hann" },
   { id: "u-boutique-hann", email: "boutique@ogss.demo", password: "Boutique2026!", nom_complet: "Fatou Ndiaye (Boutique)", role: "boutique", station_id: "st-hann" },
   { id: "u-stock-hann", email: "stock@ogss.demo", password: "Stock2026!", nom_complet: "Ibrahima Sarr (Resp. Stock)", role: "stock", station_id: "st-hann" },
   { id: "u-maint-hann", email: "maintenance@ogss.demo", password: "Maint2026!", nom_complet: "Cheikh Bâ (Technicien Maint.)", role: "maintenance", station_id: "st-hann" },
@@ -296,6 +304,18 @@ export function referentielFromSeed() {
     wash_bays,
     wash_types_vehicule,
     wash_pack_inclusions,
+    // ── Entretien & Baie de Service ────────────────────────────────────────
+    services_entretien: SEED_SERVICES_ENTRETIEN,
+    baies_entretien: SEED_STATIONS.flatMap((st) =>
+      SEED_BAIES_ENTRETIEN.map((b) => ({
+        id: `${st.id}-${b.code_baie.toLowerCase()}`,
+        station_id: st.id,
+        code_baie: b.code_baie,
+        nom_baie: b.nom_baie,
+        type: b.type,
+        actif: b.actif,
+      }))
+    ),
   };
 }
 
@@ -384,5 +404,136 @@ export const SEED_WASH_TYPES_VEHICULE = [
   { code: "4X4_SUV", libelle: "4x4 / SUV / Pick-up" },
   { code: "CAMION",  libelle: "Camion / Minibus / Utilitaire" },
 ];
+
+// ── ENTRETIEN RAPIDE & BAIE DE SERVICE ───────────────────────────────────────
+export const SEED_SERVICES_ENTRETIEN = [
+  {
+    id: "srv-bat",
+    code: "BATTERIE",
+    nom: "Changement de Batterie & Test Circuit Charge",
+    description: "Dépose ancienne batterie, pose batterie neuve, graissage cosses, test de charge et alternateur",
+    categorie: "ELECTRICITE",
+    prix_base: 3000,
+    duree_min: 20,
+    emoji: "🔋",
+    ordre: 1,
+    actif: true,
+  },
+  {
+    id: "srv-plaq",
+    code: "PLAQUETTES",
+    nom: "Remplacement Plaquettes de Frein",
+    description: "Démontage étriers, remplacement plaquettes, dépoussiérage, contrôle disques et niveau lockheed",
+    categorie: "FREINAGE",
+    prix_base: 7000,
+    duree_min: 45,
+    emoji: "🛑",
+    ordre: 2,
+    actif: true,
+  },
+  {
+    id: "srv-vid-simple",
+    code: "VIDANGE_SIMPLE",
+    nom: "Vidange Moteur Express (Main d'œuvre)",
+    description: "Vidange carter, remplacement joint bouchon, remise à niveau huile moteur neuve",
+    categorie: "VIDANGE",
+    prix_base: 4000,
+    duree_min: 30,
+    emoji: "🛢️",
+    ordre: 3,
+    actif: true,
+  },
+  {
+    id: "srv-vid-complete",
+    code: "VIDANGE_COMPLETE",
+    nom: "Vidange Complète & Forfait Révision",
+    description: "Vidange + changement filtre à huile + filtre à air + contrôle 20 points de sécurité",
+    categorie: "VIDANGE",
+    prix_base: 8000,
+    duree_min: 50,
+    emoji: "⭐",
+    ordre: 4,
+    actif: true,
+  },
+  {
+    id: "srv-liq-frein",
+    code: "PURGE_FREIN",
+    nom: "Purge & Remplacement Liquide de Frein",
+    description: "Vidange circuit freinage, purge 4 roues sous pression + remplissage DOT 4",
+    categorie: "FREINAGE",
+    prix_base: 6000,
+    duree_min: 35,
+    emoji: "🩸",
+    ordre: 5,
+    actif: true,
+  },
+  {
+    id: "srv-glaciol",
+    code: "REFROIDISSEMENT",
+    nom: "Vidange & Remplacement Liquide Refroidissement",
+    description: "Purge radiateur et bloc moteur, rinçage circuit, remplissage glaciol et purge air",
+    categorie: "REFROIDISSEMENT",
+    prix_base: 5000,
+    duree_min: 30,
+    emoji: "❄️",
+    ordre: 6,
+    actif: true,
+  },
+  {
+    id: "srv-filtre-clim",
+    code: "FILTRE_HABITACLE",
+    nom: "Remplacement Filtre Habitacle / Climatisation",
+    description: "Nettoyage conduit aération, pose filtre habitacle anti-allergène/poussière",
+    categorie: "CLIMATISATION",
+    prix_base: 3000,
+    duree_min: 20,
+    emoji: "💨",
+    ordre: 7,
+    actif: true,
+  },
+  {
+    id: "srv-bougies",
+    code: "BOUGIES",
+    nom: "Remplacement Bougies d'Allumage (x4)",
+    description: "Démontage bobines, remplacement des 4 bougies moteur, contrôle faisceau",
+    categorie: "MOTEUR",
+    prix_base: 5000,
+    duree_min: 30,
+    emoji: "⚡",
+    ordre: 8,
+    actif: true,
+  },
+  {
+    id: "srv-diag-25",
+    code: "DIAG_SECURITE",
+    nom: "Diagnostic Sécurité & Check-up 25 Points",
+    description: "Contrôle train roulant, amortisseurs, pneumatiques, éclairage, batterie et niveaux",
+    categorie: "DIAGNOSTIC",
+    prix_base: 5000,
+    duree_min: 30,
+    emoji: "🔍",
+    ordre: 9,
+    actif: true,
+  },
+  {
+    id: "srv-mo-rapide",
+    code: "MAIN_DOEUVRE",
+    nom: "Intervention Rapide / Main d'Œuvre Spécifique",
+    description: "Intervention mécanique rapide au forfait ou ajustement selon devis",
+    categorie: "DIVERS",
+    prix_base: 6000,
+    duree_min: 45,
+    emoji: "🛠️",
+    ordre: 10,
+    actif: true,
+  },
+];
+
+export const SEED_BAIES_ENTRETIEN = [
+  { code_baie: "PONT-1", nom_baie: "Pont 1 (Élévateur 4T)", type: "ELEVATEUR", actif: true },
+  { code_baie: "PONT-2", nom_baie: "Pont 2 (Ciseaux / Vidange Rapide)", type: "CISEAUX", actif: true },
+  { code_baie: "BAIE-SOL", nom_baie: "Baie 3 (Sol / Diagnostic & Batterie)", type: "SOL", actif: true },
+];
+
 
 
