@@ -286,7 +286,33 @@ export async function ensureLocalSeed() {
 export async function getLocalRef() {
   await ensureLocalSeed();
   const row = await db.meta.get("ref");
-  return row?.value || referentielFromSeed();
+  const seed = referentielFromSeed();
+  if (!row?.value) return seed;
+
+  // Garantir la rétrocompatibilité : fusionner les référentiels ajoutés dans les nouvelles versions
+  let needsUpdate = false;
+  const merged = { ...seed, ...row.value };
+  const keysToCheck = [
+    "wash_packs",
+    "wash_services",
+    "wash_vehicle_pricing",
+    "wash_bays",
+    "wash_types_vehicule",
+    "wash_pack_inclusions",
+    "recompenses_fidelite",
+  ];
+
+  for (const k of keysToCheck) {
+    if (!merged[k] || (Array.isArray(merged[k]) && merged[k].length === 0 && seed[k]?.length > 0)) {
+      merged[k] = seed[k];
+      needsUpdate = true;
+    }
+  }
+
+  if (needsUpdate) {
+    await db.meta.put({ key: "ref", value: merged }).catch(() => {});
+  }
+  return merged;
 }
 
 export async function setLocalRef(ref) {

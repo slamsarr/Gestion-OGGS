@@ -214,33 +214,33 @@ export default function Lavage() {
           <p className="text-blue-100 text-sm mt-0.5">{stationNom} · {date}</p>
 
           {/* KPIs */}
-          <div className="grid grid-cols-4 gap-3 mt-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mt-4">
             {[
               { label: "CA du jour", val: `${F(kpis.ca)} F`, icon: "💰" },
               { label: "Lavages", val: kpis.nb, icon: "🚗" },
               { label: "Livrés", val: kpis.livres, icon: "✅" },
               { label: "En cours", val: kpis.enCours, icon: "⏳" },
             ].map((k) => (
-              <div key={k.label} className="bg-white/15 rounded-xl p-3 text-center backdrop-blur-sm">
-                <div className="text-xl">{k.icon}</div>
-                <div className="font-bold text-lg leading-tight">{k.val}</div>
-                <div className="text-blue-200 text-xs">{k.label}</div>
+              <div key={k.label} className="bg-white/15 rounded-xl p-2.5 sm:p-3 text-center backdrop-blur-sm">
+                <div className="text-lg sm:text-xl">{k.icon}</div>
+                <div className="font-bold text-base sm:text-lg leading-tight truncate">{k.val}</div>
+                <div className="text-blue-100 sm:text-blue-200 text-[11px] sm:text-xs">{k.label}</div>
               </div>
             ))}
           </div>
 
           {/* Date + Onglets */}
-          <div className="flex items-center justify-between mt-4">
-            <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-4">
+            <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
               {TABS.map((t) => (
                 <button key={t.id} onClick={() => setTab(t.id)}
-                  className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${tab === t.id ? "bg-white text-blue-700 shadow" : "text-blue-100 hover:bg-white/20"}`}>
+                  className={`px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all ${tab === t.id ? "bg-white text-blue-700 shadow" : "text-blue-100 hover:bg-white/20"}`}>
                   {t.label}
                 </button>
               ))}
             </div>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
-              className="bg-white/20 border border-white/30 text-white rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:bg-white/30" />
+              className="bg-white/20 border border-white/30 text-white rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:bg-white/30 self-end sm:self-auto" />
           </div>
         </div>
       </div>
@@ -298,7 +298,7 @@ export default function Lavage() {
                       Aucun pack configuré. <br />{canConfig && <span>Configurez des packs dans l'onglet ⚙️.</span>}
                     </p>
                   ) : (
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {packs.map((pack) => {
                         const tarif = priceMap[`${pack.id}_${form.type_vehicule}`];
                         const inclusions = (SEED_WASH_PACK_INCLUSIONS[pack.id] || [])
@@ -408,7 +408,7 @@ export default function Lavage() {
                 <div className="p-8 text-center text-gray-400">Aucune prestation enregistrée.</div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="w-full text-sm min-w-[500px]">
                     <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
                       <tr>
                         <th className="py-3 px-4 text-left">Heure</th>

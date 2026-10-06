@@ -1,7 +1,7 @@
 import { db, ensureLocalSeed, getLocalRef, isCloudConfigured, setLocalRef } from "./db";
 import { getSupabase } from "./supabase";
 import { calculer, n, todayISO, uuid, F } from "./calcul";
-import { codeClientCanonique, codesClientEquivalents, listeClientsCredit, referentielFromSeed } from "./seed";
+import { codeClientCanonique, codesClientEquivalents, listeClientsCredit, referentielFromSeed, SEED_WASH_PACKS, SEED_WASH_SERVICES, SEED_WASH_PRICING, SEED_WASH_BAYS } from "./seed";
 import {
   TABLES_CLOUD_METIER,
   TABLES_META_METIER,
@@ -1603,19 +1603,41 @@ export async function deletePrestationLavage(id) {
 
 /** Retourne tous les packs actifs pour une station (ou globaux) */
 export async function listWashPacks(stationId) {
-  await ensureLocalSeed();
-  let rows = await db.wash_packs.toArray();
-  if (!rows || rows.length === 0) {
-    const ref = await getLocalRef();
-    const defaults = (ref.wash_packs || []).map((p) => ({
-      ...p,
-      station_id: stationId || null,
-    }));
-    await db.wash_packs.bulkPut(defaults);
-    rows = defaults;
+  try {
+    await ensureLocalSeed();
+    let rows = await db.wash_packs.toArray().catch(() => []);
+    if (!rows || rows.length === 0) {
+      const ref = await getLocalRef();
+      const source = (ref.wash_packs && ref.wash_packs.length > 0) ? ref.wash_packs : SEED_WASH_PACKS;
+      const defaults = (source || []).map((p) => ({
+        ...p,
+        station_id: null,
+      }));
+      if (defaults.length > 0) {
+        await db.wash_packs.bulkPut(defaults).catch(() => {});
+        rows = defaults;
+      }
+    }
+    let filtered = rows;
+    if (stationId) {
+      const matched = rows.filter((p) => !p.station_id || p.station_id === stationId);
+      if (matched.length > 0) {
+        filtered = matched;
+      } else {
+        filtered = rows.filter((p) => !p.station_id);
+        if (filtered.length === 0) {
+          filtered = SEED_WASH_PACKS;
+        }
+      }
+    }
+    const result = (filtered && filtered.length > 0 ? filtered : SEED_WASH_PACKS)
+      .filter((p) => p.actif !== false)
+      .sort((a, b) => (a.ordre || 0) - (b.ordre || 0));
+    return result;
+  } catch (err) {
+    console.warn("listWashPacks fallback to SEED_WASH_PACKS:", err);
+    return SEED_WASH_PACKS.filter((p) => p.actif !== false).sort((a, b) => (a.ordre || 0) - (b.ordre || 0));
   }
-  if (stationId) rows = rows.filter((p) => !p.station_id || p.station_id === stationId);
-  return rows.filter((p) => p.actif !== false).sort((a, b) => (a.ordre || 0) - (b.ordre || 0));
 }
 
 export async function saveWashPack(pack) {
@@ -1629,19 +1651,39 @@ export async function deleteWashPack(id) {
 
 /** Retourne tous les services/prestations du catalogue */
 export async function listWashServices(stationId) {
-  await ensureLocalSeed();
-  let rows = await db.wash_services.toArray();
-  if (!rows || rows.length === 0) {
-    const ref = await getLocalRef();
-    const defaults = (ref.wash_services || []).map((s) => ({
-      ...s,
-      station_id: stationId || null,
-    }));
-    await db.wash_services.bulkPut(defaults);
-    rows = defaults;
+  try {
+    await ensureLocalSeed();
+    let rows = await db.wash_services.toArray().catch(() => []);
+    if (!rows || rows.length === 0) {
+      const ref = await getLocalRef();
+      const source = (ref.wash_services && ref.wash_services.length > 0) ? ref.wash_services : SEED_WASH_SERVICES;
+      const defaults = (source || []).map((s) => ({
+        ...s,
+        station_id: null,
+      }));
+      if (defaults.length > 0) {
+        await db.wash_services.bulkPut(defaults).catch(() => {});
+        rows = defaults;
+      }
+    }
+    let filtered = rows;
+    if (stationId) {
+      const matched = rows.filter((s) => !s.station_id || s.station_id === stationId);
+      if (matched.length > 0) {
+        filtered = matched;
+      } else {
+        filtered = rows.filter((s) => !s.station_id);
+        if (filtered.length === 0) {
+          filtered = SEED_WASH_SERVICES;
+        }
+      }
+    }
+    const result = (filtered && filtered.length > 0 ? filtered : SEED_WASH_SERVICES).filter((s) => s.actif !== false);
+    return result;
+  } catch (err) {
+    console.warn("listWashServices fallback to SEED_WASH_SERVICES:", err);
+    return SEED_WASH_SERVICES.filter((s) => s.actif !== false);
   }
-  if (stationId) rows = rows.filter((s) => !s.station_id || s.station_id === stationId);
-  return rows.filter((s) => s.actif !== false);
 }
 
 export async function saveWashService(svc) {
@@ -1651,19 +1693,39 @@ export async function saveWashService(svc) {
 
 /** Retourne la matrice de prix pack × type_véhicule */
 export async function listWashPricing(stationId) {
-  await ensureLocalSeed();
-  let rows = await db.wash_vehicle_pricing.toArray();
-  if (!rows || rows.length === 0) {
-    const ref = await getLocalRef();
-    const defaults = (ref.wash_vehicle_pricing || []).map((r) => ({
-      ...r,
-      station_id: stationId || null,
-    }));
-    await db.wash_vehicle_pricing.bulkPut(defaults);
-    rows = defaults;
+  try {
+    await ensureLocalSeed();
+    let rows = await db.wash_vehicle_pricing.toArray().catch(() => []);
+    if (!rows || rows.length === 0) {
+      const ref = await getLocalRef();
+      const source = (ref.wash_vehicle_pricing && ref.wash_vehicle_pricing.length > 0) ? ref.wash_vehicle_pricing : SEED_WASH_PRICING;
+      const defaults = (source || []).map((r) => ({
+        ...r,
+        station_id: null,
+      }));
+      if (defaults.length > 0) {
+        await db.wash_vehicle_pricing.bulkPut(defaults).catch(() => {});
+        rows = defaults;
+      }
+    }
+    if (stationId) {
+      const stationRows = rows.filter((r) => r.station_id === stationId);
+      const globalRows = rows.filter((r) => !r.station_id);
+      if (stationRows.length > 0) {
+        const map = new Map();
+        for (const r of globalRows) map.set(`${r.pack_id}_${r.type_vehicule}`, r);
+        for (const r of stationRows) map.set(`${r.pack_id}_${r.type_vehicule}`, r);
+        return Array.from(map.values());
+      }
+      if (globalRows.length > 0) {
+        return globalRows;
+      }
+    }
+    return rows && rows.length > 0 ? rows : SEED_WASH_PRICING;
+  } catch (err) {
+    console.warn("listWashPricing fallback to SEED_WASH_PRICING:", err);
+    return SEED_WASH_PRICING;
   }
-  if (stationId) rows = rows.filter((r) => !r.station_id || r.station_id === stationId);
-  return rows;
 }
 
 export async function saveWashPricing(rows) {
@@ -1675,28 +1737,60 @@ export async function saveWashPricing(rows) {
 
 /** Retourne un objet { packId_typeVehicule: tarif } pour affichage rapide */
 export async function getWashPriceMap(stationId) {
-  const pricing = await listWashPricing(stationId);
-  const map = {};
-  for (const r of pricing) {
-    map[`${r.pack_id}_${r.type_vehicule}`] = r.tarif;
+  try {
+    const pricing = await listWashPricing(stationId);
+    const map = {};
+    for (const r of (pricing || [])) {
+      map[`${r.pack_id}_${r.type_vehicule}`] = r.tarif;
+    }
+    if (Object.keys(map).length === 0) {
+      for (const r of SEED_WASH_PRICING) {
+        map[`${r.pack_id}_${r.type_vehicule}`] = r.tarif;
+      }
+    }
+    return map;
+  } catch (err) {
+    const map = {};
+    for (const r of SEED_WASH_PRICING) {
+      map[`${r.pack_id}_${r.type_vehicule}`] = r.tarif;
+    }
+    return map;
   }
-  return map;
 }
 
 /** Baies de lavage */
 export async function listWashBays(stationId) {
-  await ensureLocalSeed();
-  let rows = await db.wash_bays.toArray();
-  if (!rows || rows.length === 0) {
-    const ref = await getLocalRef();
-    const defaults = (ref.wash_bays || []).filter((b) =>
-      !stationId || b.station_id === stationId
-    );
-    await db.wash_bays.bulkPut(defaults);
-    rows = defaults;
+  try {
+    await ensureLocalSeed();
+    let rows = await db.wash_bays.toArray().catch(() => []);
+    if (!rows || rows.length === 0) {
+      const ref = await getLocalRef();
+      const source = (ref.wash_bays && ref.wash_bays.length > 0)
+        ? ref.wash_bays
+        : (SEED_WASH_BAYS || []).map((b) => ({
+            id: `${stationId || "st"}-${b.code_baie}`,
+            station_id: stationId || null,
+            code_baie: b.code_baie,
+            nom_baie: b.nom_baie,
+            actif: b.actif,
+          }));
+      if (source.length > 0) {
+        await db.wash_bays.bulkPut(source).catch(() => {});
+        rows = source;
+      }
+    }
+    let filtered = rows;
+    if (stationId) {
+      const matched = rows.filter((b) => !b.station_id || b.station_id === stationId);
+      if (matched.length > 0) filtered = matched;
+      else filtered = rows;
+    }
+    const result = (filtered && filtered.length > 0 ? filtered : SEED_WASH_BAYS).filter((b) => b.actif !== false);
+    return result;
+  } catch (err) {
+    console.warn("listWashBays fallback to SEED_WASH_BAYS:", err);
+    return SEED_WASH_BAYS.filter((b) => b.actif !== false);
   }
-  if (stationId) rows = rows.filter((b) => b.station_id === stationId);
-  return rows.filter((b) => b.actif !== false);
 }
 
 export async function saveWashBay(bay) {
