@@ -9,7 +9,7 @@ import {
   listCatalogueLubrifiantsEtProduits,
   applyCodePromo,
 } from "../lib/api";
-import { peutAgirProfil } from "../lib/permissions";
+import { peutAgirProfil, peutVoirToutesLesEntrees } from "../lib/permissions";
 import EntretienServiceCard from "../components/entretien/EntretienServiceCard";
 import EntretienQueue from "../components/entretien/EntretienQueue";
 import EntretienTicket from "../components/entretien/EntretienTicket";
@@ -32,6 +32,8 @@ export default function Entretien() {
   const stationNom = profil?.station_nom || "Star Energy";
   const canConfig = peutAgirProfil(profil, "entretien", "configurer");
   const canDelete = peutAgirProfil(profil, "entretien", "annuler");
+  // Un mécanicien ne voit que ses propres interventions ; gérant et profils avancés voient tout
+  const canVoirTout = peutVoirToutesLesEntrees(profil?.role);
 
   // ─── Onglet principal ──────────────────────────────────────────────────
   const [tab, setTab] = useState("caisse"); // caisse | queue | comptoir | config
@@ -47,8 +49,10 @@ export default function Entretien() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      // Restriction de visibilité : un mécanicien ne voit que ses propres ordres de réparation
+      const operateurId = canVoirTout ? undefined : (profil?.id || undefined);
       const [prest, srvs, bys, prods] = await Promise.all([
-        listPrestationsEntretien(stationId, date).catch(() => []),
+        listPrestationsEntretien(stationId, date, operateurId).catch(() => []),
         listServicesEntretien(stationId).catch(() => []),
         listBaiesEntretien(stationId).catch(() => []),
         listCatalogueLubrifiantsEtProduits(stationId).catch(() => []),
@@ -60,7 +64,7 @@ export default function Entretien() {
     } finally {
       setLoading(false);
     }
-  }, [stationId, date]);
+  }, [stationId, date, canVoirTout]);
 
   useEffect(() => {
     load();
@@ -203,6 +207,9 @@ export default function Entretien() {
         client_nom: form.client_nom,
         client_tel: form.client_tel,
         technicien: form.technicien,
+        technicien_id: profil?.id,
+        operateur_id: profil?.id,
+        user_id: profil?.id,
         baie_id: form.baie_id || null,
         services: form.selectedServices.map((s) => ({
           service_id: s.id,
@@ -272,6 +279,9 @@ export default function Entretien() {
         type_vehicule: "COMPTOIR",
         client_nom: comptoirClient || "Client Comptoir",
         technicien: profil?.nom_complet || "Comptoir",
+        technicien_id: profil?.id,
+        operateur_id: profil?.id,
+        user_id: profil?.id,
         services: [],
         produits: comptoirCart,
         montant_services: 0,

@@ -13,7 +13,7 @@ import {
 } from "../lib/api";
 import { F, fmtDate, n, T, todayISO, prixDuJour, uuid } from "../lib/calcul";
 import { Section, Row, Num, Loading, InputComptable } from "../components/ui";
-import { peutCorrigerDescente, ROLES_CORRECTION_DESCENTE } from "../lib/permissions";
+import { peutCorrigerDescente, ROLES_CORRECTION_DESCENTE, peutVoirToutesLesEntrees } from "../lib/permissions";
 
 /** Normalisation défensive pour rétrocompatibilité avec les anciennes descentes mono-pompe */
 export function normalizeDescente(d) {
@@ -109,6 +109,8 @@ export default function DescentePompiste() {
   const stationId = profil?.station_id || "st-hann";
   const stationCode = profil?.stations?.code || stationId.replace("st-", "").toUpperCase();
   const isManager = ROLES_CORRECTION_DESCENTE.includes(profil?.role);
+  // Un pompiste ne peut voir que ses propres descentes ; le gérant et les profils avancés voient tout
+  const canVoirTout = peutVoirToutesLesEntrees(profil?.role);
   const editIdFromUrl = searchParams.get("id");
   const [ref, setRef] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -195,7 +197,9 @@ export default function DescentePompiste() {
     try {
       const r = await loadReferentiel();
       setRef(r);
-      const des = await listDescentes(stationId);
+      // Si le rôle est restreint (pompiste), on ne charge que les descentes de cet opérateur
+      const operateurId = canVoirTout ? undefined : (profil?.id || undefined);
+      const des = await listDescentes(stationId, undefined, operateurId);
       setDescentes((des || []).map(normalizeDescente));
     } finally {
       setLoading(false);
@@ -966,7 +970,7 @@ export default function DescentePompiste() {
               color: historiqueView ? "white" : T.ink,
             }}
           >
-            {historiqueView ? "← Saisie / Correction" : "📋 Mes descentes (" + descentes.length + ")"}
+            {historiqueView ? "← Saisie / Correction" : canVoirTout ? "📋 Toutes les descentes (" + descentes.length + ")" : "📋 Mes descentes (" + descentes.length + ")"}
           </button>
         </div>
       </div>
@@ -1011,7 +1015,7 @@ export default function DescentePompiste() {
         /* VUE HISTORIQUE */
         <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: T.line }}>
           <h3 className="text-sm font-bold mb-3" style={{ color: T.petrol }}>
-            Historique des descentes de quart enregistrées
+            {canVoirTout ? "Toutes les descentes de la station" : "Mes descentes de quart enregistrées"}
           </h3>
           {descentes.length === 0 ? (
             <p className="text-xs py-6 text-center text-gray-500">Aucune descente enregistrée.</p>

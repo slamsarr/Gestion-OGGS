@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { loadReferentiel, listRapports, stocksTheoriques, listPrestationsLavage, listVentesBoutique } from "../lib/api";
+import { loadReferentiel, listRapports, stocksTheoriques, listPrestationsLavage, listVentesBoutique, listPrestationsEntretien } from "../lib/api";
 import { F, fmtDate, todayISO, T, n, calculer } from "../lib/calcul";
 import { Section, Row, Loading, PageHeader, StatCard, Badge, Card } from "../components/ui";
 import { peutValiderRapport } from "../lib/permissions";
+import { construireHistoire } from "../lib/histoireQuotidienne";
+import HistoireQuotidienne from "../components/HistoireQuotidienne";
 
 function Bar({ label, value, max, color = "#0B2F3A" }) {
   const pct = max > 0 ? Math.min((value / max) * 100, 100) : 0;
@@ -31,7 +33,14 @@ export default function Dashboard() {
   const [rapports, setRapports] = useState([]);
   const [stocks, setStocks] = useState([]);
   const [lavages, setLavages] = useState([]);
+  const [lavagesV, setLavagesV] = useState([]);
+  const [lavagesM7, setLavagesM7] = useState([]);
   const [ventesBoutique, setVentesBoutique] = useState([]);
+  const [ventesBoutiqueV, setVentesBoutiqueV] = useState([]);
+  const [ventesBoutiqueM7, setVentesBoutiqueM7] = useState([]);
+  const [entretiens, setEntretiens] = useState([]);
+  const [afficherHistoire, setAfficherHistoire] = useState(true);
+  const [histoire, setHistoire] = useState(null);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -47,18 +56,108 @@ export default function Dashboard() {
         const r = await loadReferentiel();
         if (!alive) return;
         setRef(r);
-        const [raps, st, lav, vBout] = await Promise.all([
-          listRapports({ page: 1, limit: 100, station: stationScope }).catch(() => []),
+
+        const aujourdHui = todayISO();
+        const dateObj = new Date(aujourdHui);
+        const hier = new Date(dateObj); hier.setDate(hier.getDate() - 1);
+        const hierISO = hier.toISOString().slice(0, 10);
+        const septJoursAvant = new Date(dateObj); septJoursAvant.setDate(septJoursAvant.getDate() - 7);
+        const septJoursAvantISO = septJoursAvant.toISOString().slice(0, 10);
+        const tousRapports = await listRapports({ page: 1, limit: 500, station: stationScope }).catch(() => []);
+        const raps = tousRapports.filter(x => (x.date || x.date_rapport) === aujourdHui);
+        const rapsHier = tousRapports.filter(x => (x.date || x.date_rapport) === hierISO);
+        const raps7 = tousRapports.filter(x => {
+          const d = x.date || x.date_rapport;
+          return d && d >= septJoursAvantISO && d <= aujourdHui;
+        });
+
+        const [st, lav, lavV, lavM7, vBout, vBoutV, vBoutM7, ent] = await Promise.all([
           stocksTheoriques(r).catch(() => []),
-          listPrestationsLavage(stationId, todayISO()).catch(() => []),
-          listVentesBoutique(stationId, todayISO()).catch(() => []),
+          listPrestationsLavage(stationId, aujourdHui).catch(() => []),
+          listPrestationsLavage(stationId, hierISO).catch(() => []),
+          listPrestationsLavage(stationId, undefined).then(tous => tous.filter(x => {
+            const d = x.date; return d && d >= septJoursAvantISO && d <= aujourdHui;
+          })).catch(() => []),
+          listVentesBoutique(stationId, aujourdHui).catch(() => []),
+          listVentesBoutique(stationId, hierISO).catch(() => []),
+          listVentesBoutique(stationId, undefined).then(tous => tous.filter(x => {
+            const d = x.date; return d && d >= septJoursAvantISO && d <= aujourdHui;
+          })).catch(() => []),
+          listPrestationsEntretien(stationId, aujourdHui).catch(() => []),
         ]);
         if (!alive) return;
         setRapports(raps || []);
-        setTotalPages(raps?.pages || 1);
+        setTotalPages(tousRapports?.pages || 1);
         setStocks(st || []);
         setLavages(lav || []);
+        setLavagesV(lavV || []);
+        setLavagesM7(lavM7 || []);
         setVentesBoutique(vBout || []);
+        setVentesBoutiqueV(vBoutV || []);
+        setVentesBoutiqueM7(vBoutM7 || []);
+        setEntretiens(ent || []);
+
+        // ── Construire l'histoire quotidienne ──────────────────────
+        const caRapJ = raps.reduce((s, rr) => s + n(rr.ca_total), 0);
+        const caRapV = rapsHier.reduce((s, rr) => s + n(rr.ca_total), 0);
+        const caRapM7 = raps7.reduce((s, rr) => s + n(rr.ca_total), 0) / Math.max(1, raps7.length);
+
+        const caLavJ = lav.reduce((s, l) => s + n(l.montant_total), 0);
+        const caLavV = lavV.reduce((s, l) => s + n(l.montant_total), 0);
+        const caLavM7 = lavM7.reduce((s, l) => s + n(l.montant_total), 0) / Math.max(1, lavM7.length);
+
+        const caBoutJ = vBout.reduce((s, v) => s + n(v.total_montant), 0);
+        const caBoutV = vBoutV.reduce((s, v) => s + n(v.total_montant), 0);
+        const caBoutM7 = vBoutM7.reduce((s, v) => s + n(v.total_montant), 0) / Math.max(1, vBoutM7.length);
+
+        const caEntJ = ent.reduce((s, e) => s + n(e.montant_total || (n(e.montant_services) + n(e.montant_produits)) || 0), 0);
+
+        const volCarbJ = raps.reduce((s, rr) => {
+          if (rr.vol_hint?.pistolets) {
+            const c = calculer(rr.vol_hint, r);
+            return s + c.volGO + c.volSU;
+          }
+          return s + (n(rr.volumes_go) || 0) + (n(rr.volumes_su) || 0);
+        }, 0);
+
+        const descentesData = raps.map(rr => ({
+          pompiste_nom: rr.gerant, pompiste_id: rr.user_id, ecart: n(rr.ecart_caisse),
+        }));
+        const ecarts = descentesData.filter(d => Math.abs(d.ecart) > 0);
+
+        const stationsRapportees = [...new Set(raps.map(r => r.station).filter(Boolean))];
+        const stationsManquantes = (r?.stations || [])
+          .filter(s => !stationsRapportees.includes(s.code))
+          .map(s => s.code);
+
+        const hist = construireHistoire({
+          dateISO: aujourdHui,
+          stationNom: profil?.stations?.nom || profil?.station_nom || "Réseau",
+          stationCode: stationScope || stationId?.replace("st-", "") || "",
+          caCarburantJ: caRapJ,
+          caLavageJ: caLavJ,
+          caBoutiqueJ: caBoutJ,
+          caEntretienJ: caEntJ,
+          volumeCarburantJ: volCarbJ,
+          nbLavagesJ: lav.length,
+          nbVentesBoutiqueJ: vBout.length,
+          nbInterventionsEntretienJ: ent.length,
+          descentesJ: descentesData,
+          caCarburantV: caRapV,
+          caLavageV: caLavV,
+          caBoutiqueV: caBoutV,
+          caCarburantM7: caRapM7,
+          caLavageM7: caLavM7,
+          caBoutiqueM7: caBoutM7,
+          stocks: st,
+          ecartsDescente: ecarts,
+          rapportsSoumis: raps.some(x => x.statut === "SOUMIS" || x.statut === "VALIDE"),
+          rapportsManquants: stationsManquantes,
+          role: profil?.role,
+          nomUtilisateur: profil?.nom_complet,
+        });
+        setHistoire(hist);
+
       } catch (err) {
         console.error("Dashboard load error:", err);
       } finally {
@@ -66,7 +165,7 @@ export default function Dashboard() {
       }
     })();
     return () => { alive = false; };
-  }, [stationScope, stationId]);
+  }, [stationScope, stationId, profil?.role, profil?.nom_complet, profil?.stations?.nom, profil?.station_nom]);
 
   const loadMore = async () => {
     const next = page + 1;
@@ -164,6 +263,34 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* HUB HISTOIRE QUOTIDIENNE — 1min de briefing 📰 */}
+      {afficherHistoire && histoire && (
+        <div className="mb-5">
+          <HistoireQuotidienne
+            histoire={histoire}
+            onFermer={() => setAfficherHistoire(false)}
+          />
+        </div>
+      )}
+      {!afficherHistoire && histoire && (
+        <div className="mb-4 flex items-center justify-between px-4 py-3 rounded-2xl bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-100">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">📰</span>
+            <div>
+              <div className="font-black text-indigo-900 text-sm">Briefing 1 minute disponible</div>
+              <div className="text-xs text-slate-500">
+                {histoire.nbHistoires} slides · {histoire.nbAlertes || 0} point(s) d'attention
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => setAfficherHistoire(true)}
+            className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-xs font-bold shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all">
+            🎬 Voir le briefing
+          </button>
+        </div>
+      )}
 
       {/* HUB D'ACTIONS RAPIDES (Raccourcis terrain) */}
       <div>

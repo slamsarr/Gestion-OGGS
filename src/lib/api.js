@@ -1436,12 +1436,21 @@ export async function updateDescente(id, patch) {
   return { ok: true, descente: res.row, pending: res.pending };
 }
 
-export async function listDescentes(stationId, date) {
+export async function listDescentes(stationId, date, operateurId) {
   await ensureLocalSeed();
   let rows = await db.descentes.toArray();
   const stations = await stationsDuReferentiel();
   if (stationId) rows = rows.filter((d) => rowMatchesStation(d, stationId, stations));
   if (date) rows = rows.filter((d) => d.date === date);
+  // Visibilité restreinte : un pompiste ne voit que ses propres descentes
+  if (operateurId) {
+    rows = rows.filter(
+      (d) =>
+        d.pompiste_id === operateurId ||
+        d.user_id === operateurId ||
+        d.operateur_id === operateurId
+    );
+  }
   return rows.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
 }
 
@@ -1586,12 +1595,21 @@ export async function createPrestationLavage(p) {
   return { ok: true, prestation: res.row, pending: res.pending };
 }
 
-export async function listPrestationsLavage(stationId, date) {
+export async function listPrestationsLavage(stationId, date, operateurId) {
   await ensureLocalSeed();
   let rows = await db.prestations_lavage.toArray();
   const stations = await stationsDuReferentiel();
   if (stationId) rows = rows.filter((p) => rowMatchesStation(p, stationId, stations));
   if (date) rows = rows.filter((p) => p.date === date);
+  // Visibilité restreinte : un agent de lavage ne voit que ses propres prestations
+  if (operateurId) {
+    rows = rows.filter(
+      (p) =>
+        p.operateur_id === operateurId ||
+        p.user_id === operateurId ||
+        p.agent_id === operateurId
+    );
+  }
   return rows.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
 }
 
@@ -1921,8 +1939,8 @@ export async function updateStatutCommandeLavage(id, statut) {
 }
 
 /** Lister les commandes du jour (alias de listPrestationsLavage + champs enrichis) */
-export async function listCommandesLavage(stationId, date) {
-  return listPrestationsLavage(stationId, date);
+export async function listCommandesLavage(stationId, date, operateurId) {
+  return listPrestationsLavage(stationId, date, operateurId);
 }
 
 /** Promotions */
@@ -2074,11 +2092,20 @@ export async function deleteBaieEntretien(id) {
 }
 
 /** Prestations / Ordres de Réparation d'entretien */
-export async function listPrestationsEntretien(stationId, date) {
+export async function listPrestationsEntretien(stationId, date, operateurId) {
   await ensureLocalSeed();
   let rows = await db.prestations_entretien.toArray().catch(() => []);
   if (stationId) rows = rows.filter((p) => p.station_id === stationId);
   if (date) rows = rows.filter((p) => p.date === date);
+  // Visibilité restreinte : un mécanicien ne voit que ses propres interventions
+  if (operateurId) {
+    rows = rows.filter(
+      (p) =>
+        p.technicien_id === operateurId ||
+        p.operateur_id === operateurId ||
+        p.user_id === operateurId
+    );
+  }
   return rows.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
 }
 
@@ -2267,12 +2294,20 @@ export async function createVenteBoutique(v) {
   return { ok: true, vente: row, pending: res.pending };
 }
 
-export async function listVentesBoutique(stationId, date) {
+export async function listVentesBoutique(stationId, date, operateurId) {
   await ensureLocalSeed();
   let rows = await db.ventes_boutique.toArray();
   const stations = await stationsDuReferentiel();
   if (stationId) rows = rows.filter((v) => rowMatchesStation(v, stationId, stations));
   if (date) rows = rows.filter((v) => v.date === date);
+  if (operateurId) {
+    rows = rows.filter(
+      (v) =>
+        v.vendeur_id === operateurId ||
+        v.operateur_id === operateurId ||
+        v.user_id === operateurId
+    );
+  }
   return rows.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
 }
 

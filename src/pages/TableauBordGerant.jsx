@@ -14,11 +14,15 @@ import {
   listCollaborateurs,
   toggleCollaborateurActif,
   resetCollaborateurPassword,
+  stocksTheoriques,
+  listPrestationsEntretien,
 } from "../lib/api";
 import { F, fmtDate, n, T, todayISO } from "../lib/calcul";
 import { ROLE_LABELS } from "../lib/permissions";
 import { Section, Row, Num, Loading } from "../components/ui";
 import CollaborateurModal from "../components/CollaborateurModal";
+import { construireHistoire } from "../lib/histoireQuotidienne";
+import HistoireQuotidienne from "../components/HistoireQuotidienne";
 
 export default function TableauBordGerant() {
   const { profil } = useAuth();
@@ -42,6 +46,12 @@ export default function TableauBordGerant() {
   const [jauges, setJauges] = useState([]);
   const [equipe, setEquipe] = useState([]);
   const [showCollabModal, setShowCollabModal] = useState(false);
+  const [stocksStation, setStocksStation] = useState([]);
+  const [entretiensJour, setEntretiensJour] = useState([]);
+  const [lavagesV, setLavagesV] = useState([]);
+  const [ventesBoutiqueV, setVentesBoutiqueV] = useState([]);
+  const [afficherHistoire, setAfficherHistoire] = useState(true);
+  const [histoire, setHistoire] = useState(null);
 
   // Filtre Bons
   const [filtreBon, setFiltreBon] = useState("TOUS"); // TOUS | IMPAYES | REGLES
@@ -58,7 +68,12 @@ export default function TableauBordGerant() {
 
   const loadStationData = async () => {
     try {
-      const [r, dList, bList, lList, vList, jList, cList] = await Promise.all([
+      const hier = new Date(date); hier.setDate(hier.getDate() - 1);
+      const hierISO = hier.toISOString().slice(0, 10);
+      const septJours = new Date(date); septJours.setDate(septJours.getDate() - 7);
+      const septJoursISO = septJours.toISOString().slice(0, 10);
+      const [r, dList, bList, lList, vList, jList, cList, stocks, ent,
+             lHier, vHier, lTous, vTous, descTous, descHier] = await Promise.all([
         loadReferentiel().catch(() => null),
         listDescentes(stationId, date).catch(() => []),
         listTousBonsStation(stationId).catch(() => []),
@@ -66,6 +81,20 @@ export default function TableauBordGerant() {
         listVentesBoutique(stationId, date).catch(() => []),
         listJaugesCuves(stationId, date).catch(() => []),
         listCollaborateurs(stationId).catch(() => []),
+        stocksTheoriques(null).catch(() => []),
+        listPrestationsEntretien(stationId, date).catch(() => []),
+        listPrestationsLavage(stationId, hierISO).catch(() => []),
+        listVentesBoutique(stationId, hierISO).catch(() => []),
+        listPrestationsLavage(stationId, undefined).then(tous => tous.filter(x => {
+          const d = x.date; return d && d >= septJoursISO && d <= date;
+        })).catch(() => []),
+        listVentesBoutique(stationId, undefined).then(tous => tous.filter(x => {
+          const d = x.date; return d && d >= septJoursISO && d <= date;
+        })).catch(() => []),
+        listDescentes(stationId, undefined).then(tous => tous.filter(x => {
+          const d = x.date; return d && d >= septJoursISO && d <= date;
+        })).catch(() => []),
+        listDescentes(stationId, hierISO).catch(() => []),
       ]);
       setRef(r);
       setDescentes(dList || []);
@@ -74,6 +103,49 @@ export default function TableauBordGerant() {
       setVentesBoutique(vList || []);
       setJauges(jList || []);
       setEquipe(cList || []);
+      setStocksStation((stocks || []).filter(s => s.station === stationCode || s.station === stationId));
+      setEntretiensJour(ent || []);
+      setLavagesV(lHier || []);
+      setVentesBoutiqueV(vHier || []);
+
+      // ── Construire l'histoire quotidienne pour le gérant ─────────
+      const caCarbV = descHier.reduce((s, x) => s + (n(x.total_carburant) || n(x.montant_theorique) || 0), 0);
+      const caCarbM7 = descTous.reduce((s, x) => s + (n(x.total_carburant) || n(x.montant_theorique) || 0), 0) / Math.max(1, [...new Set(descTous.map(x => x.date))].length);
+      const caLavV = lHier.reduce((s, x) => s + n(x.montant_total), 0);
+      const caLavM7 = lTous.reduce((s, x) => s + n(x.montant_total), 0) / Math.max(1, [...new Set(lTous.map(x => x.date))].length);
+      const caBoutV = vHier.reduce((s, x) => s + n(x.total_montant), 0);
+      const caBoutM7 = vTous.reduce((s, x) => s + n(x.total_montant), 0) / Math.max(1, [...new Set(vTous.map(x => x.date))].length);
+      const caEnt = ent.reduce((s, e) => s + n(e.montant_total || (n(e.montant_services) + n(e.montant_produits)) || 0), 0);
+      const volCarb = dList.reduce((s, x) => s + (n(x.total_volume) || n(x.volume_vendu) || 0), 0);
+
+      const hist = construireHistoire({
+        dateISO: date,
+        stationNom: stationNom,
+        stationCode,
+        caCarburantJ: totalCarburantJour,
+        caLavageJ: totalLavageJour,
+        caBoutiqueJ: totalBoutiqueJour,
+        caEntretienJ: caEnt,
+        volumeCarburantJ: volCarb,
+        nbLavagesJ: lList.length,
+        nbVentesBoutiqueJ: vList.length,
+        nbInterventionsEntretienJ: ent.length,
+        descentesJ: dList,
+        caCarburantV: caCarbV,
+        caLavageV: caLavV,
+        caBoutiqueV: caBoutV,
+        caCarburantM7: caCarbM7,
+        caLavageM7: caLavM7,
+        caBoutiqueM7: caBoutM7,
+        stocks: stocksStation,
+        ecartsDescente: dList.map(x => ({ ecart: n(x.ecart), pompiste_nom: x.pompiste_nom, pompiste_id: x.pompiste_id })),
+        bonsImpayes,
+        montantImpayes: totalResteBons,
+        role: profil?.role,
+        nomUtilisateur: profil?.nom_complet,
+      });
+      setHistoire(hist);
+
     } catch (err) {
       console.error("Erreur chargement données gérant:", err);
     } finally {
@@ -335,6 +407,32 @@ export default function TableauBordGerant() {
         >
           <span>{msg}</span>
           <button onClick={() => setMsg("")} className="text-base px-2">✕</button>
+        </div>
+      )}
+
+      {/* ── HUB HISTOIRE QUOTIDIENNE GÉRANT 📰 */}
+      {afficherHistoire && histoire && (
+        <HistoireQuotidienne
+          histoire={histoire}
+          onFermer={() => setAfficherHistoire(false)}
+        />
+      )}
+      {!afficherHistoire && histoire && (
+        <div className="flex items-center justify-between px-4 py-3 rounded-2xl bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-100">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">📰</span>
+            <div>
+              <div className="font-black text-indigo-900 text-sm">Briefing 1 minute — {stationNom}</div>
+              <div className="text-xs text-slate-500">
+                {histoire.nbHistoires} slides · {histoire.nbAlertes || 0} point(s) d'attention
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => setAfficherHistoire(true)}
+            className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-xs font-bold shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all">
+            🎬 Voir le briefing
+          </button>
         </div>
       )}
 

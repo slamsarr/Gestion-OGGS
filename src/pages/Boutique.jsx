@@ -3,7 +3,7 @@ import { useAuth } from "../context/AuthContext";
 import { listProduitsBoutique, createVenteBoutique, listVentesBoutique, updateProduitBoutique, deleteVenteBoutique } from "../lib/api";
 import { F, fmtDate, n, T, todayISO } from "../lib/calcul";
 import { Section, Row, Num, Loading, InputComptable } from "../components/ui";
-import { peutAgirProfil } from "../lib/permissions";
+import { peutAgirProfil, peutVoirToutesLesEntrees } from "../lib/permissions";
 
 export default function Boutique() {
   const { profil } = useAuth();
@@ -11,6 +11,7 @@ export default function Boutique() {
   const isManager = peutAgirProfil(profil, "vente", "annuler");
   const peutVendre = peutAgirProfil(profil, "vente", "creer");
   const peutAjusterStock = peutAgirProfil(profil, "stock", "ajuster");
+  const canVoirTout = peutVoirToutesLesEntrees(profil?.role);
   const [produits, setProduits] = useState([]);
   const [ventes, setVentes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -59,7 +60,8 @@ ${lignesStr}
     try {
       const prods = await listProduitsBoutique(stationId);
       setProduits(prods || []);
-      const v = await listVentesBoutique(stationId, todayISO());
+      const operateurId = canVoirTout ? undefined : (profil?.id || undefined);
+      const v = await listVentesBoutique(stationId, todayISO(), operateurId);
       setVentes(v || []);
     } finally {
       setLoading(false);
@@ -68,7 +70,7 @@ ${lignesStr}
 
   useEffect(() => {
     loadData();
-  }, [stationId]);
+  }, [stationId, canVoirTout]);
 
   if (loading) return <Loading label="Chargement de la Boutique / Shop..." />;
 
@@ -127,6 +129,9 @@ ${lignesStr}
       station_id: stationId,
       date: todayISO(),
       vendeur: profil?.nom_complet || "Vendeur Boutique",
+      vendeur_id: profil?.id,
+      operateur_id: profil?.id,
+      user_id: profil?.id,
       lignes: panier.map((item) => ({
         code: item.code,
         id: item.code,

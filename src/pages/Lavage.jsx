@@ -14,7 +14,7 @@ import {
   listWashBons,
   applyCodePromo,
 } from "../lib/api";
-import { peutAgirProfil } from "../lib/permissions";
+import { peutAgirProfil, peutVoirToutesLesEntrees } from "../lib/permissions";
 import { SEED_WASH_TYPES_VEHICULE, SEED_WASH_PACK_INCLUSIONS } from "../lib/seed";
 import WashPackCard from "../components/lavage/WashPackCard";
 import WashQueue from "../components/lavage/WashQueue";
@@ -34,6 +34,8 @@ export default function Lavage() {
   const stationNom = profil?.station_nom || "Star Energy";
   const canConfig = peutAgirProfil(profil, "lavage", "configurer");
   const canDelete = peutAgirProfil(profil, "lavage", "annuler");
+  // Un agent de lavage ne voit que ses propres commandes ; le gérant et les profils avancés voient tout
+  const canVoirTout = peutVoirToutesLesEntrees(profil?.role);
 
   // ─── Onglet actif ────────────────────────────────────────────────────────
   const [tab, setTab] = useState("caisse");
@@ -53,8 +55,10 @@ export default function Lavage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      // Restriction de visibilité : un agent de lavage ne voit que ses propres commandes
+      const operateurId = canVoirTout ? undefined : (profil?.id || undefined);
       const [cmds, pks, svcs, bys, pm, prs, bns, prc] = await Promise.all([
-        listCommandesLavage(stationId, date).catch(() => []),
+        listCommandesLavage(stationId, date, operateurId).catch(() => []),
         listWashPacks(stationId).catch(() => []),
         listWashServices(stationId).catch(() => []),
         listWashBays(stationId).catch(() => []),
@@ -74,7 +78,7 @@ export default function Lavage() {
     } finally {
       setLoading(false);
     }
-  }, [stationId, date]);
+  }, [stationId, date, canVoirTout]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -161,6 +165,9 @@ export default function Lavage() {
         station_id: stationId,
         date,
         agent: profil?.nom_complet || profil?.email || "—",
+        agent_id: profil?.id,
+        operateur_id: profil?.id,
+        user_id: profil?.id,
         type_vehicule: form.type_vehicule,
         immatriculation: form.immatriculation,
         pack_id: form.pack_id,

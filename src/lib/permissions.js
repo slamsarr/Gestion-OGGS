@@ -27,6 +27,19 @@ export const OPERATIONNELS = ["gerant", "pompiste", "lavage", "mecanicien", "bou
 export const ROLES_COCKPIT_RESEAU = ["admin", "superviseur", "directeur", "comptable"];
 export const ROLES_CORRECTION_DESCENTE = ["gerant", "admin", "superviseur", "directeur"];
 
+// Rôles qui peuvent voir les descentes/prestations de TOUS les collègues de leur station.
+// Les rôles absents de cette liste ne voient que leurs propres entrées.
+export const ROLES_VUE_GLOBALE_EQUIPE = ["admin", "gerant", "superviseur", "directeur", "comptable"];
+
+/**
+ * Retourne true si le rôle donné a le droit de voir les saisies de tous ses collègues
+ * (descentes pompistes, prestations lavage, prestations entretien…).
+ * Un pompiste / laveur / mécanicien ne voit que ses propres entrées.
+ */
+export function peutVoirToutesLesEntrees(role) {
+  return ROLES_VUE_GLOBALE_EQUIPE.includes(role);
+}
+
 // ── Grille par entité : { entite: { action: [rôles] } } ─────────────────────
 const ENTITES = {
   rapport: {
