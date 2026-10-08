@@ -121,7 +121,7 @@ export function genererWorkbookExcel(r, c, stations) {
     Author: "DAMEL ENERGY — Energy & Station Management",
     Company: "DAMEL ENERGY",
     Keywords: "STAR ENERGY SÉNÉGAL",
-    LastAuthor: "DAMEL ENERGY OGSS Réseau",
+    LastAuthor: "FuelOS · DAMEL ENERGY",
     CreatedDate: new Date(),
   };
   XLSX.utils.book_append_sheet(wb, ws, "JOURNAL");

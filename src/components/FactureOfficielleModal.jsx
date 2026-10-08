@@ -1,4 +1,4 @@
-﻿import React, { useRef } from "react";
+import React, { useRef } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { FISCAL_CONFIG, genererPayloadCertification } from "../lib/facturation";
 import { BRAND_CONFIG } from "../lib/branding";
@@ -6,7 +6,7 @@ import { F, fmtDate, T } from "../lib/calcul";
 
 /**
  * Modal d'affichage et d'impression de Facture Officielle conforme OHADA / Sénégal
- * avec QR Code de certification fiscale DGID / OGSS Réseau.
+ * avec QR Code de certification fiscale DGID / FuelOS by DAMEL ENERGY.
  */
 export default function FactureOfficielleModal({ facture, onClose, onMarquerReglee }) {
   if (!facture) return null;
@@ -279,7 +279,7 @@ export default function FactureOfficielleModal({ facture, onClose, onMarquerRegl
               </div>
               <div className="text-[10px] space-y-0.5 text-gray-600">
                 <div className="font-bold text-blue-900 uppercase tracking-wider text-[10.5px]">
-                  Certification Fiscale DGID / OGSS
+                  Certification Fiscale DGID · FuelOS
                 </div>
                 <div>Ce QR code certifie l'authenticité de la facture émise par le réseau.</div>
                 <div className="font-mono text-gray-500 text-[9px] pt-1 break-all">
@@ -310,7 +310,7 @@ export default function FactureOfficielleModal({ facture, onClose, onMarquerRegl
               {FISCAL_CONFIG.emetteur.enseigne} S.A. au capital de {FISCAL_CONFIG.emetteur.capital} • NINEA : {FISCAL_CONFIG.emetteur.ninea} • RCCM : {FISCAL_CONFIG.emetteur.rccm}
             </div>
             <div>
-              Document émis via le progiciel certifié OGSS Réseau • Exploitation &amp; Gestion d'Énergie DAMEL ENERGY S.A.U
+              Document émis via FuelOS · DAMEL ENERGY • Progiciel certifié DGID • Exploitation &amp; Gestion d'Énergie
             </div>
           </div>
 

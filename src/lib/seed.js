@@ -212,20 +212,20 @@ export const SEED_PRODUITS_BOUTIQUE = [
 ];
 
 export const DEMO_USERS = [
-  { id: "u-admin", email: "admin@ogss.demo", password: "Admin2026!", nom_complet: "Administrateur OGSS", role: "admin", station_id: null },
-  { id: "u-gerant-hann", email: "gerant.hann@ogss.demo", password: "Hann2026!", nom_complet: "Gérant Hann", role: "gerant", station_id: "st-hann" },
-  { id: "u-gerant-ndia", email: "gerant.ndia@ogss.demo", password: "Ndia2026!", nom_complet: "Gérant Ndiakhirate", role: "gerant", station_id: "st-ndia" },
-  { id: "u-dir", email: "directeur@ogss.demo", password: "Dir2026!", nom_complet: "Directeur Général OGSS", role: "directeur", station_id: null },
-  { id: "u-compta", email: "comptable@ogss.demo", password: "Compta2026!", nom_complet: "Comptable OGSS", role: "comptable", station_id: null },
-  { id: "u-pompiste-hann", email: "pompiste@ogss.demo", password: "Pompe2026!", nom_complet: "Modou Fall (Pompiste)", role: "pompiste", station_id: "st-hann" },
-  { id: "u-lavage-hann", email: "lavage@ogss.demo", password: "Lavage2026!", nom_complet: "Aliou Diop (Lavage)", role: "lavage", station_id: "st-hann" },
-  { id: "u-mecanicien-hann", email: "entretien@ogss.demo", password: "Meca2026!", nom_complet: "Ousmane Sow (Technicien Entretien & Baie)", role: "mecanicien", station_id: "st-hann" },
-  { id: "u-boutique-hann", email: "boutique@ogss.demo", password: "Boutique2026!", nom_complet: "Fatou Ndiaye (Boutique)", role: "boutique", station_id: "st-hann" },
-  { id: "u-stock-hann", email: "stock@ogss.demo", password: "Stock2026!", nom_complet: "Ibrahima Sarr (Resp. Stock)", role: "stock", station_id: "st-hann" },
-  { id: "u-maint-hann", email: "maintenance@ogss.demo", password: "Maint2026!", nom_complet: "Cheikh Bâ (Technicien Maint.)", role: "maintenance", station_id: "st-hann" },
-  { id: "u-comm-hann", email: "commercial@ogss.demo", password: "Comm2026!", nom_complet: "Aïssatou Diallo (Commerciale)", role: "commercial", station_id: "st-hann" },
-  { id: "u-client-pro", email: "client.pro@ogss.demo", password: "Client2026!", nom_complet: "ITS Transport (Client Pro)", role: "client_pro", station_id: "st-hann", client_code: "CP-ITS" },
-  { id: "u-super", email: "superviseur@ogss.demo", password: "Super2026!", nom_complet: "Superviseur Réseau", role: "superviseur", station_id: null },
+  { id: "u-admin", email: "admin@fuelos.demo", password: "Admin2026!", nom_complet: "Administrateur FuelOS", role: "admin", station_id: null },
+  { id: "u-gerant-hann", email: "gerant.hann@fuelos.demo", password: "Hann2026!", nom_complet: "Gérant Hann", role: "gerant", station_id: "st-hann" },
+  { id: "u-gerant-ndia", email: "gerant.ndia@fuelos.demo", password: "Ndia2026!", nom_complet: "Gérant Ndiakhirate", role: "gerant", station_id: "st-ndia" },
+  { id: "u-dir", email: "directeur@fuelos.demo", password: "Dir2026!", nom_complet: "Directeur Général FuelOS", role: "directeur", station_id: null },
+  { id: "u-compta", email: "comptable@fuelos.demo", password: "Compta2026!", nom_complet: "Comptable FuelOS", role: "comptable", station_id: null },
+  { id: "u-pompiste-hann", email: "pompiste@fuelos.demo", password: "Pompe2026!", nom_complet: "Modou Fall (Pompiste)", role: "pompiste", station_id: "st-hann" },
+  { id: "u-lavage-hann", email: "lavage@fuelos.demo", password: "Lavage2026!", nom_complet: "Aliou Diop (Lavage)", role: "lavage", station_id: "st-hann" },
+  { id: "u-mecanicien-hann", email: "entretien@fuelos.demo", password: "Meca2026!", nom_complet: "Ousmane Sow (Technicien Entretien & Baie)", role: "mecanicien", station_id: "st-hann" },
+  { id: "u-boutique-hann", email: "boutique@fuelos.demo", password: "Boutique2026!", nom_complet: "Fatou Ndiaye (Boutique)", role: "boutique", station_id: "st-hann" },
+  { id: "u-stock-hann", email: "stock@fuelos.demo", password: "Stock2026!", nom_complet: "Ibrahima Sarr (Resp. Stock)", role: "stock", station_id: "st-hann" },
+  { id: "u-maint-hann", email: "maintenance@fuelos.demo", password: "Maint2026!", nom_complet: "Cheikh Bâ (Technicien Maint.)", role: "maintenance", station_id: "st-hann" },
+  { id: "u-comm-hann", email: "commercial@fuelos.demo", password: "Comm2026!", nom_complet: "Aïssatou Diallo (Commerciale)", role: "commercial", station_id: "st-hann" },
+  { id: "u-client-pro", email: "client.pro@fuelos.demo", password: "Client2026!", nom_complet: "ITS Transport (Client Pro)", role: "client_pro", station_id: "st-hann", client_code: "CP-ITS" },
+  { id: "u-super", email: "superviseur@fuelos.demo", password: "Super2026!", nom_complet: "Superviseur Réseau", role: "superviseur", station_id: null },
 ];
 
 export function referentielFromSeed() {

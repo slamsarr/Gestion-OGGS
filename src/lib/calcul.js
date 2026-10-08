@@ -1,17 +1,31 @@
 export const T = {
-  petrol: "#4A1559", // Star Energy Deep Purple / Brand Primary
-  purple: "#56216C", // Star Purple
-  orange: "#FA5200", // Star Dynamic Orange Energy
-  gold: "#FA5200",   // Star Dynamic Orange Accent
-  green: "#76A628",  // Star Station Canopy Green
-  lime: "#82B82C",   // Star Vivid Lime
-  magenta: "#B51772",// Star Ribbon Magenta
-  ink: "#1D1024",    // Deep Star Ink
-  paper: "#F7FAF4",  // Fresh clean light background
-  line: "#E1E7DB",   // Soft harmonious border
-  ok: "#76A628",     // Star Canopy Green
-  alert: "#DC2626",  // Red alert
-  muted: "#6B7280",  // Slate text
+  petrol: "#0B2545",
+  ink: "#0F172A",
+  inkSoft: "#1E293B",
+  muted: "#64748B",
+  paper: "#F6F8FC",
+  line: "#E2E8F0",
+  lineStrong: "#CBD5E1",
+  primary: "#1D4ED8",
+  primaryDeep: "#0B4EA2",
+  primaryInk: "#0B2545",
+  accent: "#F4B400",
+  accentWarm: "#D4A017",
+  success: "#10B981",
+  successBg: "#ECFDF5",
+  warning: "#F59E0B",
+  warningBg: "#FFFBEB",
+  danger: "#DC2626",
+  dangerBg: "#FEF2F2",
+  info: "#2563EB",
+  infoBg: "#EFF6FF",
+  purple: "#56216C",
+  orange: "#FA5200",
+  green: "#76A628",
+  lime: "#82B82C",
+  magenta: "#B51772",
+  ok: "#10B981",
+  alert: "#DC2626",
 };
 
 export const COUPURES = [10000, 5000, 2000, 1000, 500, 250, 200, 100, 50];

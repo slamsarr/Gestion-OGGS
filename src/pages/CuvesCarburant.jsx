@@ -19,6 +19,7 @@ export default function CuvesCarburant() {
   const stationId = profil?.station_id || "st-hann";
   const peutSaisirJauge = peutAgirProfil(profil, "stock", "ajuster");
   const peutDepotage = peutAgirProfil(profil, "depotage", "creer");
+  const peutValiderDepotage = peutAgirProfil(profil, "depotage", "valider");
 
   const [ref, setRef] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -293,7 +294,7 @@ export default function CuvesCarburant() {
   const handleValiderDepotage = async (e) => {
     e.preventDefault();
 
-    if (!peutDepotage) return flash("Tu n'as pas le droit de valider un dépotage.", "err");
+    if (!peutValiderDepotage) return flash("Tu n'as pas le droit de valider un dépotage. Cette action est réservée au Gérant / Direction.", "err");
     if (!depotageForm.numero_bl?.trim()) {
       return flash("Le numéro de BL du camion est obligatoire", "err");
     }
@@ -1283,13 +1284,31 @@ export default function CuvesCarburant() {
               </div>
             </div>
 
-            <button
-              type="submit"
-              className="w-full py-3 rounded-xl text-xs font-bold text-gray-900 shadow-md transition-all hover:opacity-95 mt-4 flex items-center justify-center gap-2"
-              style={{ background: T.gold }}
-            >
-              <span>📄 Valider le Dépotage Convoi & Générer le Procès-Verbal Officiel</span>
-            </button>
+            <div className="flex flex-col sm:flex-row gap-2 mt-4">
+              {!peutValiderDepotage && (
+                <div className="flex-1 text-xs text-center p-3 rounded-xl border-2 border-dashed border-amber-300 bg-amber-50 text-amber-900 font-semibold flex items-center justify-center gap-2">
+                  <span>🔒</span>
+                  <span>Validation réservée au Gérant / Direction. Enregistrement en brouillon demandé.</span>
+                </div>
+              )}
+              <button
+                type="submit"
+                disabled={!peutValiderDepotage && !peutDepotage}
+                className={`w-full py-3 rounded-xl text-xs font-bold shadow-md transition-all mt-4 sm:mt-0 flex items-center justify-center gap-2 ${
+                  !peutValiderDepotage && !peutDepotage ? "opacity-50 cursor-not-allowed" : "hover:opacity-95"
+                }`}
+                style={{ background: !peutValiderDepotage ? "#94a3b8" : T.gold, color: !peutValiderDepotage ? "white" : "#111827" }}
+                title={!peutValiderDepotage ? "Réservé au Gérant / Direction" : "Valider le dépotage"}
+              >
+                {peutValiderDepotage ? (
+                  <span>📄 Valider le Dépotage Convoi & Générer le Procès-Verbal Officiel</span>
+                ) : peutDepotage ? (
+                  <span>💾 Enregistrer comme Brouillon (en attente de validation Gérant)</span>
+                ) : (
+                  <span>⛔ Accès refusé</span>
+                )}
+              </button>
+            </div>
           </div>
         </form>
       )}

@@ -1,9 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { loadReferentiel, stocksTheoriques } from "../lib/api";
-import { F, T } from "../lib/calcul";
+import { F, T, n } from "../lib/calcul";
 import { Section, Loading } from "../components/ui";
+import { useAuth } from "../context/AuthContext";
+import { peutAgirProfil, DIRECTION } from "../lib/permissions";
 
 export default function Stocks() {
+  const { profil } = useAuth();
+  const role = profil?.role || "";
+  const stationScope = profil?.station_id || "";
+  const peutAjuster = peutAgirProfil(profil, "stock", "ajuster");
+  const peutGerer = peutAgirProfil(profil, "produit", "gerer");
+  const vueReseau = DIRECTION.includes(role) || role === "comptable" || !stationScope;
+
   const [ref, setRef] = useState(null);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -26,7 +35,7 @@ export default function Stocks() {
       }
     })();
     return () => { alive = false; };
-  }, []);
+  }, [vueReseau, stationScope]);
 
   if (loading) return <Loading />;
 
@@ -34,23 +43,44 @@ export default function Stocks() {
   const filtered = filtre === "TOUS" ? rows : rows.filter((r) => r.famille === filtre);
   const alertes = rows.filter((r) => r.stock <= r.seuil && r.stock >= 0);
   const negatifs = rows.filter((r) => r.stock < 0);
-  const stations = ref?.stations || [];
+  const stations = (ref?.stations || []).filter((s) => vueReseau ? true : s.id === stationScope || s.code === stationScope || s.id === stationScope.replace("st-", "") || s.code === stationScope.replace("st-", ""));
 
   return (
     <div>
-      <h1 className="text-xl font-bold mb-1" style={{ color: T.petrol }}>Stocks lubrifiants & gaz</h1>
-      <p className="text-sm mb-4" style={{ color: T.muted }}>Stock théorique basé sur les rapports validés</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+        <div>
+          <h1 className="text-xl font-bold mb-1" style={{ color: T.petrol }}>Stocks lubrifiants & gaz</h1>
+          <p className="text-sm" style={{ color: T.muted }}>Stock théorique basé sur les rapports validés</p>
+        </div>
+        <div className="flex flex-wrap gap-2 items-center">
+          {!peutAjuster && (
+            <span className="px-3 py-1.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1.5">
+              <span>👁️</span> Lecture seule
+            </span>
+          )}
+          {peutGerer && (
+            <button className="px-3 py-1.5 rounded-xl text-xs font-bold shadow-sm transition hover:-translate-y-0.5" style={{ background: T.gold, color: "#111827" }}>
+              ➕ Nouveau produit
+            </button>
+          )}
+          {peutAjuster && (
+            <button className="px-3 py-1.5 rounded-xl text-xs font-bold shadow-sm text-white transition hover:-translate-y-0.5" style={{ background: T.petrol }}>
+              ⚖️ Inventaire / Ajustement
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* Alertes stock bas */}
       {(alertes.length > 0 || negatifs.length > 0) && (
-        <div className="rounded-lg px-3 py-2 mb-4 text-sm" style={{ background: "#FBEAE5", color: T.alert }}>
-          {negatifs.length > 0 && <div>🔴 Stock négatif : {negatifs.map((r) => `${r.produit} @ ${r.station}`).join(", ")}</div>}
-          {alertes.length > 0 && <div>⚠️ Stock bas (&le; seuil) : {alertes.map((r) => `${r.produit} (${r.stock}) @ ${r.station}`).join(", ")}</div>}
+        <div className="rounded-xl px-4 py-3 mb-4 text-sm shadow-sm border border-rose-100" style={{ background: "#FBEAE5", color: T.alert }}>
+          {negatifs.length > 0 && <div className="font-bold">🔴 Stock négatif : {negatifs.map((r) => `${r.produit} (${n(r.stock)}) @ ${r.station}`).join(", ")}</div>}
+          {alertes.length > 0 && <div>⚠️ Stock bas (&le; seuil) : {alertes.length} produit(s) concerné(s) {alertes.slice(0,4).map((r) => `${r.produit} (${r.stock}) @ ${r.station}`).join(", ")}{alertes.length > 4 ? "…" : ""}</div>}
         </div>
       )}
 
       {/* Filtre famille */}
-      <div className="flex gap-2 mb-4">
+      <div className="flex flex-wrap gap-2 mb-4">
         {familles.map((f) => (
           <button
             key={f}

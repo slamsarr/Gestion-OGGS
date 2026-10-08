@@ -867,7 +867,7 @@ export async function deleteRapport(doc, ref) {
 }
 
 // ── Paramètres réseau ──
-export const PARAMETRES_DEFAUT = { id: "reseau", nom_reseau: "OGSS Réseau", devise: "FCFA", adresse: "", contact: "" };
+export const PARAMETRES_DEFAUT = { id: "reseau", nom_reseau: "STAR ENERGY", devise: "FCFA", adresse: "", contact: "" };
 
 export async function getParametres() {
   const sb = getSupabase();

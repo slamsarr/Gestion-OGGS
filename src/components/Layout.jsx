@@ -4,51 +4,56 @@ import { useAuth } from "../context/AuthContext";
 import { flushQueue, listNotifications, marquerNotificationLue, getParametres } from "../lib/api";
 import { db } from "../lib/db";
 import { ROLE_LABELS, peutVoirNav } from "../lib/permissions";
-import { OperatorBadge, BrandDualFooter } from "./BrandingElements";
+import { OperatorBadge, BrandDualFooter, ProductBadge } from "./BrandingElements";
+import { Button } from "./ui";
 
 const NAV_POLES = [
   {
     id: "pilotage",
-    label: "📊 Pilotage & Cockpit",
+    label: "Pilotage & Cockpit",
+    icon: "📊",
     items: [
       { to: "/gerant", label: "Poste de Commande", icon: "🏪" },
       { to: "/", label: "Cockpit Réseau", icon: "📈" },
-      { to: "/bilan-site", label: "Bilan Journalier Site", icon: "📑" },
-      { to: "/rapport", label: "Clôture Officielle (Direction)", icon: "📋" },
+      { to: "/bilan-site", label: "Bilan Journalier", icon: "📑" },
+      { to: "/rapport", label: "Clôture Officielle", icon: "📋" },
       { to: "/historique", label: "Historique Clôtures", icon: "📁" },
     ],
   },
   {
     id: "operations",
-    label: "⛽ Opérations Terrain",
+    label: "Opérations",
+    icon: "⛽",
     items: [
       { to: "/descente", label: "Descentes Pompistes", icon: "⛽" },
       { to: "/cuves", label: "Cuves & Dépotage", icon: "🛢️" },
-      { to: "/stocks", label: "Stocks Produits & Cuves", icon: "📦" },
-      { to: "/fidelite", label: "Fidélité Clients", icon: "🎁" },
-      { to: "/lavage", label: "Lavage Auto", icon: "🚿" },
-      { to: "/entretien", label: "Entretien & Baie Rapide", icon: "🔧" },
-      { to: "/boutique", label: "Boutique / Shop", icon: "🛒" },
+      { to: "/stocks", label: "Stocks", icon: "📦" },
+      { to: "/fidelite", label: "Fidélité", icon: "🎁" },
+      { to: "/lavage", label: "Lavage", icon: "🚿" },
+      { to: "/entretien", label: "Entretien", icon: "🔧" },
+      { to: "/boutique", label: "Boutique", icon: "🛒" },
       { to: "/maintenance", label: "Maintenance", icon: "🛠️" },
     ],
   },
   {
     id: "finance",
-    label: "💼 Finance & Crédits",
+    label: "Finance",
+    icon: "💼",
     items: [
-      { to: "/clients-pro", label: "Clients Pro & Factures OHADA", icon: "📄" },
-      { to: "/depenses", label: "Dépenses & Justifs", icon: "🧾" },
-      { to: "/finance", label: "Finance & Caisse", icon: "💰" },
-      { to: "/fournisseurs", label: "Fournisseurs & BL", icon: "🚚" },
+      { to: "/clients-pro", label: "Clients Pro", icon: "📄" },
+      { to: "/depenses", label: "Dépenses", icon: "🧾" },
+      { to: "/finance", label: "Caisse & Trésorerie", icon: "💰" },
+      { to: "/fournisseurs", label: "Fournisseurs", icon: "🚚" },
     ],
   },
   {
     id: "gestion",
-    label: "⚙️ Configuration & Équipe",
+    label: "Équipe & Config",
+    icon: "⚙️",
     items: [
-      { to: "/parametres", label: "👥 Équipe & Paramètres", icon: "👥" },
-      { to: "/pompistes", label: "👷 Équipe, Comptes & Quarts", icon: "👷" },
-      { to: "/pistolets", label: "🔫 Pistolets & Pompes", icon: "🔫" },
+      { to: "/parametres", label: "Paramètres", icon: "👥" },
+      { to: "/pompistes", label: "Équipe & Quarts", icon: "👷" },
+      { to: "/pistolets", label: "Pistolets & Pompes", icon: "🔫" },
     ],
   },
 ];
@@ -68,7 +73,6 @@ export default function Layout() {
 
   const unread = notifs.filter((n) => !n.lu).length;
 
-  // Filtrer les pôles et leurs liens selon le rôle
   const availablePoles = useMemo(() => {
     return NAV_POLES.map((pole) => ({
       ...pole,
@@ -76,7 +80,6 @@ export default function Layout() {
     })).filter((pole) => pole.items.length > 0);
   }, [role]);
 
-  // Détecter le pôle actif selon l'URL courante
   const currentPath = location.pathname;
   const detectedPole = useMemo(() => {
     for (const pole of availablePoles) {
@@ -101,7 +104,6 @@ export default function Layout() {
     return () => { alive = false; };
   }, [cloud]);
 
-  // Check pending queue count
   useEffect(() => {
     const check = async () => {
       try { const count = await db.queue.count(); setPending(count); } catch {}
@@ -111,7 +113,6 @@ export default function Layout() {
     return () => clearInterval(interval);
   }, []);
 
-  // Auto-sync when coming back online
   useEffect(() => {
     const syncOnline = async () => {
       if (!navigator.onLine) return;
@@ -141,178 +142,176 @@ export default function Layout() {
 
   if (!role) {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-8 text-center">
-        <p className="text-sm text-slate-700 font-medium">Ce compte n’a pas encore de rôle attribué.</p>
+      <div className="min-h-screen bg-surface-base flex flex-col items-center justify-center p-8 text-center">
+        <div className="w-16 h-16 rounded-2xl flex items-center justify-center bg-fuelos-50 border border-fuelos-200 mb-4 shadow-card">
+          <img src="/branding/damel-energy/damel-energy-icon.svg" alt="Damel Energy" className="w-9 h-9 object-contain" />
+        </div>
+        <h2 className="text-lg font-extrabold text-fuelos-900 mb-1">FuelOS · DAMEL ENERGY</h2>
+        <p className="text-sm text-slate-600 font-medium">Ce compte n’a pas encore de rôle attribué.</p>
         <p className="text-xs text-slate-500 mt-2 max-w-sm">Contacte le responsable réseau. Aucun droit gérant n’est accordé par défaut.</p>
-        <button
-          type="button"
-          className="mt-6 px-4 py-2 rounded-lg bg-rose-50 text-rose-700 text-xs font-bold border border-rose-200"
+        <Button
+          variant="danger"
           onClick={async () => {
             await logout();
             navigate("/login");
           }}
+          className="mt-6"
+          icon="🚪"
         >
           Se déconnecter
-        </button>
+        </Button>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans">
-      {/* HEADER SUPÉRIEUR */}
-      <header className="sticky top-0 z-40 bg-gradient-to-r from-[#102A43] via-[#0B4EA2] to-[#08336D] text-white shadow-md border-b-2 border-amber-400">
-        <div className="max-w-6xl mx-auto px-3 sm:px-4 py-2.5 flex items-center justify-between gap-3">
-          {/* Logo & Identité Station */}
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setMobileMenuOpen((v) => !v)}
-              className="md:hidden p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-slate-200"
-              aria-label="Menu"
-            >
-              <span className="text-lg">☰</span>
-            </button>
-            <NavLink to="/" className="flex items-center gap-2.5 group">
-              <div className="h-9 px-2 rounded-xl bg-white shadow-sm border border-blue-400/50 shrink-0 flex items-center justify-center group-hover:scale-105 transition-transform">
-                <img src="/branding/damel-energy/damel-energy-logo.svg" alt="DAMEL ENERGY" className="h-6 w-auto object-contain" />
-              </div>
-              <div>
-                <div className="font-black text-sm tracking-tight text-white flex items-center gap-1.5 flex-wrap">
-                  <span className="text-white tracking-wide">DAMEL ENERGY</span>
-                  <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-blue-500 text-white shadow-xs">SERVICES &amp; GESTION</span>
-                  {/* Logo et enseigne Star Energy au second plan */}
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-950/90 text-amber-300 border border-purple-500/50 ml-1">
-                    <img src="/star_energy_logo.jpg" alt="Star Energy" className="w-3.5 h-3.5 object-contain rounded-xs" />
-                    <span>{nomReseau}</span>
-                  </span>
+    <div className="min-h-screen bg-surface-base text-slate-800 flex flex-col font-sans antialiased">
+      <header className="sticky top-0 z-40 border-b border-fuelos-900/20 shadow-sm">
+        <div className="bg-gradient-to-r from-fuelos-950 via-fuelos-900 to-damel-navy-ink text-white">
+          <div className="max-w-7xl mx-auto px-3 sm:px-5 lg:px-6 py-2.5 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen((v) => !v)}
+                className="md:hidden btn-icon bg-white/10 hover:bg-white/20 text-slate-200 border border-white/10"
+                aria-label="Menu"
+              >
+                <span className="text-base">☰</span>
+              </button>
+              <NavLink to="/" className="flex items-center gap-3 group">
+                <div className="h-10 px-2.5 rounded-xl bg-white shadow-button border border-white/80 shrink-0 flex items-center justify-center group-hover:scale-[1.03] transition-transform">
+                  <img src="/branding/damel-energy/damel-energy-logo.svg" alt="DAMEL ENERGY" className="h-6.5 w-auto object-contain" style={{ height: "26px" }} />
                 </div>
-                <div className="text-[10px] text-blue-200/90 font-medium truncate max-w-[200px] sm:max-w-none flex items-center gap-1.5">
-                  <span>{profil?.stations?.nom || (profil?.station_id ? `Station ${profil.station_id.replace("st-", "").toUpperCase()}` : "Réseau de stations-service affiliées")}</span>
-                  <span className="text-amber-300 font-bold hidden sm:inline lg:hidden">• Station {nomReseau}</span>
-                </div>
-              </div>
-            </NavLink>
-          </div>
-
-          {/* Statut & Outils Utilisateur */}
-          <div className="flex items-center gap-2 text-xs">
-            {/* Indicateur de connectivité */}
-            <span
-              className={`px-2 py-0.5 rounded-full flex items-center gap-1.5 text-[11px] font-semibold border ${
-                online
-                  ? "bg-emerald-950/60 text-emerald-300 border-emerald-800/60"
-                  : "bg-rose-950/60 text-rose-300 border-rose-800/60 animate-pulse"
-              }`}
-            >
-              <span className={`w-1.5 h-1.5 rounded-full ${online ? "bg-emerald-400" : "bg-rose-400"}`} />
-              <span className="hidden sm:inline">{online ? "En ligne" : "Hors ligne"}</span>
-              {pending > 0 && (
-                <span className="bg-amber-400 text-slate-950 font-bold px-1 rounded-full text-[10px]">
-                  {pending} en attente
-                </span>
-              )}
-            </span>
-
-            {/* Notifications / Alertes */}
-            {cloud && (
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setShowNotifs((v) => !v)}
-                  className="px-2.5 py-1 rounded-lg border border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-[11px] font-medium transition flex items-center gap-1"
-                >
-                  <span>🔔</span>
-                  {unread > 0 && (
-                    <span className="w-4 h-4 rounded-full bg-rose-500 text-white font-bold flex items-center justify-center text-[10px]">
-                      {unread}
+                <div className="flex flex-col leading-tight">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-black text-[15px] tracking-tight text-white">FuelOS</span>
+                    <ProductBadge variant="dark-mini" />
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-white/10 text-fuelos-200 border border-white/15">
+                      <img src="/star_energy_logo.jpg" alt="Star Energy" className="w-3.5 h-3.5 object-contain rounded-[2px]" />
+                      <span>{nomReseau}</span>
                     </span>
-                  )}
-                </button>
-                {showNotifs && (
-                  <div className="absolute right-0 mt-2 w-80 rounded-xl shadow-xl text-left p-2.5 z-50 bg-white text-slate-800 border border-slate-200">
-                    <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100 font-bold text-xs text-slate-900">
-                      <span>Alertes & Notifications</span>
-                      <span className="text-[10px] text-slate-400">{notifs.length} total</span>
-                    </div>
-                    {notifs.length === 0 && <div className="text-xs p-3 text-center text-slate-400">Aucune alerte récente</div>}
-                    <div className="max-h-64 overflow-y-auto space-y-1">
-                      {notifs.slice(0, 8).map((n) => (
-                        <button
-                          key={n.id}
-                          type="button"
-                          className={`block w-full text-left text-xs p-2 rounded-lg transition ${n.lu ? "bg-slate-50 hover:bg-slate-100" : "bg-amber-50/80 hover:bg-amber-100 border border-amber-200/60"}`}
-                          onClick={async () => {
-                            await marquerNotificationLue(n.id);
-                            setNotifs((list) => list.map((x) => (x.id === n.id ? { ...x, lu: true } : x)));
-                          }}
-                        >
-                          <div className="font-semibold text-slate-900">{n.titre}</div>
-                          <div className="text-[11px] text-slate-600 mt-0.5">{n.message}</div>
-                        </button>
-                      ))}
-                    </div>
                   </div>
-                )}
-              </div>
-            )}
-
-            {/* Profil utilisateur & Rôle */}
-            <div className="hidden sm:flex flex-col text-right px-2 border-l border-slate-800">
-              <span className="font-bold text-xs text-slate-200 leading-tight">{profil?.nom_complet || "Utilisateur"}</span>
-              <span className="text-[10px] text-amber-300 font-medium">{ROLE_LABELS[role] || role}</span>
+                  <div className="text-[10.5px] text-fuelos-200/90 font-medium flex items-center gap-1.5 mt-0.5">
+                    <span>{profil?.stations?.nom || (profil?.station_id ? `Station ${profil.station_id.replace("st-", "").toUpperCase()}` : "Gestion de stations-service")}</span>
+                  </div>
+                </div>
+              </NavLink>
             </div>
 
-            {/* Déconnexion */}
-            <button
-              onClick={async () => {
-                await logout();
-                navigate("/login");
-              }}
-              title="Se déconnecter"
-              className="p-1.5 sm:px-2.5 sm:py-1 rounded-lg border border-slate-700 bg-slate-800/80 hover:bg-rose-900/60 hover:border-rose-700 text-slate-300 hover:text-white text-xs font-semibold transition"
-            >
-              <span className="sm:hidden">✕</span>
-              <span className="hidden sm:inline">Quitter</span>
-            </button>
+            <div className="flex items-center gap-2 text-xs">
+              <span
+                className={`px-2.5 py-1 rounded-full flex items-center gap-1.5 text-[11px] font-semibold border backdrop-blur-sm ${
+                  online
+                    ? "bg-emerald-500/15 text-emerald-300 border-emerald-400/30"
+                    : "bg-red-500/15 text-red-300 border-red-400/30 animate-pulse"
+                }`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${online ? "bg-emerald-400" : "bg-red-400"}`} />
+                <span className="hidden sm:inline">{online ? "En ligne" : "Hors ligne"}</span>
+                {pending > 0 && (
+                  <span className="bg-damel-yellow text-fuelos-950 font-bold px-1.5 rounded-full text-[10px]">
+                    {pending}
+                  </span>
+                )}
+              </span>
+
+              {cloud && (
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowNotifs((v) => !v)}
+                    className="btn-icon bg-white/10 hover:bg-white/20 text-slate-200 border border-white/10"
+                  >
+                    <span className="text-sm">🔔</span>
+                    {unread > 0 && (
+                      <span className="absolute -top-0.5 -right-0.5 w-4.5 h-4.5 rounded-full bg-red-500 text-white font-bold flex items-center justify-center text-[10px] shadow-md" style={{ width: "18px", height: "18px" }}>
+                        {unread > 9 ? "9+" : unread}
+                      </span>
+                    )}
+                  </button>
+                  {showNotifs && (
+                    <div className="absolute right-0 mt-2 w-80 rounded-xl shadow-pop text-left p-2.5 z-50 bg-white text-slate-800 border border-surface-border animate-subtle-in">
+                      <div className="flex items-center justify-between pb-2 mb-2 border-b border-surface-border font-extrabold text-xs text-fuelos-900">
+                        <span>🔔 Alertes & Notifications</span>
+                        <span className="text-[10px] text-slate-400 font-medium">{notifs.length} total</span>
+                      </div>
+                      {notifs.length === 0 && <div className="text-xs p-4 text-center text-slate-400">Aucune alerte récente</div>}
+                      <div className="max-h-72 overflow-y-auto space-y-1">
+                        {notifs.slice(0, 8).map((n) => (
+                          <button
+                            key={n.id}
+                            type="button"
+                            className={`block w-full text-left text-xs p-2.5 rounded-lg transition ${n.lu ? "bg-white hover:bg-surface-muted border border-transparent" : "bg-amber-50/80 hover:bg-amber-50 border border-amber-200/60"}`}
+                            onClick={async () => {
+                              await marquerNotificationLue(n.id);
+                              setNotifs((list) => list.map((x) => (x.id === n.id ? { ...x, lu: true } : x)));
+                            }}
+                          >
+                            <div className="font-bold text-slate-900">{n.titre}</div>
+                            <div className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">{n.message}</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="hidden sm:flex flex-col text-right px-2.5 border-l border-white/10 leading-tight">
+                <span className="font-bold text-xs text-white">{profil?.nom_complet || "Utilisateur"}</span>
+                <span className="text-[10.5px] text-damel-yellow font-semibold">{ROLE_LABELS[role] || role}</span>
+              </div>
+
+              <button
+                onClick={async () => {
+                  await logout();
+                  navigate("/login");
+                }}
+                title="Se déconnecter"
+                className="btn-icon bg-white/10 hover:bg-red-500/20 hover:border-red-400/30 text-slate-300 hover:text-white border border-white/10 transition-colors"
+              >
+                <span className="text-sm sm:hidden">✕</span>
+                <span className="hidden sm:inline text-xs font-semibold px-1">Quitter</span>
+              </button>
+            </div>
           </div>
+
+          {syncMsg && (
+            <div className="bg-emerald-500/20 text-emerald-200 text-[11px] py-1.5 px-4 text-center font-semibold border-t border-emerald-500/20">
+              ✓ {syncMsg}
+            </div>
+          )}
+
+          {availablePoles.length > 1 && (
+            <div className="hidden md:flex max-w-7xl mx-auto px-5 lg:px-6 gap-1 border-t border-white/10 bg-fuelos-950/50">
+              {availablePoles.map((pole) => {
+                const isSelected = pole.id === selectedPoleId;
+                return (
+                  <button
+                    key={pole.id}
+                    type="button"
+                    onClick={() => setSelectedPoleId(pole.id)}
+                    className={`px-4 py-2.5 font-bold transition-all border-b-[3px] flex items-center gap-2 text-[12.5px] ${
+                      isSelected
+                        ? "border-damel-yellow text-white bg-white/[0.07]"
+                        : "border-transparent text-fuelos-200/80 hover:text-white hover:bg-white/[0.04]"
+                    }`}
+                  >
+                    <span className="text-base">{pole.icon}</span>
+                    <span>{pole.label}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                      isSelected ? "bg-damel-yellow text-fuelos-950" : "bg-white/10 text-fuelos-200/80"
+                    }`}>
+                      {pole.items.length}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        {/* Message de synchronisation automatique */}
-        {syncMsg && (
-          <div className="bg-emerald-900/80 text-emerald-200 text-xs py-1 px-4 text-center font-medium border-t border-emerald-800">
-            ✓ {syncMsg}
-          </div>
-        )}
-
-        {/* NIVEAU 1 : SÉLECTEUR DE PÔLES MÉTIER (Desktop) */}
-        {availablePoles.length > 1 && (
-          <div className="hidden md:flex max-w-6xl mx-auto px-4 gap-1 border-t border-blue-900/60 text-xs bg-[#0C2338]">
-            {availablePoles.map((pole) => {
-              const isSelected = pole.id === selectedPoleId;
-              return (
-                <button
-                  key={pole.id}
-                  type="button"
-                  onClick={() => setSelectedPoleId(pole.id)}
-                  className={`px-4 py-2 font-bold transition-all border-b-2 flex items-center gap-1.5 ${
-                    isSelected
-                      ? "border-amber-400 text-white bg-blue-900/50"
-                      : "border-transparent text-blue-200/70 hover:text-white hover:bg-blue-900/20"
-                  }`}
-                >
-                  <span>{pole.label}</span>
-                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-blue-950 text-amber-300 border border-blue-800">
-                    {pole.items.length}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {/* NIVEAU 2 : SOUS-NAVIGATION DU PÔLE ACTIF */}
-        <nav className="max-w-6xl mx-auto px-3 sm:px-4 flex overflow-x-auto gap-1.5 py-2 bg-[#091A2A] border-t border-blue-950 no-scrollbar">
+        <nav className="max-w-7xl mx-auto px-3 sm:px-5 lg:px-6 flex overflow-x-auto gap-1.5 py-3 bg-surface-card/50 backdrop-blur border-b border-surface-border no-scrollbar">
           {activePole?.items.map((item) => {
             const isRoot = item.to === "/";
             return (
@@ -321,14 +320,14 @@ export default function Layout() {
                 to={item.to}
                 end={isRoot}
                 className={({ isActive }) =>
-                  `px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap flex items-center gap-1.5 transition-all shadow-xs ${
+                  `px-3.5 py-2 rounded-xl text-[11.5px] font-semibold whitespace-nowrap flex items-center gap-2 transition-all duration-150 ${
                     isActive
-                      ? "bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 shadow-md font-bold ring-1 ring-amber-300"
-                      : "bg-blue-950/70 text-blue-100 hover:bg-blue-900/80 hover:text-white border border-blue-900/40"
+                      ? "bg-gradient-to-br from-damel-blue to-fuelos-700 text-white shadow-button font-bold"
+                      : "bg-white text-slate-600 hover:bg-surface-muted border border-surface-border hover:border-surface-border-strong"
                   }`
                 }
               >
-                <span>{item.icon}</span>
+                <span className="text-base">{item.icon}</span>
                 <span>{item.label}</span>
               </NavLink>
             );
@@ -336,42 +335,44 @@ export default function Layout() {
         </nav>
       </header>
 
-      {/* TIROIR MENU MOBILE COMPLET */}
       {mobileMenuOpen && (
-        <div className="fixed inset-0 z-50 md:hidden bg-black/70 backdrop-blur-xs flex">
-          <div className="w-4/5 max-w-sm bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-left duration-200">
-            <div className="p-4 bg-gradient-to-r from-[#102A43] via-[#0B4EA2] to-[#08336D] text-white flex items-center justify-between border-b-2 border-amber-400">
+        <div className="fixed inset-0 z-50 md:hidden bg-black/60 backdrop-blur-sm flex">
+          <div className="w-[85%] max-w-sm bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-left duration-200">
+            <div className="p-4 bg-gradient-to-r from-fuelos-950 via-fuelos-900 to-damel-navy-ink text-white flex items-center justify-between border-b-2 border-damel-yellow">
               <div className="flex items-center gap-2.5">
-                <div className="h-8 px-2 rounded-lg bg-white shadow-sm border border-blue-400 shrink-0 flex items-center justify-center">
+                <div className="h-9 px-2 rounded-xl bg-white shadow-sm border border-white/90 shrink-0 flex items-center justify-center">
                   <img src="/branding/damel-energy/damel-energy-logo.svg" alt="DAMEL ENERGY" className="h-5 w-auto object-contain" />
                 </div>
                 <div>
-                  <div className="font-extrabold text-sm flex items-center gap-1.5">
-                    <span>DAMEL ENERGY</span>
-                    <span className="text-[9px] px-1 py-0.2 bg-purple-900 text-amber-300 rounded font-bold">
+                  <div className="font-extrabold text-[13px] flex items-center gap-1.5">
+                    <span>FuelOS</span>
+                    <span className="text-[9px] px-1.5 py-0.25 bg-star-purple/90 text-amber-200 rounded font-bold">
                       {nomReseau}
                     </span>
                   </div>
-                  <div className="text-[10px] text-blue-200 font-medium">{profil?.nom_complet} ({ROLE_LABELS[role] || role})</div>
+                  <div className="text-[10.5px] text-fuelos-200 font-medium">{profil?.nom_complet} · {ROLE_LABELS[role] || role}</div>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setMobileMenuOpen(false)}
-                className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold"
+                className="btn-icon bg-white/10 hover:bg-white/20 text-white border border-white/10"
               >
                 ✕
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div className="flex-1 overflow-y-auto p-4 space-y-5">
               {availablePoles.map((pole) => (
-                <div key={pole.id} className="space-y-1">
-                  <div className="text-[11px] font-extrabold text-purple-950 uppercase tracking-wider px-2 mb-1 flex items-center justify-between">
-                    <span>{pole.label}</span>
-                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-purple-100 text-purple-800">{pole.items.length}</span>
+                <div key={pole.id} className="space-y-2">
+                  <div className="text-[11px] font-extrabold text-fuelos-900 uppercase tracking-wider px-1 mb-1 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <span className="text-sm">{pole.icon}</span>
+                      {pole.label}
+                    </span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-fuelos-50 text-fuelos-700 border border-fuelos-100">{pole.items.length}</span>
                   </div>
-                  <div className="grid gap-1">
+                  <div className="grid gap-1.5">
                     {pole.items.map((item) => (
                       <NavLink
                         key={item.to}
@@ -379,14 +380,14 @@ export default function Layout() {
                         end={item.to === "/"}
                         onClick={() => setMobileMenuOpen(false)}
                         className={({ isActive }) =>
-                          `flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition ${
+                          `flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[12px] font-semibold transition-all ${
                             isActive
-                              ? "bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-bold shadow-xs"
-                              : "text-slate-700 hover:bg-purple-50"
+                              ? "bg-gradient-to-br from-damel-blue to-fuelos-700 text-white shadow-button font-bold"
+                              : "text-slate-700 hover:bg-fuelos-50 border border-transparent hover:border-fuelos-100"
                           }`
                         }
                       >
-                        <span className="text-base">{item.icon}</span>
+                        <span className="text-lg">{item.icon}</span>
                         <span>{item.label}</span>
                       </NavLink>
                     ))}
@@ -395,34 +396,32 @@ export default function Layout() {
               ))}
             </div>
 
-            <div className="p-3 border-t bg-slate-50 space-y-2">
+            <div className="p-3 border-t bg-surface-base space-y-2.5">
               <div className="flex items-center justify-center">
                 <OperatorBadge variant="light" />
               </div>
-              <button
-                type="button"
+              <Button
+                variant="danger"
+                fullWidth
                 onClick={async () => {
                   setMobileMenuOpen(false);
                   await logout();
                   navigate("/login");
                 }}
-                className="w-full py-2.5 rounded-xl bg-rose-50 text-rose-700 font-bold text-xs border border-rose-200 flex items-center justify-center gap-2"
+                icon="🚪"
               >
-                <span>🚪</span>
-                <span>Se déconnecter</span>
-              </button>
+                Se déconnecter
+              </Button>
             </div>
           </div>
           <div className="flex-1" onClick={() => setMobileMenuOpen(false)} />
         </div>
       )}
 
-      {/* CONTENU PRINCIPAL */}
-      <main className="max-w-6xl mx-auto w-full px-3 sm:px-4 py-5 flex-1">
+      <main className="max-w-7xl mx-auto w-full px-3 sm:px-5 lg:px-6 py-5 sm:py-6 flex-1">
         <Outlet />
       </main>
 
-      {/* PIED DE PAGE DOUBLE MARQUE STAR ENERGY & DAMEL ENERGY */}
       <BrandDualFooter />
     </div>
   );

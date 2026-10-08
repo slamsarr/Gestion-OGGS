@@ -1,30 +1,44 @@
 /**
- * Configuration de marque centralisée : STAR ENERGY & DAMEL ENERGY
+ * Configuration de marque centralisée : FuelOS by DAMEL ENERGY
  *
- * Principes fondamentaux (§2 & §3 du cahier des charges) :
- * - STAR ENERGY = Enseigne principale / Stations / Visibilité terrain & pistolets
- * - DAMEL ENERGY = Opérateur / Gestion / Exploitation / Performance énergétique
+ * Hiérarchie des marques (ordonnée par importance visuelle) :
+ * 1. FuelOS        = Nom du produit / Plateforme logicielle
+ * 2. DAMEL ENERGY  = Propriétaire & Éditeur (corporate, confiance, expertise)
+ * 3. STAR ENERGY   = Exploitant / Enseigne affiliée sur le terrain (accent contextuel)
  *
- * Règle d'or : Ne jamais créer de confusion ou de concurrence visuelle entre les deux marques.
+ * Règle d'or : La plateforme = FuelOS by DAMEL ENERGY.
+ *              STAR ENERGY n'apparaît que comme identité de station.
  */
 
+export const PRODUCT = {
+  name: "FuelOS",
+  tagline: "Plateforme de gestion de stations-service",
+  taglineShort: "Station OS",
+  version: "2.0",
+};
+
 export const BRAND_CONFIG = {
-  // Marque principale : DAMEL ENERGY (Services & Gestion de Réseau)
+  platform: {
+    product: PRODUCT.name,
+    fullName: "FuelOS by DAMEL ENERGY",
+  },
+  // Propriétaire & Éditeur : DAMEL ENERGY
   operator: {
     name: "DAMEL ENERGY",
     brandTitle: "DAMEL ENERGY",
     role: "ENERGY & STATION MANAGEMENT",
     promise: "ENERGY. OPERATIONS. PERFORMANCE.",
     promiseFr: "GESTION • EXPLOITATION • PERFORMANCE",
-    operatedBy: "Services & Management DAMEL ENERGY",
-    managedBy: "Plateforme DAMEL ENERGY",
-    poweredBy: "Propulsé par DAMEL ENERGY",
+    operatedBy: "Operated by DAMEL ENERGY",
+    managedBy: "Managed by DAMEL ENERGY",
+    poweredBy: "Propulsé par FuelOS · DAMEL ENERGY",
     signatures: {
       management: "ENERGY & STATION MANAGEMENT",
       performance: "ENERGY. OPERATIONS. PERFORMANCE.",
       fr: "GESTION • EXPLOITATION • PERFORMANCE",
-      operatedBy: "Services & Management DAMEL ENERGY",
-      managedBy: "Plateforme DAMEL ENERGY",
+      operatedBy: "Operated by DAMEL ENERGY",
+      managedBy: "Managed by DAMEL ENERGY",
+      product: `${PRODUCT.name} · DAMEL ENERGY`,
     },
     logos: {
       logoJpeg: "/branding/damel-energy/logo-damel-energy.jpeg",
@@ -36,15 +50,20 @@ export const BRAND_CONFIG = {
     },
     colors: {
       blue: "#0B4EA2",
+      "blue-deep": "#08336D",
       red: "#E30620",
+      "red-deep": "#C8102E",
       yellow: "#F9C400",
+      gold: "#D4A017",
       navy: "#102A43",
+      "navy-ink": "#0C2338",
       white: "#FFFFFF",
       light: "#F0F5FA",
+      cream: "#FAFBFD",
     },
   },
 
-  // 2nd plan / Enseigne réseau affiliée : STAR ENERGY
+  // Exploitant / Enseigne : STAR ENERGY (2nd plan)
   station: {
     name: "STAR ENERGY",
     brandTitle: "STAR ENERGY SÉNÉGAL",

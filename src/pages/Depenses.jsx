@@ -11,6 +11,7 @@ export default function Depenses() {
   const { profil } = useAuth();
   const stationId = profil?.station_id || "";
   const peutDeclarer = peutAgirProfil(profil, "depense", "declarer");
+  const peutValider = peutAgirProfil(profil, "depense", "valider");
   const [ref, setRef] = useState(null);
   const [cats, setCats] = useState([]);
   const [depenses, setDeps] = useState([]);
@@ -45,30 +46,82 @@ export default function Depenses() {
     if (!peutDeclarer) return flash("Tu n'as pas le droit de déclarer une dépense.");
     if (!dForm.categorie_code) return flash("Catégorie requise");
     if (!n(dForm.montant) || n(dForm.montant) <= 0) return flash("Montant invalide");
-    const res = await saveDepense({ ...dForm, montant: n(dForm.montant), id: uuid() });
+    const statut = peutValider ? "VALIDE" : "BROUILLON";
+    const payload = {
+      ...dForm,
+      montant: n(dForm.montant),
+      id: uuid(),
+      statut,
+      valide_par: peutValider ? (profil?.nom_complet || profil?.email || "admin") : null,
+      date_validation: peutValider ? todayISO() : null,
+      cree_par: profil?.nom_complet || profil?.email || "inconnu",
+      cree_par_role: profil?.role || "",
+    };
+    const res = await saveDepense(payload);
     if (res?.error) return flash("Erreur : " + res.error);
     setDForm({ categorie_code: "", libelle: "", montant: "", date_depense: todayISO(), mode_paiement: "ESPECES", station_id: stationId });
-    flash("Dépense enregistrée");
+    flash(peutValider ? "✅ Dépense validée" : "💾 Dépense enregistrée en brouillon — en attente de validation Direction");
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
     load();
   };
 
   const del = async (id) => {
-    if (!confirm("Supprimer cette dépense ?")) return;
+    const d = depenses.find((x) => x.id === id);
+    if (!d) return;
+    if (d.statut === "VALIDE" && !peutValider) {
+      return flash("⛔ Une dépense validée ne peut être supprimée que par la Direction / Supervision.");
+    }
+    if (!confirm(d.statut === "BROUILLON"
+      ? "Supprimer ce brouillon de dépense ?"
+      : "⚠️ Dépense VALIDÉE. Êtes-vous SÛR de vouloir la supprimer ? Cette action est tracée.")) return;
     await deleteDepense(id);
     flash("Dépense supprimée");
+    load();
+  };
+
+  const validerDepense = async (id) => {
+    if (!peutValider) return flash("⛔ Validation réservée à la Direction / Supervision.");
+    const d = depenses.find((x) => x.id === id);
+    if (!d) return;
+    if (d.statut === "VALIDE") return flash("Déjà validée.");
+    const miseAJour = {
+      ...d,
+      statut: "VALIDE",
+      valide_par: profil?.nom_complet || profil?.email || "admin",
+      date_validation: todayISO(),
+    };
+    const { error } = await saveDepense(miseAJour);
+    if (error) return flash("Erreur : " + error);
+    flash("✅ Dépense validée — comptabilisée.");
     load();
   };
 
   if (loading) return <Loading label="Chargement des dépenses…" />;
 
   const total = depenses.reduce((s, d) => s + n(d.montant), 0);
+  const totalValide = depenses.filter((d) => d.statut === "VALIDE").reduce((s, d) => s + n(d.montant), 0);
+  const totalBrouillon = depenses.filter((d) => d.statut !== "VALIDE").reduce((s, d) => s + n(d.montant), 0);
+  const nbBrouillon = depenses.filter((d) => d.statut !== "VALIDE").length;
 
   return (
     <div>
-      <h1 className="text-xl font-bold mb-1" style={{ color: T.petrol }}>Dépenses réseau</h1>
-      <p className="text-sm mb-3" style={{ color: T.muted }}>Par catégorie — §38 (SYSCOHADA §35, classe 6/65/66)</p>
-      {msg && <div className="rounded px-3 py-2 mb-3 text-sm" style={{ background: "#E3F4EA", color: T.ok }}>{msg}</div>}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+        <div>
+          <h1 className="text-xl font-bold mb-1" style={{ color: T.petrol }}>Dépenses réseau</h1>
+          <p className="text-sm" style={{ color: T.muted }}>Par catégorie — §38 (SYSCOHADA §35, classe 6/65/66)</p>
+        </div>
+        <div className="flex flex-wrap gap-2 items-center">
+          {nbBrouillon > 0 && (
+            <span className="px-3 py-1.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1.5">
+              <span>📝</span> {nbBrouillon} brouillon(s) · {F(totalBrouillon)} F
+            </span>
+          )}
+          <span className="px-3 py-1.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1.5">
+            <span>✅</span> Validé : {F(totalValide)} F
+          </span>
+        </div>
+      </div>
+      {msg && <div className="rounded-xl px-4 py-3 mb-3 text-sm shadow-sm border border-emerald-100" style={{ background: "#E3F4EA", color: T.ok }}>{msg}</div>}
 
       <Section titre="Nouvelle dépense" aside={`${cats.length} catégories`}>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 py-2">

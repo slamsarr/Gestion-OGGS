@@ -27,7 +27,7 @@ import { calculerFactureFiscale, genererNumeroFacture, FISCAL_CONFIG } from "../
 export default function ClientsPro() {
   const { profil, cloud } = useAuth();
   const peutCreerClient = peutAgirProfil(profil, "client_pro", "creer");
-  const peutEncaisserCredit = peutAgirProfil(profil, "credit", "encaisser");
+  const peutEncaisserCredit = peutAgirProfil(profil, "credit", "encaisser") && profil?.role !== "client_pro";
   const [searchParams] = useSearchParams();
   const [stationId, setStationId] = useState(profil?.station_id || "");
   const [loading, setLoading] = useState(true);
