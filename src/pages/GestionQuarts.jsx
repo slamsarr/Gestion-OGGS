@@ -15,12 +15,31 @@ export default function GestionQuarts() {
   
   // États pour les formulaires
   const [showAddQuart, setShowAddQuart] = useState(false);
+  const [usePreset, setUsePreset] = useState(false);
   const [newQuart, setNewQuart] = useState({
     nom: "",
     heure_debut: "06:00",
     heure_fin: "14:00",
     type: "MATIN",
   });
+
+  // Quarts prédéfinis pour couverture 24h
+  const quartPresets = [
+    { nom: "Quart Nuit", heure_debut: "00:00", heure_fin: "06:00", type: "NUIT" },
+    { nom: "Quart Matin", heure_debut: "06:00", heure_fin: "12:00", type: "MATIN" },
+    { nom: "Quart Midi", heure_debut: "12:00", heure_fin: "18:00", type: "APRES-MIDI" },
+    { nom: "Quart Soir", heure_debut: "18:00", heure_fin: "24:00", type: "SOIR" },
+  ];
+
+  const selectPreset = (preset) => {
+    setNewQuart({
+      nom: preset.nom,
+      heure_debut: preset.heure_debut,
+      heure_fin: preset.heure_fin,
+      type: preset.type,
+    });
+    setUsePreset(true);
+  };
   
   const [selectedPompiste, setSelectedPompiste] = useState(null);
   const [showAffectation, setShowAffectation] = useState(false);
@@ -62,22 +81,34 @@ export default function GestionQuarts() {
       flash("⚠️ Le nom du quart est obligatoire");
       return;
     }
-    
+
+    // Convertir 00:00 en 24:00 pour les quarts de nuit si nécessaire
+    let heureFin = newQuart.heure_fin;
+    if (newQuart.heure_debut > newQuart.heure_fin) {
+      // Cas où le quart traverse minuit (ex: 22:00 à 06:00)
+      // On garde tel quel pour l'instant, pourrait être géré différemment
+    }
+    // Pour le quart soir 18:00-24:00, le preset utilise 24:00
+    if (newQuart.heure_fin === "00:00" && newQuart.heure_debut >= "18:00") {
+      heureFin = "24:00";
+    }
+
     try {
       const config = {
         id: uuid(),
         station_id: stationId,
         nom: newQuart.nom.trim(),
         heure_debut: newQuart.heure_debut,
-        heure_fin: newQuart.heure_fin,
+        heure_fin: heureFin,
         type: newQuart.type,
         actif: true,
         created_at: new Date().toISOString(),
       };
-      
+
       await saveQuartConfig(config);
       setQuartConfigs([...quartConfigs, config]);
       setNewQuart({ nom: "", heure_debut: "06:00", heure_fin: "14:00", type: "MATIN" });
+      setUsePreset(false);
       setShowAddQuart(false);
       flash("✓ Quart créé avec succès");
     } catch (e) {
@@ -119,13 +150,17 @@ export default function GestionQuarts() {
     
     if (!quartActuel || !nouveauQuart) return false;
     
-    // Logique de chevauchement simplifiée
+    // Logique de chevauchement pour quarts 24h
     const debut1 = parseInt(quartActuel.heure_debut.replace(":", ""));
     const fin1 = parseInt(quartActuel.heure_fin.replace(":", ""));
     const debut2 = parseInt(nouveauQuart.heure_debut.replace(":", ""));
     const fin2 = parseInt(nouveauQuart.heure_fin.replace(":", ""));
     
-    return !(fin1 <= debut2 || fin2 <= debut1);
+    // Gestion du passage minuit (24:00 = 2400)
+    const fin1Adj = fin1 === 2400 ? 1440 : fin1;
+    const fin2Adj = fin2 === 2400 ? 1440 : fin2;
+    
+    return !(fin1Adj <= debut2 || fin2Adj <= debut1);
   };
 
   if (loading) return <Loading label="Chargement de la gestion des quarts..." />;
@@ -179,7 +214,7 @@ export default function GestionQuarts() {
                   <div>
                     <div className="font-bold text-sm">{quart.nom}</div>
                     <div className="text-xs" style={{ color: T.muted }}>
-                      {quart.heure_debut} - {quart.heure_fin} · {quart.type}
+                      {quart.heure_debut} - {quart.heure_fin === "24:00" ? "24:00" : quart.heure_fin} · {quart.type}
                     </div>
                   </div>
                   <span className="px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
@@ -216,6 +251,28 @@ export default function GestionQuarts() {
           </button>
         ) : (
           <div className="mt-3 p-3 rounded-lg bg-gray-50 space-y-2">
+            <div className="text-xs font-semibold mb-2" style={{ color: T.muted }}>
+              Quarts prédéfinis (couverture 24h)
+            </div>
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              {quartPresets.map((preset) => (
+                <button
+                  key={preset.type}
+                  onClick={() => selectPreset(preset)}
+                  className="px-2 py-1.5 rounded text-xs border-2 transition-all"
+                  style={{
+                    borderColor: usePreset && newQuart.type === preset.type ? T.petrol : T.line,
+                    background: usePreset && newQuart.type === preset.type ? "#E3F4EA" : "white",
+                    color: usePreset && newQuart.type === preset.type ? T.petrol : T.muted,
+                  }}
+                >
+                  {preset.nom}
+                  <div className="text-[10px] opacity-70">
+                    {preset.heure_debut} - {preset.heure_fin}
+                  </div>
+                </button>
+              ))}
+            </div>
             <div>
               <label className="block text-xs font-semibold mb-1">Nom du quart *</label>
               <input
@@ -242,11 +299,14 @@ export default function GestionQuarts() {
                 <label className="block text-xs font-semibold mb-1">Fin</label>
                 <input
                   type="time"
-                  value={newQuart.heure_fin}
+                  value={newQuart.heure_fin === "24:00" ? "00:00" : newQuart.heure_fin}
                   onChange={(e) => setNewQuart({ ...newQuart, heure_fin: e.target.value })}
                   className="w-full border rounded px-2 py-1.5 text-xs"
                   style={{ borderColor: T.line }}
                 />
+                {newQuart.heure_fin === "24:00" && (
+                  <div className="text-[10px] text-gray-500 mt-0.5">Affiché comme 24:00 pour quart 24h</div>
+                )}
               </div>
               <div>
                 <label className="block text-xs font-semibold mb-1">Type</label>
