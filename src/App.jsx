@@ -14,6 +14,7 @@ import Pistolets from "./pages/Pistolets";
 import Pompistes from "./pages/Pompistes";
 import Parametres from "./pages/Parametres";
 import Configuration from "./pages/Configuration";
+import Etats from "./pages/Etats";
 import DescentePompiste from "./pages/DescentePompiste";
 import Lavage from "./pages/Lavage";
 import Entretien from "./pages/Entretien";
@@ -97,6 +98,7 @@ export default function App() {
         <Route path="/gestion-quarts" element={<RequireRole path="/gestion-quarts"><GestionQuarts /></RequireRole>} />
         <Route path="/parametres" element={<RequireRole path="/parametres"><Parametres /></RequireRole>} />
         <Route path="/configuration" element={<RequireRole path="/configuration"><Configuration /></RequireRole>} />
+        <Route path="/etats" element={<RequireRole path="/etats"><Etats /></RequireRole>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

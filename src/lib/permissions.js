@@ -201,6 +201,7 @@ const ROUTES = {
   "/fidelite": ["admin", "gerant", "superviseur", "directeur", "commercial", "pompiste", "boutique", "lavage", "mecanicien"],
   "/gestion-quarts": ["admin", "gerant", "superviseur", "directeur", "comptable"],
   "/configuration": ["admin", "gerant", "superviseur", "directeur", "comptable"],
+  "/etats": ["admin", "gerant", "superviseur", "directeur", "comptable"],
 };
 
 export function rolesRoute(role, route) {

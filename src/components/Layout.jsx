@@ -18,6 +18,7 @@ const NAV_POLES = [
       { to: "/bilan-site", label: "Bilan Journalier", icon: "📑" },
       { to: "/rapport", label: "Clôture Officielle", icon: "📋" },
       { to: "/historique", label: "Historique Clôtures", icon: "📁" },
+      { to: "/etats", label: "États & Rapports", icon: "📊" },
     ],
   },
   {
