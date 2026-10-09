@@ -5,22 +5,16 @@ import {
   loadReferentiel,
   listDescentes,
   listTousBonsStation,
-  attribuerBonClient,
   listPrestationsLavage,
   listVentesBoutique,
   listJaugesCuves,
-  deletePrestationLavage,
-  deleteVenteBoutique,
   listCollaborateurs,
-  toggleCollaborateurActif,
-  resetCollaborateurPassword,
   stocksTheoriques,
   listPrestationsEntretien,
 } from "../lib/api";
 import { F, fmtDate, n, T, todayISO } from "../lib/calcul";
 import { ROLE_LABELS } from "../lib/permissions";
 import { Section, Row, Num, Loading } from "../components/ui";
-import CollaborateurModal from "../components/CollaborateurModal";
 import { construireHistoire } from "../lib/histoireQuotidienne";
 import HistoireQuotidienne from "../components/HistoireQuotidienne";
 
@@ -45,7 +39,6 @@ export default function TableauBordGerant() {
   const [ventesBoutique, setVentesBoutique] = useState([]);
   const [jauges, setJauges] = useState([]);
   const [equipe, setEquipe] = useState([]);
-  const [showCollabModal, setShowCollabModal] = useState(false);
   const [stocksStation, setStocksStation] = useState([]);
   const [entretiensJour, setEntretiensJour] = useState([]);
   const [lavagesV, setLavagesV] = useState([]);
@@ -55,10 +48,6 @@ export default function TableauBordGerant() {
 
   // Filtre Bons
   const [filtreBon, setFiltreBon] = useState("TOUS"); // TOUS | IMPAYES | REGLES
-
-  // Modal Attribution Bon
-  const [attribModal, setAttribModal] = useState(null);
-  const [attribClientCode, setAttribClientCode] = useState("");
 
   const flash = (text, type = "ok") => {
     setMsg(text);
@@ -196,74 +185,7 @@ export default function TableauBordGerant() {
     return tousBons;
   }, [tousBons, filtreBon]);
 
-  // Clients référentiel pour attribution
-  const clientsList = useMemo(() => {
-    return (ref?.clients_pro || []).map((c) => ({
-      code: c.code,
-      nom: c.nom_entreprise || c.code,
-    }));
-  }, [ref]);
 
-  const handleOuvrirAttribModal = (bon) => {
-    setAttribModal(bon);
-    setAttribClientCode(bon.client_code && bon.client_code !== "DIVERS" ? bon.client_code : (clientsList[0]?.code || ""));
-  };
-
-  const handleConfirmerAttribution = async () => {
-    if (!attribModal || !attribClientCode) return;
-    const cl = clientsList.find((c) => c.code === attribClientCode);
-    const res = await attribuerBonClient(attribModal.id, attribClientCode, cl?.nom || attribClientCode);
-    if (res.ok) {
-      flash(`Le bon ${attribModal.numero_bon} a été attribué avec succès à ${cl?.nom || attribClientCode}`);
-      setAttribModal(null);
-      loadStationData();
-    } else {
-      flash("Erreur lors de l'attribution du bon", "error");
-    }
-  };
-
-  // Annulation directe par le gérant
-  const handleAnnulerLavage = async (id) => {
-    if (!confirm("Gérant : Confirmer l'annulation de cette prestation lavage ?")) return;
-    await deletePrestationLavage(id);
-    flash("Prestation de lavage annulée par le gérant");
-    loadStationData();
-  };
-
-  const handleAnnulerVenteBoutique = async (id) => {
-    if (!confirm("Gérant : Confirmer l'annulation de ce ticket boutique et la réintégration des articles en stock ?")) return;
-    await deleteVenteBoutique(id);
-    flash("Vente boutique annulée par le gérant et stock réintégré");
-    loadStationData();
-  };
-
-  const handleToggleActifCollab = async (collab) => {
-    const res = await toggleCollaborateurActif(collab.id);
-    if (res.ok) {
-      flash(`${collab.nom_complet} : compte ${res.actif ? "activé" : "suspendu"}`);
-      setEquipe((prev) => prev.map((x) => x.id === collab.id ? { ...x, actif: res.actif } : x));
-    } else {
-      flash("Erreur lors de la modification du statut");
-    }
-  };
-
-  const handleResetPassword = async (collab) => {
-    if (!window.confirm(`Réinitialiser le mot de passe de ${collab.nom_complet} ?`)) return;
-    const res = await resetCollaborateurPassword(collab.id);
-    if (res.ok) {
-      flash(`✓ Nouveau mot de passe pour ${collab.nom_complet} : ${res.password}`);
-      setEquipe((prev) => prev.map((x) => x.id === collab.id ? { ...x, password: res.password } : x));
-    } else {
-      flash("Erreur réinitialisation mot de passe");
-    }
-  };
-
-  const handleCollabCreated = (res) => {
-    flash(`✓ Collaborateur ${res.identifiants.nom} créé avec succès !`);
-    if (res.user) {
-      setEquipe((prev) => [res.user, ...prev]);
-    }
-  };
 
   if (loading) return <Loading label="Chargement du poste de commande Gérant..." />;
 
@@ -510,33 +432,31 @@ export default function TableauBordGerant() {
 
         <div className="ml-auto flex items-center gap-2">
           <button
-            onClick={() => navigate("/bilan-site")}
+            onClick={() => navigate(`/rapport?station=${encodeURIComponent(stationCode)}&date=${encodeURIComponent(date)}`)}
             className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors"
+            title="Clôture officielle après vérification de cohérence"
           >
-            <span>📑 Clôturer le Bilan du Site</span>
+            <span>� Clôture Officielle</span>
           </button>
         </div>
       </div>
 
-      {/* ── TAB 1 : DESCENTES POMPISTES (AVEC DROIT DE CORRECTION GÉRANT) ── */}
+      {/* ── TAB 1 : DESCENTES POMPISTES (VISUALISATION SEULE) ── */}
       {activeTab === "descentes" && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide">
-              Contrôle des Descentes Pompistes du {fmtDate(date)}
+              Supervision des Descentes Pompistes du {fmtDate(date)}
             </h2>
-            <button
-              onClick={() => navigate("/descente")}
-              className="px-3 py-1.5 rounded-lg bg-[#431454] hover:bg-[#56216C] text-white text-xs font-bold shadow-xs"
-            >
-              + Ouvrir / Saisir une descente
-            </button>
+            <div className="text-xs text-gray-500">
+              Visualisation uniquement · Pas de saisie opérationnelle
+            </div>
           </div>
 
           {descentes.length === 0 ? (
             <div className="bg-white p-8 rounded-2xl border text-center text-gray-500 text-xs shadow-sm">
               <p className="font-bold text-gray-700 text-sm">Aucune descente pompiste enregistrée pour le {fmtDate(date)}.</p>
-              <p className="text-gray-400 mt-1">Dès qu'un pompiste démarre ou soumet son quart, il apparaîtra ici avec son statut et ses écarts.</p>
+              <p className="text-gray-400 mt-1">Dès qu'un pompiste démarre ou soumet son quart, il apparaîtra ici avec ses index et modes d'encaissement.</p>
             </div>
           ) : (
             <div className="bg-white rounded-2xl border shadow-sm divide-y" style={{ borderColor: T.line }}>
@@ -544,8 +464,9 @@ export default function TableauBordGerant() {
                 const isTerminee = d.statut === "TERMINEE";
                 const ecartVal = n(d.ecart);
                 return (
-                  <div key={d.id} className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-gray-50/70 transition-colors">
-                    <div>
+                  <div key={d.id} className="p-4 hover:bg-gray-50/70 transition-colors">
+                    {/* En-tête pompiste */}
+                    <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
                         <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-700">
                           {d.numero || d.id?.slice(0, 8)}
@@ -556,46 +477,95 @@ export default function TableauBordGerant() {
                             isTerminee ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900"
                           }`}
                         >
-                          {isTerminee ? "✓ Soumise (Clôturée)" : "🟡 En cours"}
+                          {isTerminee ? "✓ Soumise" : "🟡 En cours"}
                         </span>
-                        {d.corrige_par && (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800" title={`Corrigée par ${d.corrige_par}`}>
-                            ✏️ Corrigée par Gérant
+                        {d.quart && (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800">
+                            {d.quart}
                           </span>
                         )}
                       </div>
-
-                      <div className="text-xs text-gray-600 mt-1 flex flex-wrap gap-x-4 gap-y-1">
-                        <span>Carburant : <strong>{F(d.total_carburant || d.montant_theorique)} F</strong> ({F(d.total_volume || d.volume_vendu)} L)</span>
-                        {n(d.total_lubrifiants) > 0 && <span>Lubrifiants : <strong>{F(d.total_lubrifiants)} F</strong></span>}
-                        {Array.isArray(d.bons) && d.bons.length > 0 && (
-                          <span className="text-rose-700 font-semibold">
-                            Bons : {d.bons.length} bon(s) ({F(d.total_bons || 0)} F)
-                          </span>
-                        )}
-                        <span>Total Caisse : <strong>{F(d.total_caisse || d.montant_theorique)} F</strong></span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between md:justify-end gap-3 pt-2 md:pt-0 border-t md:border-t-0">
                       <div className="text-right">
                         <div className="text-[10px] text-gray-400 font-bold uppercase">Écart Caisse</div>
                         <div className={`font-black text-sm tabular ${ecartVal >= 0 ? "text-emerald-700" : "text-rose-600"}`}>
                           {ecartVal >= 0 ? "+" : ""}{F(ecartVal)} FCFA
                         </div>
                       </div>
+                    </div>
 
-                      <div className="flex items-center gap-1.5">
-                        {/* Bouton Corriger réservé au Gérant */}
-                        <button
-                          onClick={() => navigate(`/descente?id=${encodeURIComponent(d.id)}`)}
-                          className="px-3 py-1.5 rounded-lg bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs flex items-center gap-1 shadow-xs transition-colors"
-                          title="Le gérant peut corriger les index, les bons et les versements d'une descente soumise"
-                        >
-                          <span>✏️ Corriger (Gérant)</span>
-                        </button>
+                    {/* Détails index */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-gray-50 p-3 rounded-lg mb-3">
+                      <div>
+                        <div className="text-[10px] text-gray-500 font-bold uppercase">Index Départ</div>
+                        <div className="font-mono text-sm font-bold text-gray-800">{d.index_depart || "—"}</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] text-gray-500 font-bold uppercase">Index Fin</div>
+                        <div className="font-mono text-sm font-bold text-gray-800">{d.index_fin || "—"}</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] text-gray-500 font-bold uppercase">Volume</div>
+                        <div className="font-mono text-sm font-bold text-gray-800">{F(d.total_volume || d.volume_vendu || 0)} L</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] text-gray-500 font-bold uppercase">Valeur</div>
+                        <div className="font-mono text-sm font-bold text-gray-800">{F(d.total_carburant || d.montant_theorique || 0)} F</div>
                       </div>
                     </div>
+
+                    {/* Modes d'encaissement */}
+                    <div className="mb-3">
+                      <div className="text-[10px] text-gray-500 font-bold uppercase mb-2">Modes d'Encaissement</div>
+                      <div className="flex flex-wrap gap-2">
+                        <span className="px-2 py-1 rounded bg-emerald-100 text-emerald-800 text-xs font-medium">
+                          Espèces : {F(d.especes || 0)} F
+                        </span>
+                        {Array.isArray(d.bons) && d.bons.length > 0 && (
+                          <span className="px-2 py-1 rounded bg-rose-100 text-rose-800 text-xs font-medium">
+                            Bons : {d.bons.length} bon(s) ({F(d.total_bons || 0)} F)
+                          </span>
+                        )}
+                        {d.mobile_money && (
+                          <span className="px-2 py-1 rounded bg-blue-100 text-blue-800 text-xs font-medium">
+                            Mobile Money : {F(d.mobile_money)} F
+                          </span>
+                        )}
+                        {d.carte_bancaire && (
+                          <span className="px-2 py-1 rounded bg-purple-100 text-purple-800 text-xs font-medium">
+                            Carte Bancaire : {F(d.carte_bancaire)} F
+                          </span>
+                        )}
+                        <span className="px-2 py-1 rounded bg-gray-100 text-gray-800 text-xs font-medium">
+                          Total Caisse : {F(d.total_caisse || d.montant_theorique || 0)} F
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Lubrifiants */}
+                    {n(d.total_lubrifiants) > 0 && (
+                      <div className="mb-3">
+                        <div className="text-[10px] text-gray-500 font-bold uppercase mb-2">Lubrifiants</div>
+                        <div className="bg-amber-50 p-2 rounded-lg">
+                          <span className="text-sm font-medium text-amber-900">
+                            {F(d.total_lubrifiants)} F
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Versements */}
+                    {Array.isArray(d.versements) && d.versements.length > 0 && (
+                      <div>
+                        <div className="text-[10px] text-gray-500 font-bold uppercase mb-2">Versements</div>
+                        <div className="flex flex-wrap gap-2">
+                          {d.versements.map((v, i) => (
+                            <span key={i} className="px-2 py-1 rounded bg-emerald-50 text-emerald-800 text-xs font-medium">
+                              Versement {i + 1} : {F(v)} F
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -634,44 +604,33 @@ export default function TableauBordGerant() {
             </div>
           </div>
 
-          {/* Filtres & Accès Règlement */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
-            <div className="flex items-center gap-1.5 text-xs">
-              <span className="text-gray-500 font-bold mr-1">Filtrer :</span>
-              <button
-                onClick={() => setFiltreBon("TOUS")}
-                className={`px-3 py-1 rounded-lg font-bold text-xs transition-colors ${
-                  filtreBon === "TOUS" ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-              >
-                Tous ({tousBons.length})
-              </button>
-              <button
-                onClick={() => setFiltreBon("IMPAYES")}
-                className={`px-3 py-1 rounded-lg font-bold text-xs transition-colors ${
-                  filtreBon === "IMPAYES" ? "bg-rose-700 text-white" : "bg-rose-50 text-rose-800 hover:bg-rose-100"
-                }`}
-              >
-                À Régler ({bonsImpayes.length})
-              </button>
-              <button
-                onClick={() => setFiltreBon("REGLES")}
-                className={`px-3 py-1 rounded-lg font-bold text-xs transition-colors ${
-                  filtreBon === "REGLES" ? "bg-emerald-700 text-white" : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
-                }`}
-              >
-                Soldés ({tousBons.length - bonsImpayes.length})
-              </button>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => navigate("/clients-pro")}
-                className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors"
-              >
-                <span>💳 Encaisser un Règlement Client</span>
-              </button>
-            </div>
+          {/* Filtres (visualisation uniquement) */}
+          <div className="flex items-center gap-1.5 text-xs pt-1">
+            <span className="text-gray-500 font-bold mr-1">Filtrer :</span>
+            <button
+              onClick={() => setFiltreBon("TOUS")}
+              className={`px-3 py-1 rounded-lg font-bold text-xs transition-colors ${
+                filtreBon === "TOUS" ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              Tous ({tousBons.length})
+            </button>
+            <button
+              onClick={() => setFiltreBon("IMPAYES")}
+              className={`px-3 py-1 rounded-lg font-bold text-xs transition-colors ${
+                filtreBon === "IMPAYES" ? "bg-rose-700 text-white" : "bg-rose-50 text-rose-800 hover:bg-rose-100"
+              }`}
+            >
+              À Régler ({bonsImpayes.length})
+            </button>
+            <button
+              onClick={() => setFiltreBon("REGLES")}
+              className={`px-3 py-1 rounded-lg font-bold text-xs transition-colors ${
+                filtreBon === "REGLES" ? "bg-emerald-700 text-white" : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+              }`}
+            >
+              Soldés ({tousBons.length - bonsImpayes.length})
+            </button>
           </div>
 
           {/* Table complète des Bons */}
@@ -693,7 +652,6 @@ export default function TableauBordGerant() {
                     <th className="py-2.5 px-3 text-right">Montant Total</th>
                     <th className="py-2.5 px-3 text-right">Reste Dû</th>
                     <th className="py-2.5 px-3 text-center">Statut</th>
-                    <th className="py-2.5 px-3 text-center">Action Gérant</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y" style={{ borderColor: T.line }}>
@@ -753,22 +711,14 @@ export default function TableauBordGerant() {
                         <td className="py-2.5 px-3 text-center">
                           <div className="flex items-center justify-center gap-1">
                             {isDivers && (
-                              <button
-                                onClick={() => handleOuvrirAttribModal(b)}
-                                className="px-2 py-1 rounded bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 font-bold text-[10px]"
-                                title="Attribuer ce bon à un client de la flotte"
-                              >
-                                🔗 Attribuer
-                              </button>
+                              <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-800 text-[10px]">
+                                Non attribué
+                              </span>
                             )}
                             {reste > 0 && !isDivers && (
-                              <button
-                                onClick={() => navigate(`/clients-pro?client=${encodeURIComponent(b.client_code)}`)}
-                                className="px-2 py-1 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-[10px]"
-                                title="Aller régler dans le compte client"
-                              >
-                                💳 Régler
-                              </button>
+                              <span className="px-2 py-0.5 rounded bg-rose-100 text-rose-800 text-[10px]">
+                                À régler
+                              </span>
                             )}
                           </div>
                         </td>
@@ -810,28 +760,11 @@ export default function TableauBordGerant() {
                       <div className="font-bold text-gray-900">{l.libelle_vehicule || l.type_vehicule} — {l.immatriculation}</div>
                       <div className="text-[10px] text-gray-400">Agent: {l.agent} · Mode: {l.mode_paiement}</div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-black text-gray-900 tabular">{F(l.montant_total)} F</span>
-                      <button
-                        onClick={() => handleAnnulerLavage(l.id)}
-                        className="text-rose-600 hover:text-rose-800 font-bold px-1.5 py-0.5 rounded text-xs hover:bg-rose-50"
-                        title="Annuler cette prestation (Gérant)"
-                      >
-                        ✕
-                      </button>
-                    </div>
+                    <div className="font-black text-gray-900 tabular">{F(l.montant_total)} F</div>
                   </div>
                 ))}
               </div>
             )}
-            <div className="pt-2 text-right">
-              <button
-                onClick={() => navigate("/lavage")}
-                className="text-xs font-bold text-purple-900 hover:underline"
-              >
-                Ouvrir la caisse Lavage →
-              </button>
-            </div>
           </div>
 
           {/* Boutique / Shop */}
@@ -859,28 +792,11 @@ export default function TableauBordGerant() {
                       <div className="font-bold text-gray-900">Ticket #{v.id?.slice(0, 8)} · {v.vendeur}</div>
                       <div className="text-[10px] text-gray-400">{v.lignes?.map((l) => `${l.quantite}x ${l.designation}`).join(", ")}</div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-black text-gray-900 tabular">{F(v.total_montant)} F</span>
-                      <button
-                        onClick={() => handleAnnulerVenteBoutique(v.id)}
-                        className="text-rose-600 hover:text-rose-800 font-bold px-1.5 py-0.5 rounded text-xs hover:bg-rose-50"
-                        title="Annuler ce ticket et réintégrer les stocks (Gérant)"
-                      >
-                        ✕
-                      </button>
-                    </div>
+                    <div className="font-black text-gray-900 tabular">{F(v.total_montant)} F</div>
                   </div>
                 ))}
               </div>
             )}
-            <div className="pt-2 text-right">
-              <button
-                onClick={() => navigate("/boutique")}
-                className="text-xs font-bold text-purple-900 hover:underline"
-              >
-                Ouvrir la caisse Boutique →
-              </button>
-            </div>
           </div>
         </div>
       )}
@@ -891,14 +807,8 @@ export default function TableauBordGerant() {
           <div className="flex items-center justify-between border-b pb-2">
             <div>
               <h3 className="font-bold text-sm text-gray-900">État Volumétrique & Jaugeages Physiques</h3>
-              <p className="text-xs text-gray-500">Rapprochement des jauges cuves et dépotages citernes</p>
+              <p className="text-xs text-gray-500">Rapprochement des jauges cuves et dépotages citernes (visualisation)</p>
             </div>
-            <button
-              onClick={() => navigate("/cuves")}
-              className="px-3 py-1.5 rounded-lg bg-[#431454] hover:bg-[#56216C] text-white text-xs font-bold shadow-xs"
-            >
-              + Nouveau Dépotage / Jaugeage
-            </button>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
@@ -959,18 +869,9 @@ export default function TableauBordGerant() {
                 </span>
               </h2>
               <p className="text-xs text-gray-500 mt-0.5">
-                Pompistes, agents de lavage, vendeurs boutique et techniciens rattachés à votre site.
+                Pompistes, agents de lavage, vendeurs boutique et techniciens rattachés à votre site (visualisation).
               </p>
             </div>
-
-            <button
-              type="button"
-              onClick={() => setShowCollabModal(true)}
-              className="px-4 py-2 rounded-xl bg-[#431454] hover:bg-[#56216C] text-white text-xs font-bold transition-colors shadow-xs flex items-center justify-center gap-1.5 shrink-0"
-            >
-              <span>➕</span>
-              <span>Nouveau Collaborateur (Créer Compte)</span>
-            </button>
           </div>
 
           {equipe.length === 0 ? (
@@ -987,7 +888,6 @@ export default function TableauBordGerant() {
                     <th className="py-2.5 px-3 text-left">Profil / Métier</th>
                     <th className="py-2.5 px-3 text-left">Email de Connexion</th>
                     <th className="py-2.5 px-3 text-center">Statut</th>
-                    <th className="py-2.5 px-3 text-center">Actions Gérant</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -1032,31 +932,6 @@ export default function TableauBordGerant() {
                             {isActif ? "Actif" : "Suspendu"}
                           </span>
                         </td>
-
-                        <td className="py-2.5 px-3 text-center">
-                          <div className="flex items-center justify-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => handleResetPassword(u)}
-                              className="px-2 py-1 rounded bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-bold transition-colors"
-                              title="Générer un nouveau mot de passe temporaire"
-                            >
-                              🔑 Reset MdP
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleToggleActifCollab(u)}
-                              className={`px-2 py-1 rounded text-xs font-bold border transition-colors ${
-                                isActif
-                                  ? "bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300"
-                                  : "bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300"
-                              }`}
-                              title={isActif ? "Suspendre l'accès" : "Réactiver l'accès"}
-                            >
-                              {isActif ? "⏸️ Suspendre" : "▶️ Réactiver"}
-                            </button>
-                          </div>
-                        </td>
                       </tr>
                     );
                   })}
@@ -1067,81 +942,6 @@ export default function TableauBordGerant() {
         </div>
       )}
 
-      {/* ── MODAL ATTRIBUTION BON ── */}
-      {attribModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-3">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border">
-            <div className="p-4 bg-purple-900 text-white flex items-center justify-between">
-              <h3 className="font-bold text-sm flex items-center gap-1.5">
-                <span>🔗 Attribuer le Bon à un Client</span>
-              </h3>
-              <button onClick={() => setAttribModal(null)} className="text-white text-base">✕</button>
-            </div>
-
-            <div className="p-4 space-y-3 text-xs">
-              <div className="p-3 bg-purple-50 rounded-xl space-y-1">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">N° Bon :</span>
-                  <span className="font-mono font-bold text-gray-900">{attribModal.numero_bon}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Date & Litrage :</span>
-                  <span className="font-bold">{fmtDate(attribModal.date)} · {F(attribModal.volume_litres)} L ({attribModal.produit})</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Montant :</span>
-                  <span className="font-black text-rose-700">{F(attribModal.montant)} FCFA</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Véhicule :</span>
-                  <span>{attribModal.immatriculation || "Non renseigné"}</span>
-                </div>
-              </div>
-
-              <div>
-                <label className="font-bold text-gray-700 block mb-1">Sélectionner le Client Professionnel *</label>
-                <select
-                  value={attribClientCode}
-                  onChange={(e) => setAttribClientCode(e.target.value)}
-                  className="w-full border rounded-lg p-2 text-xs font-semibold bg-white"
-                >
-                  {clientsList.map((cl) => (
-                    <option key={cl.code} value={cl.code}>
-                      {cl.nom} ({cl.code})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="pt-2 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setAttribModal(null)}
-                  className="px-3 py-1.5 rounded-lg border text-xs font-bold text-gray-600 hover:bg-gray-50"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConfirmerAttribution}
-                  className="px-4 py-1.5 rounded-lg bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs shadow-xs"
-                >
-                  ✓ Confirmer l'attribution
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de création de compte collaborateur depuis le cockpit gérant */}
-      <CollaborateurModal
-        isOpen={showCollabModal}
-        onClose={() => setShowCollabModal(false)}
-        stations={ref?.stations || []}
-        defaultStationId={stationId}
-        onCreated={handleCollabCreated}
-      />
     </div>
   );
 }
