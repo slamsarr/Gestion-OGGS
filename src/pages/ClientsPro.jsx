@@ -187,7 +187,10 @@ export default function ClientsPro() {
 
   // Génération d'une Facture Officielle conforme OHADA
   const handleGenererFacture = async (bonsCibles = null) => {
-    if (!clientActif) return;
+    if (!clientActif) {
+      flash("⚠️ Veuillez sélectionner un client d'abord.");
+      return;
+    }
 
     let bonsAFacturer = [];
     if (bonsCibles && bonsCibles.length > 0) {
@@ -206,8 +209,15 @@ export default function ClientsPro() {
 
     try {
       const station = (ref?.stations || []).find((s) => s.id === stationId) || ref?.stations?.[0] || { code: "HANN", nom: "HANN MARISTE" };
+      
+      console.log("Génération facture - Station:", station);
+      console.log("Bons à facturer:", bonsAFacturer);
+      
       const seq = await nextSequenceFacture(station.code, todayISO());
+      console.log("Séquence:", seq);
+      
       const numeroFacture = genererNumeroFacture(station.code, todayISO(), seq);
+      console.log("Numéro facture:", numeroFacture);
 
       // Construction des lignes de facture
       const lignesBrutes = bonsAFacturer.map((b) => ({
@@ -221,6 +231,7 @@ export default function ClientsPro() {
       }));
 
       const calculFiscal = calculerFactureFiscale(lignesBrutes);
+      console.log("Calcul fiscal:", calculFiscal);
 
       const nouvelleFacture = {
         id: uuid(),
@@ -245,6 +256,8 @@ export default function ClientsPro() {
         created_at: new Date().toISOString(),
       };
 
+      console.log("Facture à sauvegarder:", nouvelleFacture);
+      
       await saveFacture(nouvelleFacture);
       setFacturesClient((prev) => [nouvelleFacture, ...prev]);
       setToutesFactures((prev) => [nouvelleFacture, ...prev]);
@@ -252,6 +265,7 @@ export default function ClientsPro() {
       setSelectedBonsIds(new Set());
       flash(`✓ Facture officielle ${numeroFacture} générée avec succès (${F(calculFiscal.totalTTC)} FCFA)`);
     } catch (e) {
+      console.error("Erreur génération facture:", e);
       flash("Erreur génération facture : " + (e.message || e));
     }
   };

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
-import { creerCollaborateur } from "../lib/api";
+import { creerCollaborateur, loadReferentiel } from "../lib/api";
 import { ROLE_LABELS } from "../lib/permissions";
-import { T } from "../lib/calcul";
+import { T, todayISO } from "../lib/calcul";
 
 export default function CollaborateurModal({ isOpen, onClose, stations = [], defaultStationId = "", onCreated }) {
   const [form, setForm] = useState({
@@ -16,12 +16,27 @@ export default function CollaborateurModal({ isOpen, onClose, stations = [], def
   const [err, setErr] = useState("");
   const [successData, setSuccessData] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [ref, setRef] = useState(null);
+  
+  // Quart assignment state
+  const [showQuartConfig, setShowQuartConfig] = useState(false);
+  const [quartAssignment, setQuartAssignment] = useState({
+    quarts: [], // ['MATIN', 'APRES-MIDI', 'SOIR', 'NUIT']
+    pistolets: [], // ['gasoil1', 'gasoil2', ...]
+    date_affectation: todayISO(),
+  });
 
   useEffect(() => {
     if (defaultStationId) {
       setForm((prev) => ({ ...prev, station_id: defaultStationId }));
     }
   }, [defaultStationId]);
+
+  useEffect(() => {
+    if (isOpen) {
+      loadReferentiel().then(setRef).catch(() => {});
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -52,6 +67,24 @@ export default function CollaborateurModal({ isOpen, onClose, stations = [], def
     }));
   };
 
+  const toggleQuart = (quart) => {
+    setQuartAssignment((prev) => ({
+      ...prev,
+      quarts: prev.quarts.includes(quart)
+        ? prev.quarts.filter((q) => q !== quart)
+        : [...prev.quarts, quart],
+    }));
+  };
+
+  const togglePistolet = (pistolet) => {
+    setQuartAssignment((prev) => ({
+      ...prev,
+      pistolets: prev.pistolets.includes(pistolet)
+        ? prev.pistolets.filter((p) => p !== pistolet)
+        : [...prev.pistolets, pistolet],
+    }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErr("");
@@ -68,6 +101,8 @@ export default function CollaborateurModal({ isOpen, onClose, stations = [], def
         telephone: form.telephone.trim(),
         email: form.email.trim(),
         password: form.password.trim(),
+        // Include quart assignment for pompistes
+        quart_config: form.role === "pompiste" ? quartAssignment : null,
       });
 
       if (res.ok) {
@@ -187,7 +222,13 @@ export default function CollaborateurModal({ isOpen, onClose, stations = [], def
                 <label className="block text-gray-700 font-bold mb-1">Profil / Métier *</label>
                 <select
                   value={form.role}
-                  onChange={(e) => setForm({ ...form, role: e.target.value })}
+                  onChange={(e) => {
+                    setForm({ ...form, role: e.target.value });
+                    // Reset quart config when role changes
+                    if (e.target.value !== "pompiste") {
+                      setShowQuartConfig(false);
+                    }
+                  }}
                   className="w-full border rounded-lg px-3 py-2 text-xs bg-white font-medium"
                   style={{ borderColor: T.line }}
                 >
@@ -222,6 +263,96 @@ export default function CollaborateurModal({ isOpen, onClose, stations = [], def
                 </select>
               </div>
             </div>
+
+            {/* Quart Configuration for Pompistes */}
+            {form.role === "pompiste" && (
+              <div className="mt-3 p-3 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="font-bold text-xs text-amber-900 flex items-center gap-1.5">
+                    <span>⏰</span>
+                    <span>Configuration des Quarts & Pistolets</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowQuartConfig(!showQuartConfig)}
+                    className="text-xs px-2 py-1 rounded border border-amber-300 bg-white text-amber-700 font-medium hover:bg-amber-100"
+                  >
+                    {showQuartConfig ? "Masquer" : "Configurer"}
+                  </button>
+                </div>
+
+                {showQuartConfig && (
+                  <div className="space-y-3">
+                    {/* Quarts selection */}
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1.5">Quarts de travail</label>
+                      <div className="flex flex-wrap gap-2">
+                        {["MATIN", "APRES-MIDI", "SOIR", "NUIT"].map((quart) => (
+                          <button
+                            key={quart}
+                            type="button"
+                            onClick={() => toggleQuart(quart)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                              quartAssignment.quarts.includes(quart)
+                                ? "bg-amber-500 text-white border-amber-600"
+                                : "bg-white text-gray-700 border-gray-300 hover:border-amber-400"
+                            }`}
+                          >
+                            {quart}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Pistolets assignment */}
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1.5">Pistolets assignés</label>
+                      <div className="flex flex-wrap gap-2">
+                        {ref?.pistolets
+                          ?.filter((p) => !form.station_id || p.station_id === form.station_id)
+                          .map((p) => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => togglePistolet(p.code)}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                                quartAssignment.pistolets.includes(p.code)
+                                  ? "bg-blue-500 text-white border-blue-600"
+                                  : "bg-white text-gray-700 border-gray-300 hover:border-blue-400"
+                              }`}
+                            >
+                              {p.code}
+                            </button>
+                          ))}
+                      </div>
+                      {quartAssignment.pistolets.length > 0 && (
+                        <p className="text-[11px] text-gray-500 mt-1">
+                          {quartAssignment.pistolets.length} pistolet(s) sélectionné(s)
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Date d'affectation */}
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1.5">Date d'affectation</label>
+                      <input
+                        type="date"
+                        value={quartAssignment.date_affectation}
+                        onChange={(e) => setQuartAssignment({ ...quartAssignment, date_affectation: e.target.value })}
+                        className="w-full border rounded-lg px-3 py-2 text-xs bg-white"
+                        style={{ borderColor: T.line }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {!showQuartConfig && (
+                  <p className="text-[11px] text-gray-500 italic">
+                    Cliquez sur "Configurer" pour définir les quarts et pistolets assignés à ce pompiste.
+                  </p>
+                )}
+              </div>
+            )}
 
             <div>
               <label className="block text-gray-700 font-bold mb-1">Numéro de Téléphone (Optionnel)</label>

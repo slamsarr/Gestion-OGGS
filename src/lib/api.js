@@ -2809,7 +2809,7 @@ export async function marquerFactureReglee(factureId) {
 // GESTION DES COLLABORATEURS ET CRÉATION AUTOMATIQUE DE COMPTE PAR PROFIL
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function creerCollaborateur({ nom_complet, role = "pompiste", station_id = null, telephone = "", email = "", password = "" }) {
+export async function creerCollaborateur({ nom_complet, role = "pompiste", station_id = null, telephone = "", email = "", password = "", quart_config = null }) {
   await ensureLocalSeed();
   if (!nom_complet || !nom_complet.trim()) {
     return { ok: false, error: "Le nom complet est obligatoire" };
@@ -2834,6 +2834,7 @@ export async function creerCollaborateur({ nom_complet, role = "pompiste", stati
     telephone: telephone ? telephone.trim() : "",
     actif: true,
     created_at: new Date().toISOString(),
+    quart_config: quart_config, // Save quart configuration
   };
 
   // 1. Sauvegarde dans Dexie users
@@ -2842,13 +2843,17 @@ export async function creerCollaborateur({ nom_complet, role = "pompiste", stati
   // 2. Si le rôle est pompiste, l'ajouter également à la table pompistes pour les descentes
   if (role === "pompiste") {
     try {
-      await db.pompistes.put({
+      const pompisteData = {
         id: `pomp-${userId}`,
         nom: nom_complet.trim(),
         station_id: station_id || "",
         actif: true,
         user_id: userId,
-      });
+        quarts: quart_config?.quarts || [],
+        pistolets: quart_config?.pistolets || [],
+        date_affectation: quart_config?.date_affectation || todayISO(),
+      };
+      await db.pompistes.put(pompisteData);
     } catch {}
   }
 
@@ -2863,7 +2868,20 @@ export async function creerCollaborateur({ nom_complet, role = "pompiste", stati
         station_id: station_id || null,
         telephone: telephone ? telephone.trim() : "",
         actif: true,
+        quart_config: quart_config,
       });
+      
+      // Si pompiste, aussi mettre à jour la table pompistes dans Supabase
+      if (role === "pompiste") {
+        await sb.from("pompistes").upsert({
+          id: `pomp-${userId}`,
+          nom: nom_complet.trim(),
+          station_id: station_id || "",
+          actif: true,
+          quarts: quart_config?.quarts || [],
+          pistolets: quart_config?.pistolets || [],
+        });
+      }
     } catch (e) {
       console.warn("Synchro cloud profil:", e);
     }

@@ -179,14 +179,51 @@ export default function Pompistes() {
       {/* Liste pompistes */}
       <Section titre="👷 Pompistes" aside={`${filteredP.length} pompiste(s)`}>
         {filteredP.map((p) => (
-          <Row key={p.id}>
-            <div className="flex items-center gap-2">
-              <span className={`w-2 h-2 rounded-full ${p.actif ? "bg-green-500" : "bg-gray-300"}`} />
-              <span className="font-medium">{p.nom}</span>
-              <span className="text-xs" style={{ color: T.muted }}>{stationName(p.station_id)}</span>
+          <div key={p.id} className="py-3 border-b" style={{ borderColor: T.line }}>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${p.actif ? "bg-green-500" : "bg-gray-300"}`} />
+                <span className="font-medium">{p.nom}</span>
+                <span className="text-xs" style={{ color: T.muted }}>{stationName(p.station_id)}</span>
+              </div>
+              <button onClick={() => toggleActif(p)} className="text-xs px-2 py-1 rounded border" style={{ borderColor: T.line, color: p.actif ? T.alert : T.ok }}>{p.actif ? "Désactiver" : "Activer"}</button>
             </div>
-            <button onClick={() => toggleActif(p)} className="text-xs px-2 py-1 rounded border" style={{ borderColor: T.line, color: p.actif ? T.alert : T.ok }}>{p.actif ? "Désactiver" : "Activer"}</button>
-          </Row>
+            
+            {/* Affichage des quarts et pistolets assignés */}
+            {(p.quarts && p.quarts.length > 0) || (p.pistolets && p.pistolets.length > 0) ? (
+              <div className="mt-2 space-y-1.5 text-xs">
+                {p.quarts && p.quarts.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium" style={{ color: T.muted }}>Quarts :</span>
+                    <div className="flex flex-wrap gap-1">
+                      {p.quarts.map((q) => (
+                        <span key={q} className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-medium">{q}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {p.pistolets && p.pistolets.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium" style={{ color: T.muted }}>Pistolets :</span>
+                    <div className="flex flex-wrap gap-1">
+                      {p.pistolets.map((pist) => (
+                        <span key={pist} className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-medium">{pist}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {p.date_affectation && (
+                  <div className="text-[11px]" style={{ color: T.muted }}>
+                    Affecté depuis le {fmtDate(p.date_affectation)}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="mt-2 text-[11px] italic" style={{ color: T.muted }}>
+                Aucun quart ou pistolet assigné
+              </div>
+            )}
+          </div>
         ))}
         {filteredP.length === 0 && <p className="text-sm py-3" style={{ color: T.muted }}>Aucun pompiste enregistré.</p>}
 
