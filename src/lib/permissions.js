@@ -127,6 +127,19 @@ const ENTITES = {
     configurer:    ["admin", "gerant", "superviseur", "directeur"],
     voir_rapports: ["admin", "gerant", "superviseur", "directeur", "comptable"],
   },
+  quart: {
+    creer:         ["admin", "gerant", "superviseur", "directeur"],
+    modifier:      ["admin", "gerant", "superviseur", "directeur"],
+    supprimer:     ["admin", "gerant", "superviseur", "directeur"],
+    affecter:      ["admin", "gerant", "superviseur", "directeur"],
+    consulter:     ["admin", "gerant", "superviseur", "directeur", "comptable"],
+  },
+  equipe: {
+    creer:         ["admin", "gerant", "superviseur", "directeur"],
+    modifier:      ["admin", "gerant", "superviseur", "directeur"],
+    supprimer:     ["admin", "gerant", "superviseur", "directeur"],
+    consulter:     ["admin", "gerant", "superviseur", "directeur", "comptable"],
+  },
 
 };
 
@@ -186,6 +199,7 @@ const ROUTES = {
   "/finance": ["admin", "superviseur", "directeur", "comptable"],
   "/parametres": ["admin", "directeur", "superviseur"],
   "/fidelite": ["admin", "gerant", "superviseur", "directeur", "commercial", "pompiste", "boutique", "lavage", "mecanicien"],
+  "/gestion-quarts": ["admin", "gerant", "superviseur", "directeur", "comptable"],
 };
 
 export function rolesRoute(role, route) {

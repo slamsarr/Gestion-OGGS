@@ -286,6 +286,7 @@ db.version(11).stores({
   pompistes: "id, station_id, nom, user_id, quarts, pistolets, date_affectation",
   quarts: "++id, date, rapport_id, pompiste_id",
   queue: "++id, created_at",
+  quart_configs: "id, station_id, nom, type, heure_debut, heure_fin, actif, created_at",
 
   clients_pro: "++id, code, nom_entreprise, station_id, telephone, email, created_at",
   vehicules: "++id, client_id, station_id, immatriculation, marque, modele, type_vehicule, carburant, created_at",

@@ -23,6 +23,7 @@ import Fidelite from "./pages/Fidelite";
 import BilanJournalierSite from "./pages/BilanJournalierSite";
 import EspaceClientFidelite from "./pages/EspaceClientFidelite";
 import TableauBordGerant from "./pages/TableauBordGerant";
+import GestionQuarts from "./pages/GestionQuarts";
 import { rolesRoute } from "./lib/permissions";
 
 function RequireAuth({ children }) {
@@ -92,6 +93,7 @@ export default function App() {
         <Route path="/fournisseurs" element={<RequireRole path="/fournisseurs"><Fournisseurs /></RequireRole>} />
         <Route path="/pistolets" element={<RequireRole path="/pistolets"><Pistolets /></RequireRole>} />
         <Route path="/pompistes" element={<RequireRole path="/pompistes"><Pompistes /></RequireRole>} />
+        <Route path="/gestion-quarts" element={<RequireRole path="/gestion-quarts"><GestionQuarts /></RequireRole>} />
         <Route path="/parametres" element={<RequireRole path="/parametres"><Parametres /></RequireRole>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

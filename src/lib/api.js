@@ -2806,6 +2806,74 @@ export async function marquerFactureReglee(factureId) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// GESTION DES QUARTS ET ÉQUIPES
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function listQuartConfigs(stationId = null) {
+  await ensureLocalSeed();
+  let rows = await db.quart_configs.toArray();
+  if (stationId) {
+    rows = rows.filter((q) => !q.station_id || q.station_id === stationId);
+  }
+  return rows.filter((q) => q.actif !== false);
+}
+
+export async function saveQuartConfig(config) {
+  await ensureLocalSeed();
+  const quart = {
+    ...config,
+    id: config.id || uuid(),
+    created_at: config.created_at || new Date().toISOString(),
+    maj_le: new Date().toISOString(),
+  };
+  await db.quart_configs.put(quart);
+  
+  // Synchro cloud si configuré
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      await sb.from("quart_configs").upsert(quart);
+    } catch (e) {
+      console.warn("Synchro cloud quart config:", e);
+    }
+  }
+  
+  return quart;
+}
+
+export async function updatePompisteQuart(pompisteId, quartId, pistolets = []) {
+  await ensureLocalSeed();
+  const pompiste = await db.pompistes.get(pompisteId);
+  if (!pompiste) return { error: "Pompiste introuvable" };
+  
+  const updated = {
+    ...pompiste,
+    quart_id: quartId || null,
+    pistolets: pistolets,
+    date_affectation: quartId ? todayISO() : null,
+    maj_le: new Date().toISOString(),
+  };
+  
+  await db.pompistes.put(updated);
+  
+  // Synchro cloud
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      await sb.from("pompistes").upsert({
+        id: pompiste.id,
+        quart_id: quartId || null,
+        pistolets: pistolets,
+      });
+    } catch (e) {
+      console.warn("Synchro cloud pompiste quart:", e);
+    }
+  }
+  
+  return { ok: true, pompiste: updated };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // GESTION DES COLLABORATEURS ET CRÉATION AUTOMATIQUE DE COMPTE PAR PROFIL
 // ─────────────────────────────────────────────────────────────────────────────
 

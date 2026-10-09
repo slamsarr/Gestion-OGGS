@@ -51,9 +51,10 @@ const NAV_POLES = [
     label: "Équipe & Config",
     icon: "⚙️",
     items: [
-      { to: "/parametres", label: "Paramètres", icon: "👥" },
-      { to: "/pompistes", label: "Équipe & Quarts", icon: "👷" },
+      { to: "/pompistes", label: "Équipe & Quarts", icon: "�" },
+      { to: "/gestion-quarts", label: "Planning Quarts", icon: "⏰" },
       { to: "/pistolets", label: "Pistolets & Pompes", icon: "🔫" },
+      { to: "/parametres", label: "Paramètres", icon: "👥" },
     ],
   },
 ];

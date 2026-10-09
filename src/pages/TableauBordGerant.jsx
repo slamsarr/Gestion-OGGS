@@ -340,6 +340,16 @@ export default function TableauBordGerant() {
             </button>
             <button
               type="button"
+              onClick={() => navigate("/gestion-quarts")}
+              className="px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition-colors shadow-md flex items-center gap-1.5"
+              title="Gérer les quarts et affectations"
+            >
+              <span>⏰</span>
+              <span className="hidden sm:inline">Planning Quarts</span>
+              <span className="sm:hidden">Quarts</span>
+            </button>
+            <button
+              type="button"
               onClick={() => setActiveTab("equipe")}
               className={`px-3 py-2 rounded-xl text-white text-xs font-bold transition-colors shadow-md flex items-center gap-1.5 ${
                 activeTab === "equipe" ? "bg-purple-800 ring-2 ring-amber-400" : "bg-purple-700 hover:bg-purple-600"
