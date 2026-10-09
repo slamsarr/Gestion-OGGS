@@ -200,6 +200,7 @@ const ROUTES = {
   "/parametres": ["admin", "directeur", "superviseur"],
   "/fidelite": ["admin", "gerant", "superviseur", "directeur", "commercial", "pompiste", "boutique", "lavage", "mecanicien"],
   "/gestion-quarts": ["admin", "gerant", "superviseur", "directeur", "comptable"],
+  "/configuration": ["admin", "gerant", "superviseur", "directeur", "comptable"],
 };
 
 export function rolesRoute(role, route) {
