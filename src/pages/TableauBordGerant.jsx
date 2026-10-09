@@ -28,7 +28,7 @@ export default function TableauBordGerant() {
   const [date, setDate] = useState(todayISO());
   const [loading, setLoading] = useState(true);
   const [ref, setRef] = useState(null);
-  const [activeTab, setActiveTab] = useState("descentes"); // descentes | bons | services | cuves | equipe
+  const [activeTab, setActiveTab] = useState("tableau_bord"); // tableau_bord | descentes | bons | services | cuves | equipe | alertes
   const [msg, setMsg] = useState("");
   const [msgType, setMsgType] = useState("ok");
 
@@ -185,6 +185,111 @@ export default function TableauBordGerant() {
     return tousBons;
   }, [tousBons, filtreBon]);
 
+  // Calculs pour correspondre au journal Excel BASE_JOURS
+  const volumesGasoil = useMemo(() => {
+    return descentes.reduce((acc, d) => acc + (n(d.vol_gasoil) || 0), 0);
+  }, [descentes]);
+
+  const volumesSuper = useMemo(() => {
+    return descentes.reduce((acc, d) => acc + (n(d.vol_super) || 0), 0);
+  }, [descentes]);
+
+  const caGasoil = useMemo(() => {
+    return descentes.reduce((acc, d) => acc + (n(d.ca_gasoil) || 0), 0);
+  }, [descentes]);
+
+  const caSuper = useMemo(() => {
+    return descentes.reduce((acc, d) => acc + (n(d.ca_super) || 0), 0);
+  }, [descentes]);
+
+  // Modes de paiement (comme dans le journal)
+  const totalEspeces = useMemo(() => {
+    return descentes.reduce((acc, d) => acc + (n(d.especes) || 0), 0);
+  }, [descentes]);
+
+  const totalMobileMoney = useMemo(() => {
+    return descentes.reduce((acc, d) => acc + (n(d.mobile_money) || 0), 0);
+  }, [descentes]);
+
+  const totalCarteBancaire = useMemo(() => {
+    return descentes.reduce((acc, d) => acc + (n(d.carte_bancaire) || 0), 0);
+  }, [descentes]);
+
+  const totalVersements = useMemo(() => {
+    return descentes.reduce((acc, d) => {
+      const versements = Array.isArray(d.versements) ? d.versements.reduce((sum, v) => sum + n(v), 0) : 0;
+      return acc + versements;
+    }, 0);
+  }, [descentes]);
+
+  // Calcul des marges (comme dans BASE_JOURS)
+  const prixVenteGO = ref?.prices?.gasoil_vente || 680;
+  const prixAchatGO = ref?.prices?.gasoil_achat || 665.5;
+  const prixVenteSUP = ref?.prices?.super_vente || 920;
+  const prixAchatSUP = ref?.prices?.super_achat || 905.5;
+
+  const margeTheorique = useMemo(() => {
+    const margeGO = volumesGasoil * (prixVenteGO - prixAchatGO);
+    const margeSUP = volumesSuper * (prixVenteSUP - prixAchatSUP);
+    return margeGO + margeSUP;
+  }, [volumesGasoil, volumesSuper, prixVenteGO, prixAchatGO, prixVenteSUP, prixAchatSUP]);
+
+  // Contrôle de continuité des index (comme dans BASE_POMPISTES)
+  const alertesIndex = useMemo(() => {
+    const alerts = [];
+    descentes.forEach((d) => {
+      if (d.index_depart && d.index_fin && d.index_depart > d.index_fin) {
+        alerts.push({
+          type: "index_incoherent",
+          pompiste: d.pompiste_nom,
+          message: `Index fin < Index départ pour ${d.pompiste_nom}`,
+        });
+      }
+    });
+    return alerts;
+  }, [descentes]);
+
+  // Alertes de stock (comme dans CONTROLES)
+  const alertesStock = useMemo(() => {
+    const alerts = [];
+    stocksStation.forEach((s) => {
+      const stock = n(s.stock);
+      const capacite = n(s.capacite);
+      if (capacite > 0 && stock < capacite * 0.2) {
+        alerts.push({
+          type: "stock_bas",
+          produit: s.produit,
+          stock,
+          capacite,
+          message: `Stock ${s.produit} bas (${stock}L / ${capacite}L)`,
+        });
+      }
+    });
+    return alerts;
+  }, [stocksStation]);
+
+  // Alertes de caisse
+  const alertesCaisse = useMemo(() => {
+    const alerts = [];
+    descentes.forEach((d) => {
+      const ecart = n(d.ecart);
+      if (Math.abs(ecart) > 5000) {
+        alerts.push({
+          type: "ecart_caisse",
+          pompiste: d.pompiste_nom,
+          ecart,
+          message: `Écart caisse élevé pour ${d.pompiste_nom}: ${F(ecart)} F`,
+        });
+      }
+    });
+    return alerts;
+  }, [descentes]);
+
+  // Toutes les alertes consolidées
+  const toutesAlertes = useMemo(() => {
+    return [...alertesIndex, ...alertesStock, ...alertesCaisse];
+  }, [alertesIndex, alertesStock, alertesCaisse]);
+
 
 
   if (loading) return <Loading label="Chargement du poste de commande Gérant..." />;
@@ -293,40 +398,44 @@ export default function TableauBordGerant() {
           </div>
         </div>
 
-        {/* ── KPIs OPÉRATIONNELS DU SITE ── */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-3">
+        {/* ── KPIs OPÉRATIONNELS DU SITE (Style BASE_JOURS Excel) ── */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 pt-3">
           <div className="bg-white/5 border border-white/10 p-2.5 rounded-xl">
-            <div className="text-[10px] font-bold text-amber-300 uppercase">Recette Globale Jour</div>
+            <div className="text-[10px] font-bold text-amber-300 uppercase">CA Total Jour</div>
             <div className="text-lg font-black text-white tabular mt-0.5">{F(totalRecetteStation)} F</div>
-            <div className="text-[10px] text-gray-300">Tous services réunis</div>
+            <div className="text-[10px] text-gray-300">Tous services</div>
           </div>
 
           <div className="bg-white/5 border border-white/10 p-2.5 rounded-xl">
-            <div className="text-[10px] font-bold text-blue-300 uppercase">Carburant Piste</div>
-            <div className="text-lg font-black text-white tabular mt-0.5">{F(totalCarburantJour)} F</div>
-            <div className="text-[10px] text-blue-200 font-semibold">{F(totalLitresCarburant)} Litres</div>
+            <div className="text-[10px] font-bold text-blue-300 uppercase">Volume GASOIL</div>
+            <div className="text-lg font-black text-white tabular mt-0.5">{F(volumesGasoil)} L</div>
+            <div className="text-[10px] text-blue-200 font-semibold">{F(caGasoil)} F</div>
           </div>
 
           <div className="bg-white/5 border border-white/10 p-2.5 rounded-xl">
-            <div className="text-[10px] font-bold text-rose-300 uppercase">Bons en Attente</div>
+            <div className="text-[10px] font-bold text-emerald-300 uppercase">Volume SUPER</div>
+            <div className="text-lg font-black text-white tabular mt-0.5">{F(volumesSuper)} L</div>
+            <div className="text-[10px] text-emerald-200 font-semibold">{F(caSuper)} F</div>
+          </div>
+
+          <div className="bg-white/5 border border-white/10 p-2.5 rounded-xl">
+            <div className="text-[10px] font-bold text-purple-300 uppercase">Marge Théorique</div>
+            <div className="text-lg font-black text-white tabular mt-0.5">{F(margeTheorique)} F</div>
+            <div className="text-[10px] text-gray-300">Carburant</div>
+          </div>
+
+          <div className="bg-white/5 border border-white/10 p-2.5 rounded-xl">
+            <div className="text-[10px] font-bold text-rose-300 uppercase">Créances Clients</div>
             <div className="text-lg font-black text-white tabular mt-0.5">{F(totalResteBons)} F</div>
-            <div className="text-[10px] text-rose-200 font-bold">{bonsImpayes.length} bon(s) non réglé(s)</div>
+            <div className="text-[10px] text-rose-200 font-bold">{bonsImpayes.length} bon(s)</div>
           </div>
 
           <div className="bg-white/5 border border-white/10 p-2.5 rounded-xl">
-            <div className="text-[10px] font-bold text-emerald-300 uppercase">Lavage & Shop</div>
-            <div className="text-lg font-black text-white tabular mt-0.5">{F(totalLavageJour + totalBoutiqueJour)} F</div>
-            <div className="text-[10px] text-gray-300">Lavage: {F(totalLavageJour)} · Shop: {F(totalBoutiqueJour)}</div>
-          </div>
-
-          <div className="bg-white/5 border border-white/10 p-2.5 rounded-xl col-span-2 sm:col-span-1">
-            <div className="text-[10px] font-bold text-amber-300 uppercase">Écart Caisse & Équipe</div>
+            <div className="text-[10px] font-bold text-amber-300 uppercase">Écart Caisse</div>
             <div className={`text-lg font-black tabular mt-0.5 ${totalEcartDescentes >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
               {totalEcartDescentes >= 0 ? "+" : ""}{F(totalEcartDescentes)} F
             </div>
-            <div className="text-[10px] text-gray-300">
-              {descentes.length} quart(s) · {equipe.filter((e) => e.actif !== false).length} agent(s) actif(s)
-            </div>
+            <div className="text-[10px] text-gray-300">{descentes.length} descente(s)</div>
           </div>
         </div>
       </div>
@@ -370,6 +479,17 @@ export default function TableauBordGerant() {
 
       {/* ── ONGLETS DU POSTE DE COMMANDE GÉRANT ── */}
       <div className="flex flex-wrap gap-2 border-b pb-2" style={{ borderColor: T.line }}>
+        <button
+          onClick={() => setActiveTab("tableau_bord")}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs ${
+            activeTab === "tableau_bord"
+              ? "bg-[#431454] text-white shadow-md ring-2 ring-amber-400"
+              : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-200"
+          }`}
+        >
+          <span>📊 Tableau de Bord</span>
+        </button>
+
         <button
           onClick={() => setActiveTab("descentes")}
           className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs ${
@@ -420,6 +540,22 @@ export default function TableauBordGerant() {
         </button>
 
         <button
+          onClick={() => setActiveTab("alertes")}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs ${
+            activeTab === "alertes"
+              ? "bg-[#431454] text-white shadow-md ring-2 ring-amber-400"
+              : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-200"
+          }`}
+        >
+          <span>⚠️ Alertes ({toutesAlertes.length})</span>
+          {toutesAlertes.length > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[10px] font-black">
+              {toutesAlertes.length}
+            </span>
+          )}
+        </button>
+
+        <button
           onClick={() => setActiveTab("equipe")}
           className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs ${
             activeTab === "equipe"
@@ -427,7 +563,7 @@ export default function TableauBordGerant() {
               : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-200"
           }`}
         >
-          <span>👥 Mon Équipe ({equipe.length})</span>
+          <span>👥 Équipe ({equipe.length})</span>
         </button>
 
         <div className="ml-auto flex items-center gap-2">
@@ -440,6 +576,142 @@ export default function TableauBordGerant() {
           </button>
         </div>
       </div>
+
+      {/* ── TAB 0 : TABLEAU DE BORD (Style BASE_JOURS Excel) ── */}
+      {activeTab === "tableau_bord" && (
+        <div className="space-y-4">
+          <div className="bg-white rounded-2xl border shadow-sm p-4" style={{ borderColor: T.line }}>
+            <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide mb-4">
+              Synthèse Journalière — {fmtDate(date)}
+            </h2>
+
+            {/* Synthèse comme BASE_JOURS */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <div className="p-3 bg-blue-50 rounded-xl">
+                <div className="text-[10px] font-bold text-blue-700 uppercase">Volume GASOIL</div>
+                <div className="text-lg font-black text-blue-900 tabular">{F(volumesGasoil)} L</div>
+                <div className="text-xs text-blue-600">{F(caGasoil)} F</div>
+              </div>
+              <div className="p-3 bg-emerald-50 rounded-xl">
+                <div className="text-[10px] font-bold text-emerald-700 uppercase">Volume SUPER</div>
+                <div className="text-lg font-black text-emerald-900 tabular">{F(volumesSuper)} L</div>
+                <div className="text-xs text-emerald-600">{F(caSuper)} F</div>
+              </div>
+              <div className="p-3 bg-purple-50 rounded-xl">
+                <div className="text-[10px] font-bold text-purple-700 uppercase">Marge Théorique</div>
+                <div className="text-lg font-black text-purple-900 tabular">{F(margeTheorique)} F</div>
+                <div className="text-xs text-purple-600">Carburant</div>
+              </div>
+              <div className="p-3 bg-amber-50 rounded-xl">
+                <div className="text-[10px] font-bold text-amber-700 uppercase">Écart Caisse</div>
+                <div className={`text-lg font-black tabular ${totalEcartDescentes >= 0 ? "text-emerald-900" : "text-rose-900"}`}>
+                  {totalEcartDescentes >= 0 ? "+" : ""}{F(totalEcartDescentes)} F
+                </div>
+                <div className="text-xs text-amber-600">{descentes.length} descente(s)</div>
+              </div>
+            </div>
+
+            {/* Modes de paiement */}
+            <h3 className="text-xs font-bold text-gray-700 uppercase mb-3">Modes d'Encaissement</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+              <div className="p-2 bg-gray-50 rounded-lg">
+                <div className="text-[10px] text-gray-500">Espèces</div>
+                <div className="font-bold text-gray-900">{F(totalEspeces)} F</div>
+              </div>
+              <div className="p-2 bg-gray-50 rounded-lg">
+                <div className="text-[10px] text-gray-500">Wave/O.Money</div>
+                <div className="font-bold text-gray-900">{F(totalMobileMoney)} F</div>
+              </div>
+              <div className="p-2 bg-gray-50 rounded-lg">
+                <div className="text-[10px] text-gray-500">Carte Bancaire</div>
+                <div className="font-bold text-gray-900">{F(totalCarteBancaire)} F</div>
+              </div>
+              <div className="p-2 bg-gray-50 rounded-lg">
+                <div className="text-[10px] text-gray-500">Bons Crédit</div>
+                <div className="font-bold text-gray-900">{F(totalResteBons)} F</div>
+              </div>
+            </div>
+
+            {/* Stocks cuves */}
+            <h3 className="text-xs font-bold text-gray-700 uppercase mb-3">État des Stocks Cuves</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {stocksStation.slice(0, 4).map((s) => {
+                const stock = n(s.stock);
+                const capacite = n(s.capacite);
+                const pct = capacite > 0 ? Math.round((stock / capacite) * 100) : 0;
+                return (
+                  <div key={s.code} className="p-3 bg-gray-50 rounded-lg">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="font-bold text-gray-900">{s.nom || s.code}</span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${pct < 20 ? "bg-rose-100 text-rose-800" : "bg-emerald-100 text-emerald-800"}`}>
+                        {pct}%
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                      <div className={`h-full rounded-full ${pct < 20 ? "bg-rose-500" : "bg-emerald-500"}`} style={{ width: `${pct}%` }}></div>
+                    </div>
+                    <div className="flex justify-between text-xs text-gray-600">
+                      <span>Stock: {F(stock)} L</span>
+                      <span>Capacité: {F(capacite)} L</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB ALERTES ── */}
+      {activeTab === "alertes" && (
+        <div className="space-y-3">
+          <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide">
+            Contrôles et Alertes — {fmtDate(date)}
+          </h2>
+
+          {toutesAlertes.length === 0 ? (
+            <div className="bg-white p-8 rounded-2xl border text-center text-gray-500 text-xs shadow-sm">
+              <p className="font-bold text-gray-700 text-sm">✓ Aucune alerte détectée</p>
+              <p className="text-gray-400 mt-1">Tous les indicateurs sont dans les normes.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {alertesIndex.length > 0 && (
+                <div className="bg-white rounded-2xl border shadow-sm p-4" style={{ borderColor: T.line }}>
+                  <h3 className="text-xs font-bold text-rose-700 uppercase mb-3">⚠️ Incohérences d'Index</h3>
+                  {alertesIndex.map((alert, idx) => (
+                    <div key={idx} className="p-2 bg-rose-50 rounded-lg mb-2">
+                      <div className="font-bold text-rose-900 text-xs">{alert.message}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {alertesStock.length > 0 && (
+                <div className="bg-white rounded-2xl border shadow-sm p-4" style={{ borderColor: T.line }}>
+                  <h3 className="text-xs font-bold text-amber-700 uppercase mb-3">📦 Stocks Bas</h3>
+                  {alertesStock.map((alert, idx) => (
+                    <div key={idx} className="p-2 bg-amber-50 rounded-lg mb-2">
+                      <div className="font-bold text-amber-900 text-xs">{alert.message}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {alertesCaisse.length > 0 && (
+                <div className="bg-white rounded-2xl border shadow-sm p-4" style={{ borderColor: T.line }}>
+                  <h3 className="text-xs font-bold text-purple-700 uppercase mb-3">💰 Écarts de Caisse</h3>
+                  {alertesCaisse.map((alert, idx) => (
+                    <div key={idx} className="p-2 bg-purple-50 rounded-lg mb-2">
+                      <div className="font-bold text-purple-900 text-xs">{alert.message}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── TAB 1 : DESCENTES POMPISTES (VISUALISATION SEULE) ── */}
       {activeTab === "descentes" && (
