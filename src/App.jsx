@@ -26,6 +26,7 @@ import BilanJournalierSite from "./pages/BilanJournalierSite";
 import EspaceClientFidelite from "./pages/EspaceClientFidelite";
 import TableauBordGerant from "./pages/TableauBordGerant";
 import GestionQuarts from "./pages/GestionQuarts";
+import ComptesClientsB2B from "./pages/ComptesClientsB2B";
 import { rolesRoute } from "./lib/permissions";
 
 function RequireAuth({ children }) {
@@ -99,6 +100,7 @@ export default function App() {
         <Route path="/parametres" element={<RequireRole path="/parametres"><Parametres /></RequireRole>} />
         <Route path="/configuration" element={<RequireRole path="/configuration"><Configuration /></RequireRole>} />
         <Route path="/etats" element={<RequireRole path="/etats"><Etats /></RequireRole>} />
+        <Route path="/comptes-clients-b2b" element={<RequireRole path="/comptes-clients-b2b"><ComptesClientsB2B /></RequireRole>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -42,6 +42,7 @@ const NAV_POLES = [
     icon: "💼",
     items: [
       { to: "/clients-pro", label: "Clients Pro", icon: "📄" },
+      { to: "/comptes-clients-b2b", label: "Comptes B2B", icon: "📊" },
       { to: "/depenses", label: "Dépenses", icon: "🧾" },
       { to: "/finance", label: "Caisse & Trésorerie", icon: "💰" },
       { to: "/fournisseurs", label: "Fournisseurs", icon: "🚚" },
@@ -53,7 +54,7 @@ const NAV_POLES = [
     icon: "⚙️",
     items: [
       { to: "/configuration", label: "Configuration", icon: "⚙️" },
-      { to: "/pompistes", label: "Équipe & Quarts", icon: "�" },
+      { to: "/pompistes", label: "Équipe & Quarts", icon: "👥" },
       { to: "/gestion-quarts", label: "Planning Quarts", icon: "⏰" },
       { to: "/pistolets", label: "Pistolets & Pompes", icon: "🔫" },
       { to: "/parametres", label: "Paramètres Réseau", icon: "👥" },

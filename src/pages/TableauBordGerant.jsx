@@ -234,18 +234,68 @@ export default function TableauBordGerant() {
     return margeGO + margeSUP;
   }, [volumesGasoil, volumesSuper, prixVenteGO, prixAchatGO, prixVenteSUP, prixAchatSUP]);
 
-  // Contrôle de continuité des index (comme dans BASE_POMPISTES)
+  // Contrôle de continuité des index (comme dans BASE_POMPISTES Excel)
   const alertesIndex = useMemo(() => {
     const alerts = [];
+    
+    // 1. Incohérence index fin < index départ (même quart)
     descentes.forEach((d) => {
       if (d.index_depart && d.index_fin && d.index_depart > d.index_fin) {
         alerts.push({
           type: "index_incoherent",
           pompiste: d.pompiste_nom,
-          message: `Index fin < Index départ pour ${d.pompiste_nom}`,
+          date: d.date,
+          message: `Index fin < Index départ pour ${d.pompiste_nom} le ${fmtDate(d.date)}`,
+          gravite: "critique"
         });
       }
     });
+
+    // 2. Contrôle de continuité entre quarts (index fin quart N = index début quart N+1)
+    // Regrouper par pompiste et pompe
+    const pompesParPompiste = {};
+    descentes.forEach((d) => {
+      const key = `${d.pompiste_nom}_${d.pistolet || 'inconnu'}`;
+      if (!pompesParPompiste[key]) {
+        pompesParPompiste[key] = [];
+      }
+      pompesParPompiste[key].push({
+        date: d.date,
+        index_depart: d.index_depart,
+        index_fin: d.index_fin,
+        pompiste: d.pompiste_nom
+      });
+    });
+
+    // Vérifier la continuité pour chaque pompiste/pompe
+    Object.entries(pompesParPompiste).forEach(([key, records]) => {
+      // Trier par date
+      records.sort((a, b) => a.date.localeCompare(b.date));
+      
+      for (let i = 0; i < records.length - 1; i++) {
+        const courant = records[i];
+        const suivant = records[i + 1];
+        
+        if (courant.index_fin && suivant.index_depart) {
+          const difference = Math.abs(courant.index_fin - suivant.index_depart);
+          // Tolérance de 10 litres pour les ajustements de pompes
+          if (difference > 10) {
+            alerts.push({
+              type: "continuite_brompee",
+              pompiste: courant.pompiste,
+              date_courant: courant.date,
+              date_suivant: suivant.date,
+              index_fin: courant.index_fin,
+              index_debut_suivant: suivant.index_depart,
+              difference,
+              message: `Rupture de continuité pour ${courant.pompiste}: index fin ${courant.index_fin} ≠ index début suivant ${suivant.index_depart} (écart: ${difference}L)`,
+              gravite: "moyenne"
+            });
+          }
+        }
+      }
+    });
+
     return alerts;
   }, [descentes]);
 
@@ -364,6 +414,16 @@ export default function TableauBordGerant() {
               <span>📄</span>
               <span className="hidden sm:inline">Facturation OHADA</span>
               <span className="sm:hidden">Factures</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate("/comptes-clients-b2b")}
+              className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors shadow-md flex items-center gap-1.5"
+              title="Gérer les comptes clients B2B"
+            >
+              <span>📊</span>
+              <span className="hidden sm:inline">Comptes B2B</span>
+              <span className="sm:hidden">B2B</span>
             </button>
             <button
               type="button"
@@ -678,10 +738,18 @@ export default function TableauBordGerant() {
             <div className="space-y-3">
               {alertesIndex.length > 0 && (
                 <div className="bg-white rounded-2xl border shadow-sm p-4" style={{ borderColor: T.line }}>
-                  <h3 className="text-xs font-bold text-rose-700 uppercase mb-3">⚠️ Incohérences d'Index</h3>
+                  <h3 className="text-xs font-bold text-rose-700 uppercase mb-3">⚠️ Incohérences d'Index ({alertesIndex.length})</h3>
                   {alertesIndex.map((alert, idx) => (
-                    <div key={idx} className="p-2 bg-rose-50 rounded-lg mb-2">
-                      <div className="font-bold text-rose-900 text-xs">{alert.message}</div>
+                    <div key={idx} className={`p-3 rounded-lg mb-2 ${alert.gravite === 'critique' ? 'bg-rose-50 border border-rose-200' : 'bg-amber-50 border border-amber-200'}`}>
+                      <div className="font-bold text-xs mb-1">
+                        {alert.gravite === 'critique' ? '🔴 CRITIQUE' : '🟡 MOYENNE'} - {alert.pompiste}
+                      </div>
+                      <div className="text-xs text-gray-700">{alert.message}</div>
+                      {alert.date_courant && (
+                        <div className="text-[10px] text-gray-500 mt-1">
+                          Du {fmtDate(alert.date_courant)} au {fmtDate(alert.date_suivant)}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -689,7 +757,7 @@ export default function TableauBordGerant() {
 
               {alertesStock.length > 0 && (
                 <div className="bg-white rounded-2xl border shadow-sm p-4" style={{ borderColor: T.line }}>
-                  <h3 className="text-xs font-bold text-amber-700 uppercase mb-3">📦 Stocks Bas</h3>
+                  <h3 className="text-xs font-bold text-amber-700 uppercase mb-3">📦 Stocks Bas ({alertesStock.length})</h3>
                   {alertesStock.map((alert, idx) => (
                     <div key={idx} className="p-2 bg-amber-50 rounded-lg mb-2">
                       <div className="font-bold text-amber-900 text-xs">{alert.message}</div>
@@ -700,7 +768,7 @@ export default function TableauBordGerant() {
 
               {alertesCaisse.length > 0 && (
                 <div className="bg-white rounded-2xl border shadow-sm p-4" style={{ borderColor: T.line }}>
-                  <h3 className="text-xs font-bold text-purple-700 uppercase mb-3">💰 Écarts de Caisse</h3>
+                  <h3 className="text-xs font-bold text-purple-700 uppercase mb-3">💰 Écarts de Caisse ({alertesCaisse.length})</h3>
                   {alertesCaisse.map((alert, idx) => (
                     <div key={idx} className="p-2 bg-purple-50 rounded-lg mb-2">
                       <div className="font-bold text-purple-900 text-xs">{alert.message}</div>
