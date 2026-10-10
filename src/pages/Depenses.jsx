@@ -4,6 +4,7 @@ import { loadReferentiel, listDepenses, saveDepense, deleteDepense, createCatego
 import { F, fmtDate, n, T, todayISO, uuid } from "../lib/calcul";
 import { Section, Row, Num, Loading } from "../components/ui";
 import { peutAgirProfil } from "../lib/permissions";
+import { useFlash } from "../hooks/useFlash";
 
 const CAT_VIDE = { code: "", libelle: "", nature_depense: "FONCTIONNEMENT", compte_syscohada: "6588" };
 
@@ -14,7 +15,7 @@ export default function Depenses() {
   const [cats, setCats] = useState([]);
   const [depenses, setDeps] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [msg, setMsg] = useState("");
+  const [msg, flash] = useFlash();
   const [showCat, setShowCat] = useState(false);
   const [catForm, setCatForm] = useState(CAT_VIDE);
   const [dForm, setDForm] = useState({ categorie_code: "", libelle: "", montant: "", date_depense: todayISO(), mode_paiement: "ESPECES", station_id: stationId });
@@ -27,8 +28,6 @@ export default function Depenses() {
     setIsMounted(true);
     return () => setIsMounted(false);
   }, []);
-
-  const flash = (t) => { if (isMounted) { setMsg(t); setTimeout(() => { if (isMounted) setMsg(""); }, 3500); } };
 
   const load = async () => {
     if (!isMounted) return;
