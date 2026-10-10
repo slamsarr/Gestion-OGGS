@@ -18,6 +18,7 @@ import { Section, Row, Num, Loading } from "../components/ui";
 import { listeClientsCredit } from "../lib/seed";
 import { BRAND_CONFIG } from "../lib/branding";
 import { ROLE_LABELS } from "../lib/permissions";
+import { useFlash } from "../hooks/useFlash";
 
 function AddForm({ label, children, onSubmit, show, setShow }) {
   if (!show) return <button onClick={() => setShow(true)} className="w-full py-2 my-2 rounded text-sm font-medium" style={{ border: `1px dashed ${T.petrol}`, color: T.petrol }}>+ {label}</button>;
@@ -46,7 +47,7 @@ export default function Parametres() {
   const [ref, setRef] = useState(null);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [msg, setMsg] = useState("");
+  const [msg, flash] = useFlash();
 
   // Add form states
   const [showSt, setShowSt] = useState(false);
@@ -124,7 +125,6 @@ export default function Parametres() {
     flash(res.cloud ? "Paramètres réseau enregistrés dans le cloud" : `Paramètres enregistrés${res.pending ? " (sync en attente)" : ""}`);
   };
 
-  const flash = (t) => { setMsg(t); setTimeout(() => setMsg(""), 3000); };
   const reload = async () => { const r = await loadReferentiel(); setRef(r); };
   const patchRef = async (fn) => {
     const next = fn({ ...ref });

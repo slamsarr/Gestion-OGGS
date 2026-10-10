@@ -6,6 +6,7 @@ import {
 } from "../lib/api";
 import { F, fmtDate, n, T, todayISO, uuid } from "../lib/calcul";
 import { Section, Row, Num, Loading } from "../components/ui";
+import { useFlash } from "../hooks/useFlash";
 
 export default function Fournisseurs() {
   const { profil } = useAuth();
@@ -14,7 +15,7 @@ export default function Fournisseurs() {
   const [fous, setFous] = useState([]);
   const [achats, setAchats] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [msg, setMsg] = useState("");
+  const [msg, flash] = useFlash();
   const [showFo, setShowFo] = useState(false);
   const [formFo, setFormFo] = useState({ code: "", nom_fournisseur: "", telephone: "", email: "", adresse: "" });
   const [showAc, setShowAc] = useState(false);
@@ -22,8 +23,6 @@ export default function Fournisseurs() {
   const [formAc, setFormAc] = useState({ fournisseur_id: "", date_achat: todayISO(), designation: "", quantite: "", prix_unitaire: "", montant: "" });
   const [editFoId, setEditFoId] = useState(null);
   const [editFou, setEditFou] = useState(null);
-
-  const flash = (t) => { setMsg(t); setTimeout(() => setMsg(""), 3500); };
 
   const load = async () => {
     try {

@@ -5,6 +5,7 @@ import { loadReferentiel, listPompistes, savePompiste, listRapports, listQuarts,
 import { F, fmtDate, n, T, todayISO, uuid } from "../lib/calcul";
 import { Section, Row, Num, Loading } from "../components/ui";
 import CollaborateurModal from "../components/CollaborateurModal";
+import { useFlash } from "../hooks/useFlash";
 
 export default function Pompistes() {
   const { profil } = useAuth();
@@ -13,7 +14,7 @@ export default function Pompistes() {
   const [pompistes, setPompistes] = useState([]);
   const [rapports, setRapports] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [msg, setMsg] = useState("");
+  const [msg, flash] = useFlash();
   const [showAdd, setShowAdd] = useState(false);
   const [nom, setNom] = useState("");
   const [stId, setStId] = useState("");
@@ -52,8 +53,6 @@ export default function Pompistes() {
     if (loading) return;
     listQuarts(dateQuart).then(setQuarts);
   }, [dateQuart, loading]);
-
-  const flash = (t) => { setMsg(t); setTimeout(() => setMsg(""), 3000); };
 
   const addPompiste = async () => {
     if (!nom.trim() || !stId) return;

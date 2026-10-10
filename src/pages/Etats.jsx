@@ -4,6 +4,7 @@ import { loadReferentiel, listRapports, listCollaborateurs, listDescentes } from
 import { F, n, fmtDate, todayISO, T } from "../lib/calcul";
 import { Section, Loading } from "../components/ui";
 import { exporterCsv } from "../lib/exportExcel";
+import { useFlash } from "../hooks/useFlash";
 
 const ETAT_TYPES = [
   { id: "rapports_journaliers", nom: "Rapports Journaliers", description: "Rapports de caisse complets par station et date" },
@@ -25,7 +26,7 @@ export default function Etats() {
   const [ref, setRef] = useState(null);
   const [collaborateurs, setCollaborateurs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [msg, setMsg] = useState("");
+  const [msg, flash] = useFlash();
 
   // Filtres
   const [etatType, setEtatType] = useState("rapports_journaliers");
@@ -50,8 +51,6 @@ export default function Etats() {
       setLoading(false);
     })();
   }, []);
-
-  const flash = (t) => { setMsg(t); setTimeout(() => setMsg(""), 4000); };
 
   const genererEtat = async () => {
     setGenerating(true);

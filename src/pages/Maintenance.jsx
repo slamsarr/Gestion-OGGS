@@ -4,6 +4,7 @@ import { loadReferentiel, listEquipements, listIncidents, createIncident, update
 import { F, fmtDate, n, T, todayISO } from "../lib/calcul";
 import { Section, Row, Num, Loading } from "../components/ui";
 import { peutAgirProfil } from "../lib/permissions";
+import { useFlash } from "../hooks/useFlash";
 
 export default function Maintenance() {
   const { profil } = useAuth();
@@ -13,7 +14,7 @@ export default function Maintenance() {
   const peutPlanifier = peutAgirProfil(profil, "maintenance", "creer");
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("incidents"); // incidents | interventions | equipements
-  const [msg, setMsg] = useState("");
+  const [msg, flash] = useFlash();
 
   const [equipements, setEquipements] = useState([]);
   const [incidents, setIncidents] = useState([]);
@@ -31,8 +32,6 @@ export default function Maintenance() {
   const [piecesChangees, setPiecesChangees] = useState("");
   const [prestataire, setPrestataire] = useState("");
   const [coutMaintenance, setCoutMaintenance] = useState("");
-
-  const flash = (t) => { setMsg(t); setTimeout(() => setMsg(""), 3500); };
 
   const loadData = async () => {
     try {

@@ -5,6 +5,7 @@ import { loadReferentiel, listRapports, deleteRapport } from "../lib/api";
 import { F, n, fmtDate, todayISO, T } from "../lib/calcul";
 import { Row, Loading } from "../components/ui";
 import { peutSupprimerRapport } from "../lib/permissions";
+import { useFlash } from "../hooks/useFlash";
 
 export default function Historique() {
   const { profil } = useAuth();
@@ -14,7 +15,7 @@ export default function Historique() {
   const [ref, setRef] = useState(null);
   const [rapports, setRapports] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [msg, setMsg] = useState("");
+  const [msg, flash] = useFlash();
   const [filtreStation, setFiltreStation] = useState(stationScope || "ALL");
   const [filtreStatut, setFiltreStatut] = useState("ALL");
   const [page, setPage] = useState(1);
@@ -44,8 +45,6 @@ export default function Historique() {
       setLoadingMore(false);
     })();
   }, [page, filtreStation, loading]);
-
-  const flash = (t) => { setMsg(t); setTimeout(() => setMsg(""), 3000); };
 
   const effacer = async (r) => {
     if (!peutSupprimerRapport(role, r.statut, r.station, stationScope)) { flash("Droits insuffisants pour supprimer ce rapport"); return; }

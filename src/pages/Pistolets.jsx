@@ -3,6 +3,7 @@ import { useAuth } from "../context/AuthContext";
 import { loadReferentiel, listRapports, saveJauge, listJauges, saveLivraison, listLivraisons, listCuves } from "../lib/api";
 import { F, fmtDate, n, T, todayISO } from "../lib/calcul";
 import { Section, Num, Loading } from "../components/ui";
+import { useFlash } from "../hooks/useFlash";
 
 export default function Pistolets() {
   const { profil } = useAuth();
@@ -11,7 +12,7 @@ export default function Pistolets() {
   const [loading, setLoading] = useState(true);
   const [stationFilter, setStationFilter] = useState("ALL");
   const [tab, setTab] = useState("index"); // index | jauges | livraisons
-  const [msg, setMsg] = useState("");
+  const [msg, flash] = useFlash();
 
   // Jauges state
   const [jauges, setJauges] = useState([]);
@@ -40,8 +41,6 @@ export default function Pistolets() {
       setLoading(false);
     })();
   }, []);
-
-  const flash = (t) => { setMsg(t); setTimeout(() => setMsg(""), 3000); };
 
   const loadStationData = async (sid) => {
     const [j, l, cv] = await Promise.all([listJauges(sid), listLivraisons(sid), listCuves(sid)]);

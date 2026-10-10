@@ -3,6 +3,7 @@ import { useAuth } from "../context/AuthContext";
 import { loadReferentiel, listPompistes, saveQuartConfig, listQuartConfigs, updatePompisteQuart } from "../lib/api";
 import { F, fmtDate, n, T, todayISO, uuid } from "../lib/calcul";
 import { Section, Row, Loading } from "../components/ui";
+import { useFlash } from "../hooks/useFlash";
 
 export default function GestionQuarts() {
   const { profil } = useAuth();
@@ -11,7 +12,7 @@ export default function GestionQuarts() {
   const [ref, setRef] = useState(null);
   const [pompistes, setPompistes] = useState([]);
   const [quartConfigs, setQuartConfigs] = useState([]);
-  const [msg, setMsg] = useState("");
+  const [msg, flash] = useFlash();
   
   // États pour les formulaires
   const [showAddQuart, setShowAddQuart] = useState(false);
@@ -48,8 +49,6 @@ export default function GestionQuarts() {
     equipe_id: "",
     pistolets: [],
   });
-
-  const flash = (t) => { setMsg(t); setTimeout(() => setMsg(""), 4000); };
 
   const loadData = async () => {
     try {
