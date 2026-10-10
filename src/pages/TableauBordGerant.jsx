@@ -489,50 +489,50 @@ export default function TableauBordGerant() {
         </div>
 
         {/* ── KPIs OPÉRATIONNELS DU SITE (Style BASE_JOURS Excel) ── */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 pt-3">
-          <div className="bg-white/5 border border-white/10 p-2.5 rounded-xl">
-            <div className="text-[10px] font-bold text-amber-300 uppercase">CA Total Jour</div>
-            <div className="text-lg font-black text-white tabular mt-0.5">{F(totalRecetteStation)} F</div>
-            <div className="text-[10px] text-gray-300">Tous services</div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 pt-4">
+          <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
+            <div className="text-xs font-bold text-amber-300 uppercase">CA Total Jour</div>
+            <div className="text-lg font-black text-white tabular mt-1">{F(totalRecetteStation)} F</div>
+            <div className="text-xs text-gray-300">Tous services</div>
           </div>
 
-          <div className="bg-white/5 border border-white/10 p-2.5 rounded-xl">
-            <div className="text-[10px] font-bold text-blue-300 uppercase">Volume GASOIL</div>
-            <div className="text-lg font-black text-white tabular mt-0.5">{F(volumesGasoil)} L</div>
-            <div className="text-[10px] text-blue-200 font-semibold">{F(caGasoil)} F</div>
+          <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
+            <div className="text-xs font-bold text-blue-300 uppercase">Volume GASOIL</div>
+            <div className="text-lg font-black text-white tabular mt-1">{F(volumesGasoil)} L</div>
+            <div className="text-xs text-blue-200 font-semibold">{F(caGasoil)} F</div>
           </div>
 
-          <div className="bg-white/5 border border-white/10 p-2.5 rounded-xl">
-            <div className="text-[10px] font-bold text-emerald-300 uppercase">Volume SUPER</div>
-            <div className="text-lg font-black text-white tabular mt-0.5">{F(volumesSuper)} L</div>
-            <div className="text-[10px] text-emerald-200 font-semibold">{F(caSuper)} F</div>
+          <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
+            <div className="text-xs font-bold text-emerald-300 uppercase">Volume SUPER</div>
+            <div className="text-lg font-black text-white tabular mt-1">{F(volumesSuper)} L</div>
+            <div className="text-xs text-emerald-200 font-semibold">{F(caSuper)} F</div>
           </div>
 
-          <div className="bg-white/5 border border-white/10 p-2.5 rounded-xl">
-            <div className="text-[10px] font-bold text-purple-300 uppercase">Marge Théorique</div>
-            <div className="text-lg font-black text-white tabular mt-0.5">{F(margeTheorique)} F</div>
-            <div className="text-[10px] text-gray-300">Carburant</div>
+          <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
+            <div className="text-xs font-bold text-purple-300 uppercase">Marge Théorique</div>
+            <div className="text-lg font-black text-white tabular mt-1">{F(margeTheorique)} F</div>
+            <div className="text-xs text-gray-300">Carburant</div>
           </div>
 
-          <div className="bg-white/5 border border-white/10 p-2.5 rounded-xl">
-            <div className="text-[10px] font-bold text-rose-300 uppercase">Créances Clients</div>
-            <div className="text-lg font-black text-white tabular mt-0.5">{F(totalResteBons)} F</div>
-            <div className="text-[10px] text-rose-200 font-bold">{bonsImpayes.length} bon(s)</div>
+          <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
+            <div className="text-xs font-bold text-rose-300 uppercase">Créances Clients</div>
+            <div className="text-lg font-black text-white tabular mt-1">{F(totalResteBons)} F</div>
+            <div className="text-xs text-rose-200 font-bold">{bonsImpayes.length} bon(s)</div>
           </div>
 
-          <div className="bg-white/5 border border-white/10 p-2.5 rounded-xl">
-            <div className="text-[10px] font-bold text-amber-300 uppercase">Écart Caisse</div>
-            <div className={`text-lg font-black tabular mt-0.5 ${totalEcartDescentes >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+          <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
+            <div className="text-xs font-bold text-amber-300 uppercase">Écart Caisse</div>
+            <div className={`text-lg font-black tabular mt-1 ${totalEcartDescentes >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
               {totalEcartDescentes >= 0 ? "+" : ""}{F(totalEcartDescentes)} F
             </div>
-            <div className="text-[10px] text-gray-300">{descentes.length} descente(s)</div>
+            <div className="text-xs text-gray-300">{descentes.length} descente(s)</div>
           </div>
         </div>
       </div>
 
       {msg && (
         <div
-          className={`p-3 rounded-xl text-xs font-bold shadow-xs flex items-center justify-between ${
+          className={`p-4 rounded-xl text-sm font-bold shadow-xs flex items-center justify-between ${
             msgType === "error" ? "bg-rose-100 text-rose-900 border border-rose-300" : "bg-emerald-100 text-emerald-900 border border-emerald-300"
           }`}
         >
