@@ -14,10 +14,10 @@ export function Button({
   fullWidth = false,
 }) {
   const sizeMap = {
-    xs: "px-3 py-1.5 text-xs rounded-md gap-1.5",
-    sm: "px-4 py-2 text-sm rounded-lg gap-2",
-    md: "px-5 py-2.5 text-sm rounded-xl gap-2",
-    lg: "px-6 py-3 text-base rounded-xl gap-2.5",
+    xs: "px-4 py-2.5 text-sm rounded-lg gap-2",
+    sm: "px-5 py-3 text-base rounded-xl gap-2.5",
+    md: "px-6 py-3.5 text-base rounded-xl gap-2.5",
+    lg: "px-7 py-4 text-lg rounded-2xl gap-3",
   };
   const variantMap = {
     primary:
@@ -135,7 +135,7 @@ export function InputComptable({
       <div
         className={`relative flex items-center rounded-xl border transition-all overflow-hidden shadow-inner-soft bg-white ${borderClass}`}
       >
-        <span className={`shrink-0 w-10 text-center text-xs font-black border-r py-3.5 ${badgeColor} transition-colors`}>
+        <span className={`shrink-0 w-12 text-center text-sm font-black border-r py-4 ${badgeColor} transition-colors`}>
           {badgeIcon}
         </span>
         <input
@@ -151,14 +151,14 @@ export function InputComptable({
           }}
           onBlur={() => setIsFocused(false)}
           onChange={handleChange}
-          className="flex-1 px-4 py-3.5 text-right text-base font-mono font-bold bg-transparent disabled:text-slate-400 outline-none tabular-nums"
+          className="flex-1 px-5 py-4 text-right text-lg font-mono font-bold bg-transparent disabled:text-slate-400 outline-none tabular-nums"
           style={{
             color: disabled ? "#94A3B8" : isInvalid ? "#DC2626" : "#0F172A",
             fontVariantNumeric: "tabular-nums",
           }}
         />
         {unit && (
-          <span className="shrink-0 px-4 py-3.5 text-xs font-bold text-slate-500 bg-slate-50 border-l border-surface-border">
+          <span className="shrink-0 px-5 py-4 text-sm font-bold text-slate-500 bg-slate-50 border-l border-surface-border">
             {unit}
           </span>
         )}
@@ -180,21 +180,21 @@ export function InputComptable({
 }
 
 export const Row = ({ children, className = "" }) => (
-  <div className={`flex items-center justify-between gap-4 py-4 border-b border-surface-border last:border-b-0 ${className}`}>
+  <div className={`flex items-center justify-between gap-4 py-5 border-b border-surface-border last:border-b-0 ${className}`}>
     {children}
   </div>
 );
 
 export const Section = ({ titre, aside, children, icon }) => (
-  <section className="mb-8 animate-subtle-in">
-    <div className="flex items-baseline justify-between mb-3 px-0.5">
-      <h2 className="text-base font-extrabold tracking-tight text-ink flex items-center gap-2" style={{ color: T.primaryInk }}>
-        {icon && <span className="text-lg">{icon}</span>}
+  <section className="mb-10 animate-subtle-in">
+    <div className="flex items-baseline justify-between mb-4 px-0.5">
+      <h2 className="text-lg font-extrabold tracking-tight text-ink flex items-center gap-2" style={{ color: T.primaryInk }}>
+        {icon && <span className="text-xl">{icon}</span>}
         {titre}
       </h2>
-      {aside && <span className="text-sm font-semibold" style={{ color: T.muted }}>{aside}</span>}
+      {aside && <span className="text-sm font-semibold px-3 py-1.5 rounded-lg bg-slate-100" style={{ color: T.muted }}>{aside}</span>}
     </div>
-    <div className="bg-surface-card rounded-2xl px-5 sm:px-6 py-5 shadow-card border border-surface-border/80">
+    <div className="bg-surface-card rounded-2xl px-6 sm:px-7 py-6 shadow-card border border-surface-border/80">
       {children}
     </div>
   </section>
@@ -209,21 +209,21 @@ export const Alerte = ({ children, variant = "alert", icon }) => {
   };
   const v = variants[variant] || variants.alert;
   return (
-    <div className={`text-sm font-medium rounded-xl px-5 py-4 my-4 border ${v.bg} ${v.text} ${v.border} shadow-card flex items-start gap-3`}>
-      <span className="text-lg leading-none mt-0.5">{v.icon}</span>
+    <div className={`text-base font-semibold rounded-xl px-6 py-5 my-5 border ${v.bg} ${v.text} ${v.border} shadow-card flex items-start gap-4`}>
+      <span className="text-2xl leading-none mt-0.5">{v.icon}</span>
       <div className="flex-1">{children}</div>
     </div>
   );
 };
 
 export const Loading = ({ label = "Chargement…" }) => (
-  <div className="flex flex-col items-center justify-center gap-6 p-20 text-sm font-medium" style={{ color: T.muted }}>
+  <div className="flex flex-col items-center justify-center gap-8 p-24 text-base font-medium" style={{ color: T.muted }}>
     <div className="relative">
-      <span className="inline-block w-12 h-12 rounded-full border-[3px] border-slate-200 border-t-damel-blue animate-spin" />
+      <span className="inline-block w-16 h-16 rounded-full border-[4px] border-slate-200 border-t-damel-blue animate-spin" />
     </div>
-    <div className="flex flex-col items-center gap-2">
-      <span className="text-base font-semibold text-slate-600">{label}</span>
-      <span className="text-xs text-slate-400">FuelOS · DAMEL ENERGY</span>
+    <div className="flex flex-col items-center gap-3">
+      <span className="text-lg font-bold text-slate-600">{label}</span>
+      <span className="text-sm text-slate-400">FuelOS · DAMEL ENERGY</span>
     </div>
   </div>
 );
@@ -236,25 +236,25 @@ export const PageHeader = ({ icon, titre, subtitle, badge, actions, breadcrumb }
       </div>
     )}
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <div className="flex items-center gap-3.5">
+      <div className="flex items-center gap-4">
         {icon && (
-          <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shadow-card bg-gradient-to-br from-fuelos-50 to-fuelos-100 border border-fuelos-200/60 shrink-0">
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-3xl shadow-card bg-gradient-to-br from-fuelos-50 to-fuelos-100 border border-fuelos-200/60 shrink-0">
             {icon}
           </div>
         )}
         <div>
           <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-ink" style={{ color: T.primaryInk }}>{titre}</h1>
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-ink" style={{ color: T.primaryInk }}>{titre}</h1>
             {badge && (
-              <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-damel-yellow/20 text-damel-gold border border-damel-yellow/40">
+              <span className="inline-flex items-center gap-1 text-sm font-bold px-3 py-1.5 rounded-full bg-damel-yellow/20 text-damel-gold border border-damel-yellow/40">
                 {badge}
               </span>
             )}
           </div>
-          {subtitle && <p className="text-sm text-slate-500 mt-1">{subtitle}</p>}
+          {subtitle && <p className="text-base text-slate-500 mt-1">{subtitle}</p>}
         </div>
       </div>
-      {actions && <div className="flex items-center gap-2 flex-wrap">{actions}</div>}
+      {actions && <div className="flex items-center gap-3 flex-wrap">{actions}</div>}
     </div>
   </div>
 );
@@ -323,25 +323,25 @@ export const StatCard = ({ label, value, subtext, icon, color = "blue", onClick,
   return (
     <div
       onClick={onClick}
-      className={`relative overflow-hidden transition-all duration-200 rounded-2xl p-4 sm:p-5 border bg-gradient-to-br ${theme.bg} ${theme.border} shadow-card ${
+      className={`relative overflow-hidden transition-all duration-200 rounded-2xl p-5 sm:p-6 border bg-gradient-to-br ${theme.bg} ${theme.border} shadow-card ${
         onClick ? `cursor-pointer hover:shadow-card-hover hover:-translate-y-0.5 hover:ring-2 ${theme.ring}` : ""
       }`}
     >
       <div className="absolute top-0 right-0 w-24 h-24 rounded-full opacity-[0.04] bg-current -mt-10 -mr-10" style={{ color: theme.text.replace("text-", "") }} />
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">{label}</span>
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <span className="text-sm font-bold text-slate-500 uppercase tracking-wider">{label}</span>
         {icon && (
-          <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg shrink-0 ${theme.accentBg} ${theme.accentText}`}>
+          <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-xl shrink-0 ${theme.accentBg} ${theme.accentText}`}>
             {icon}
           </div>
         )}
       </div>
-      <div className={`text-2xl sm:text-3xl font-black tabular tracking-tight ${theme.text}`}>{value}</div>
+      <div className={`text-3xl sm:text-4xl font-black tabular tracking-tight ${theme.text}`}>{value}</div>
       {(subtext || trend !== undefined) && (
-        <div className="flex items-center justify-between mt-2">
-          {subtext && <div className="text-[11px] text-slate-400">{subtext}</div>}
+        <div className="flex items-center justify-between mt-3">
+          {subtext && <div className="text-sm text-slate-400">{subtext}</div>}
           {trend !== undefined && (
-            <div className={`inline-flex items-center gap-1 text-xs font-bold px-1.5 py-0.5 rounded-md ${
+            <div className={`inline-flex items-center gap-1.5 text-sm font-bold px-2 py-1 rounded-lg ${
               trend >= 0 ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
             }`}>
               <span>{trend >= 0 ? "↑" : "↓"}</span>
@@ -372,9 +372,9 @@ export const Badge = ({ children, variant = "default", className = "", dot }) =>
     star: "bg-star-purple/10 text-star-purple border border-star-purple/25 font-semibold",
   };
   return (
-    <span className={`inline-flex items-center gap-1.5 text-[10.5px] font-semibold px-2.5 py-1 rounded-full ${map[variant] || map.default} ${className}`}>
+    <span className={`inline-flex items-center gap-2 text-sm font-semibold px-3 py-1.5 rounded-full ${map[variant] || map.default} ${className}`}>
       {dot !== undefined && (
-        <span className={`w-1.5 h-1.5 rounded-full ${dot ? "bg-emerald-500" : "bg-slate-300"}`} />
+        <span className={`w-2 h-2 rounded-full ${dot ? "bg-emerald-500" : "bg-slate-300"}`} />
       )}
       {children}
     </span>
@@ -384,7 +384,7 @@ export const Badge = ({ children, variant = "default", className = "", dot }) =>
 export const Card = ({ children, className = "", onClick, hover = true }) => (
   <div
     onClick={onClick}
-    className={`bg-surface-card rounded-2xl border border-surface-border/80 shadow-card p-4 sm:p-5 ${
+    className={`bg-surface-card rounded-2xl border border-surface-border/80 shadow-card p-5 sm:p-6 ${
       onClick && hover ? "cursor-pointer hover:shadow-card-hover hover:border-surface-border-strong hover:-translate-y-0.5 transition-all duration-200" : ""
     } ${className}`}
   >
@@ -394,12 +394,12 @@ export const Card = ({ children, className = "", onClick, hover = true }) => (
 
 export function EmptyState({ icon = "📭", title, description, action }) {
   return (
-    <div className="flex flex-col items-center justify-center text-center py-16 px-8 rounded-2xl border-2 border-dashed border-surface-border bg-white/40">
-      <div className="w-20 h-20 rounded-2xl flex items-center justify-center text-4xl mb-6 bg-gradient-to-br from-surface-muted to-white border border-surface-border shadow-card">
+    <div className="flex flex-col items-center justify-center text-center py-20 px-10 rounded-2xl border-2 border-dashed border-surface-border bg-white/40">
+      <div className="w-24 h-24 rounded-2xl flex items-center justify-center text-5xl mb-8 bg-gradient-to-br from-surface-muted to-white border border-surface-border shadow-card">
         {icon}
       </div>
-      <h3 className="text-base font-extrabold text-slate-800 mb-2">{title}</h3>
-      {description && <p className="text-sm text-slate-500 max-w-md mb-6">{description}</p>}
+      <h3 className="text-lg font-extrabold text-slate-800 mb-3">{title}</h3>
+      {description && <p className="text-base text-slate-500 max-w-md mb-8">{description}</p>}
       {action && <div>{action}</div>}
     </div>
   );
