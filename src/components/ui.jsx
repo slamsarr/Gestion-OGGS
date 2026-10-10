@@ -14,10 +14,10 @@ export function Button({
   fullWidth = false,
 }) {
   const sizeMap = {
-    xs: "px-3 py-1.5 text-xs rounded-md gap-1.5",
-    sm: "px-4 py-2 text-sm rounded-lg gap-2",
-    md: "px-5 py-2.5 text-sm rounded-xl gap-2",
-    lg: "px-6 py-3 text-base rounded-xl gap-2.5",
+    xs: "px-3 py-2 text-xs rounded-md gap-1.5",
+    sm: "px-4 py-2.5 text-sm rounded-lg gap-2",
+    md: "px-5 py-3.5 text-sm rounded-xl gap-2",
+    lg: "px-6 py-4 text-base rounded-xl gap-2.5",
   };
   const variantMap = {
     primary:
