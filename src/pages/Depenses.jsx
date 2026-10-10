@@ -10,8 +10,6 @@ const CAT_VIDE = { code: "", libelle: "", nature_depense: "FONCTIONNEMENT", comp
 export default function Depenses() {
   const { profil } = useAuth();
   const stationId = profil?.station_id || "";
-  const peutDeclarer = peutAgirProfil(profil, "depense", "declarer");
-  const peutValider = peutAgirProfil(profil, "depense", "valider");
   const [ref, setRef] = useState(null);
   const [cats, setCats] = useState([]);
   const [depenses, setDeps] = useState([]);
@@ -20,6 +18,9 @@ export default function Depenses() {
   const [showCat, setShowCat] = useState(false);
   const [catForm, setCatForm] = useState(CAT_VIDE);
   const [dForm, setDForm] = useState({ categorie_code: "", libelle: "", montant: "", date_depense: todayISO(), mode_paiement: "ESPECES", station_id: stationId });
+
+  const peutDeclarer = useMemo(() => peutAgirProfil(profil, "depense", "declarer"), [profil]);
+  const peutValider = useMemo(() => peutAgirProfil(profil, "depense", "valider"), [profil]);
 
   const flash = (t) => { setMsg(t); setTimeout(() => setMsg(""), 3500); };
 
