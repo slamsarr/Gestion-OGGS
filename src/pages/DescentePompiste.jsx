@@ -2249,14 +2249,21 @@ export default function DescentePompiste() {
               <div className="border-b pb-2 border-dashed border-gray-300 text-[11px] space-y-2">
                 <div className="font-bold text-gray-700">DÉTAIL DES CAISSES PAR POMPE :</div>
                 {(ticketModal.pompes || []).map((p) => (
-                  <div key={p.id || p.pistolet_code} className="bg-gray-50 p-2 rounded border border-gray-200 space-y-0.5">
+                  <div key={p.id || p.pistolet_code} className="bg-gray-50 p-2 rounded border border-gray-200 space-y-1">
                     <div className="flex justify-between font-bold text-blue-900">
                       <span>{p.caisseId} — {(p.pistolet_code || "").toUpperCase()} ({p.produit})</span>
                       <span className="tabular">{F(p.montant)} F</span>
                     </div>
                     <div className="flex justify-between text-[10px] text-gray-600">
-                      <span>Index : {p.index_debut} ➔ {p.index_fin}</span>
-                      <span>{F(p.volume_vendu)} L à {F(p.prix_unitaire)} F</span>
+                      <span>Index départ : {p.index_debut}</span>
+                      <span>Index fin : {p.index_fin}</span>
+                    </div>
+                    <div className="flex justify-between text-[10px] text-gray-600">
+                      <span>Volume vendu : {F(p.volume_vendu)} L</span>
+                      <span>Prix unitaire : {F(p.prix_unitaire)} F/L</span>
+                    </div>
+                    <div className="text-[10px] text-emerald-700 font-medium pl-1">
+                      📊 Valeur : {F(p.volume_vendu * p.prix_unitaire)} F
                     </div>
                   </div>
                 ))}
@@ -2272,15 +2279,21 @@ export default function DescentePompiste() {
 
                 {/* Ventes Lubrifiants sur ticket */}
                 {ticketModal.lubrifiants && ticketModal.lubrifiants.length > 0 && (
-                  <div className="pt-1 mt-1 border-t border-dotted text-emerald-800 space-y-0.5">
+                  <div className="pt-1 mt-1 border-t border-dotted text-emerald-800 space-y-1">
                     <div className="font-bold flex justify-between">
-                      <span>VENTES LUBRIFIANTS :</span>
+                      <span>VENTES LUBRIFIANTS (Addons) :</span>
                       <span className="tabular">+{F(ticketModal.total_lubrifiants || 0)} F</span>
                     </div>
                     {ticketModal.lubrifiants.map((l) => (
-                      <div key={l.id} className="flex justify-between text-[10px] pl-1 text-gray-600">
-                        <span>• {l.libelle} (x{l.quantite})</span>
-                        <span className="tabular">{F(l.montant)} F</span>
+                      <div key={l.id} className="bg-emerald-50 p-2 rounded border border-emerald-200 space-y-0.5">
+                        <div className="flex justify-between font-medium text-emerald-900">
+                          <span>• {l.libelle}</span>
+                          <span className="tabular">{F(l.montant)} F</span>
+                        </div>
+                        <div className="flex justify-between text-[10px] text-emerald-700 pl-1">
+                          <span>Quantité : {l.quantite}</span>
+                          <span>Prix unitaire : {F(l.prix_unitaire)} F</span>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -2304,63 +2317,121 @@ export default function DescentePompiste() {
 
               {/* Détail encaissements */}
               <div className="border-b pb-2 border-dashed border-gray-300 text-[11px] space-y-1">
-                <div className="font-bold text-gray-700">ENCAISSEMENTS REMIS :</div>
-                <div className="flex justify-between">
-                  <span>Espèces (Cash) :</span>
-                  <span className="tabular">{F(ticketModal.encaissements?.especes || 0)} F</span>
+                <div className="font-bold text-gray-700">DÉTAIL DES ENCAISSEMENTS REMIS :</div>
+                <div className="bg-green-50 p-2 rounded border border-green-200 space-y-0.5">
+                  <div className="flex justify-between font-medium text-green-900">
+                    <span>💵 Espèces (Cash) :</span>
+                    <span className="tabular">{F(ticketModal.encaissements?.especes || 0)} F</span>
+                  </div>
+                  <div className="text-[10px] text-green-700 pl-1">
+                    📏 Billet(s) de caisse comptés
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span>Wave :</span>
-                  <span className="tabular">{F(ticketModal.encaissements?.wave || 0)} F</span>
+                <div className="bg-blue-50 p-2 rounded border border-blue-200 space-y-0.5">
+                  <div className="flex justify-between font-medium text-blue-900">
+                    <span>📱 Wave :</span>
+                    <span className="tabular">{F(ticketModal.encaissements?.wave || 0)} F</span>
+                  </div>
+                  <div className="text-[10px] text-blue-700 pl-1">
+                    📲 Paiement mobile Wave
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span>Orange Money :</span>
-                  <span className="tabular">{F(ticketModal.encaissements?.orange_money || 0)} F</span>
+                <div className="bg-orange-50 p-2 rounded border border-orange-200 space-y-0.5">
+                  <div className="flex justify-between font-medium text-orange-900">
+                    <span>📶 Orange Money :</span>
+                    <span className="tabular">{F(ticketModal.encaissements?.orange_money || 0)} F</span>
+                  </div>
+                  <div className="text-[10px] text-orange-700 pl-1">
+                    📲 Paiement mobile Orange Money
+                  </div>
                 </div>
-                <div className="flex justify-between text-purple-800 font-medium">
-                  <span>Paiement Petrosen :</span>
-                  <span className="tabular">{F(ticketModal.encaissements?.petrosen || 0)} F</span>
+                <div className="bg-purple-50 p-2 rounded border border-purple-200 space-y-0.5">
+                  <div className="flex justify-between font-medium text-purple-900">
+                    <span>⛽ Paiement Petrosen :</span>
+                    <span className="tabular">{F(ticketModal.encaissements?.petrosen || 0)} F</span>
+                  </div>
+                  <div className="text-[10px] text-purple-700 pl-1">
+                    🏷️ Carte de paiement Petrosen
+                  </div>
                 </div>
-                <div className="flex justify-between text-cyan-800 font-medium">
-                  <span>Code Électronique :</span>
-                  <span className="tabular">{F(ticketModal.encaissements?.code_electronique || 0)} F</span>
+                <div className="bg-cyan-50 p-2 rounded border border-cyan-200 space-y-0.5">
+                  <div className="flex justify-between font-medium text-cyan-900">
+                    <span>💳 Code Électronique :</span>
+                    <span className="tabular">{F(ticketModal.encaissements?.code_electronique || 0)} F</span>
+                  </div>
+                  <div className="text-[10px] text-cyan-700 pl-1">
+                    📟 Paiement par code électronique
+                  </div>
                 </div>
-                <div className="flex justify-between text-emerald-800 font-medium">
-                  <span>Tickets Carburant :</span>
-                  <span className="tabular">{F(ticketModal.encaissements?.tickets || 0)} F</span>
+                <div className="bg-teal-50 p-2 rounded border border-teal-200 space-y-0.5">
+                  <div className="flex justify-between font-medium text-teal-900">
+                    <span>🎫 Tickets Carburant :</span>
+                    <span className="tabular">{F(ticketModal.encaissements?.tickets || 0)} F</span>
+                  </div>
+                  <div className="text-[10px] text-teal-700 pl-1">
+                    📄 Tickets d'entreprise
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span>Carte Bancaire / TPE :</span>
-                  <span className="tabular">{F(ticketModal.encaissements?.carte_bancaire || 0)} F</span>
+                <div className="bg-gray-50 p-2 rounded border border-gray-200 space-y-0.5">
+                  <div className="flex justify-between font-medium text-gray-900">
+                    <span>💳 Carte Bancaire / TPE :</span>
+                    <span className="tabular">{F(ticketModal.encaissements?.carte_bancaire || 0)} F</span>
+                  </div>
+                  <div className="text-[10px] text-gray-700 pl-1">
+                    🏦 Paiement par carte bancaire
+                  </div>
                 </div>
-                <div className="flex justify-between font-bold text-amber-900">
-                  <span>Bons Client Pro ({ticketModal.bons?.length || 0}) :</span>
-                  <span className="tabular">{F(ticketModal.total_bons || ticketModal.encaissements?.credit_client || 0)} F</span>
+                <div className="bg-amber-50 p-2 rounded border border-amber-200 space-y-0.5">
+                  <div className="flex justify-between font-bold text-amber-900">
+                    <span>📄 Bons Client Pro ({ticketModal.bons?.length || 0}) :</span>
+                    <span className="tabular">{F(ticketModal.total_bons || ticketModal.encaissements?.credit_client || 0)} F</span>
+                  </div>
+                  <div className="text-[10px] text-amber-700 pl-1">
+                    📋 Crédit client professionnel
+                  </div>
                 </div>
                 {n(ticketModal.depenses_valeur) > 0 && (
-                  <div className="flex justify-between text-rose-700 font-medium">
-                    <span>Dépenses Pompiste {ticketModal.depenses_motif ? `(${ticketModal.depenses_motif})` : ""} :</span>
-                    <span className="tabular font-bold">+{F(ticketModal.depenses_valeur)} F</span>
+                  <div className="bg-rose-50 p-2 rounded border border-rose-200 space-y-0.5">
+                    <div className="flex justify-between font-medium text-rose-900">
+                      <span>💸 Dépenses Pompiste {ticketModal.depenses_motif ? `(${ticketModal.depenses_motif})` : ""} :</span>
+                      <span className="tabular font-bold">+{F(ticketModal.depenses_valeur)} F</span>
+                    </div>
+                    <div className="text-[10px] text-rose-700 pl-1">
+                      📝 Dépenses justifiées (tickets, carburant personnel, etc.)
+                    </div>
                   </div>
                 )}
                 {n(ticketModal.encaissements?.autre) > 0 && (
-                  <div className="flex justify-between">
-                    <span>Autre :</span>
-                    <span className="tabular">{F(ticketModal.encaissements?.autre)} F</span>
+                  <div className="bg-gray-50 p-2 rounded border border-gray-200 space-y-0.5">
+                    <div className="flex justify-between font-medium text-gray-900">
+                      <span>📦 Autre :</span>
+                      <span className="tabular">{F(ticketModal.encaissements?.autre)} F</span>
+                    </div>
+                    <div className="text-[10px] text-gray-700 pl-1">
+                      📋 Autre mode de paiement
+                    </div>
                   </div>
                 )}
 
                 {/* Détail des bons d'encaissement */}
                 {ticketModal.bons && ticketModal.bons.length > 0 && (
-                  <div className="pt-1 mt-1 border-t border-dotted space-y-0.5 text-[10px] text-gray-600">
-                    <div className="font-semibold text-gray-700">Détail des bons :</div>
+                  <div className="pt-1 mt-1 border-t border-dotted space-y-1 text-[10px] text-gray-600">
+                    <div className="font-semibold text-gray-700">DÉTAIL DES BONS CLIENTS PRO :</div>
                     {ticketModal.bons.map((b) => (
-                      <div key={b.id || b.numero_bon} className="flex justify-between pl-1">
-                        <span>
-                          • {b.client_nom || b.client_code} ({b.numero_bon})
-                          {n(b.volume_litres) > 0 ? ` [${F(b.volume_litres)} L]` : ""}
-                        </span>
-                        <span className="tabular font-medium">{F(b.montant)} F</span>
+                      <div key={b.id || b.numero_bon} className="bg-amber-50 p-2 rounded border border-amber-200 space-y-0.5">
+                        <div className="flex justify-between font-medium text-amber-900">
+                          <span>• {b.client_nom || b.client_code}</span>
+                          <span className="tabular">{F(b.montant)} F</span>
+                        </div>
+                        <div className="flex justify-between text-[10px] text-amber-700 pl-1">
+                          <span>Bon N° : {b.numero_bon}</span>
+                          {n(b.volume_litres) > 0 && <span>Volume : {F(b.volume_litres)} L</span>}
+                        </div>
+                        {b.produit && (
+                          <div className="text-[10px] text-amber-600 pl-1">
+                            📦 Produit : {b.produit}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

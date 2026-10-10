@@ -588,15 +588,28 @@ ${lignesStr}
               </div>
 
               <div className="space-y-1 text-xs border-b pb-2 border-dashed border-gray-300">
-                <div className="font-bold text-gray-700 mb-1">ARTICLES :</div>
+                <div className="font-bold text-gray-700 mb-1">ARTICLES ACHETÉS :</div>
                 {(ticketModal.lignes || []).map((l, i) => (
-                  <div key={i} className="flex justify-between py-0.5">
-                    <span>{l.quantite}x {l.designation}</span>
-                    <span className="tabular font-medium">{F(l.montant_total)} F</span>
+                  <div key={i} className="bg-gray-50 p-2 rounded border border-gray-200 space-y-0.5">
+                    <div className="flex justify-between font-bold text-gray-900">
+                      <span>{l.quantite}x {l.designation}</span>
+                      <span className="tabular">{F(l.montant_total)} F</span>
+                    </div>
+                    {l.prix_unitaire && (
+                      <div className="flex justify-between text-[10px] text-gray-600 pl-1">
+                        <span>• Prix unitaire : {F(l.prix_unitaire)} F</span>
+                        <span>Total : {F(l.quantite * l.prix_unitaire)} F</span>
+                      </div>
+                    )}
+                    {l.caracteristiques && (
+                      <div className="text-[10px] text-blue-700 pl-1">
+                        📝 {l.caracteristiques}
+                      </div>
+                    )}
                   </div>
                 ))}
                 <div className="flex justify-between font-black text-amber-950 text-sm pt-2 border-t border-dotted">
-                  <span>TOTAL :</span>
+                  <span>TOTAL PANIER :</span>
                   <span className="tabular">{F(ticketModal.total_montant)} FCFA</span>
                 </div>
               </div>
