@@ -140,6 +140,12 @@ const ENTITES = {
     supprimer:     ["admin", "superviseur", "directeur"],
     consulter:     ["admin", "gerant", "superviseur", "directeur", "comptable"],
   },
+  depense: {
+    declarer:      ["admin", "gerant", "superviseur", "directeur", "comptable"],
+    valider:       ["admin", "superviseur", "directeur"],
+    supprimer:     ["admin", "superviseur", "directeur"],
+    consulter:     ["admin", "gerant", "superviseur", "directeur", "comptable"],
+  },
 
 };
 
