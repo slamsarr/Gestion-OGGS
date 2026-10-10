@@ -302,16 +302,22 @@ export default function TableauBordGerant() {
   // Alertes de stock (comme dans CONTROLES)
   const alertesStock = useMemo(() => {
     const alerts = [];
+    const seuilStockBas = 20; // Seuil configurable
+    
     stocksStation.forEach((s) => {
       const stock = n(s.stock);
       const capacite = n(s.capacite);
-      if (capacite > 0 && stock < capacite * 0.2) {
+      const pourcentage = capacite > 0 ? (stock / capacite) * 100 : 0;
+      
+      if (capacite > 0 && pourcentage < seuilStockBas) {
         alerts.push({
           type: "stock_bas",
           produit: s.produit,
           stock,
           capacite,
-          message: `Stock ${s.produit} bas (${stock}L / ${capacite}L)`,
+          pourcentage,
+          message: `Stock ${s.produit} bas (${F(stock)}L / ${F(capacite)}L - ${Math.round(pourcentage)}%)`,
+          gravite: pourcentage < 10 ? "critique" : "moyenne"
         });
       }
     });
@@ -321,24 +327,48 @@ export default function TableauBordGerant() {
   // Alertes de caisse
   const alertesCaisse = useMemo(() => {
     const alerts = [];
+    const seuilEcartCaisse = 5000; // Seuil configurable
+    
     descentes.forEach((d) => {
       const ecart = n(d.ecart);
-      if (Math.abs(ecart) > 5000) {
+      if (Math.abs(ecart) > seuilEcartCaisse) {
         alerts.push({
           type: "ecart_caisse",
           pompiste: d.pompiste_nom,
           ecart,
           message: `Écart caisse élevé pour ${d.pompiste_nom}: ${F(ecart)} F`,
+          gravite: Math.abs(ecart) > 20000 ? "critique" : "moyenne"
         });
       }
     });
     return alerts;
   }, [descentes]);
 
+  // Alertes sur créances clients impayées
+  const alertesCreances = useMemo(() => {
+    const alerts = [];
+    const seuilCreance = 100000; // Seuil configurable pour créances importantes
+    
+    bonsImpayes.forEach((b) => {
+      const reste = n(b.reste_a_payer ?? b.montant);
+      if (reste > seuilCreance) {
+        alerts.push({
+          type: "creance_importante",
+          client: b.client_nom,
+          numero_bon: b.numero_bon,
+          reste,
+          message: `Créance importante pour ${b.client_nom}: ${F(reste)} F (bon ${b.numero_bon})`,
+          gravite: reste > 500000 ? "critique" : "moyenne"
+        });
+      }
+    });
+    return alerts;
+  }, [bonsImpayes]);
+
   // Toutes les alertes consolidées
   const toutesAlertes = useMemo(() => {
-    return [...alertesIndex, ...alertesStock, ...alertesCaisse];
-  }, [alertesIndex, alertesStock, alertesCaisse]);
+    return [...alertesIndex, ...alertesStock, ...alertesCaisse, ...alertesCreances];
+  }, [alertesIndex, alertesStock, alertesCaisse, alertesCreances]);
 
 
 
@@ -759,8 +789,11 @@ export default function TableauBordGerant() {
                 <div className="bg-white rounded-2xl border shadow-sm p-4" style={{ borderColor: T.line }}>
                   <h3 className="text-xs font-bold text-amber-700 uppercase mb-3">📦 Stocks Bas ({alertesStock.length})</h3>
                   {alertesStock.map((alert, idx) => (
-                    <div key={idx} className="p-2 bg-amber-50 rounded-lg mb-2">
-                      <div className="font-bold text-amber-900 text-xs">{alert.message}</div>
+                    <div key={idx} className={`p-3 rounded-lg mb-2 ${alert.gravite === 'critique' ? 'bg-rose-50 border border-rose-200' : 'bg-amber-50 border border-amber-200'}`}>
+                      <div className="font-bold text-xs mb-1">
+                        {alert.gravite === 'critique' ? '🔴 CRITIQUE' : '🟡 MOYENNE'}
+                      </div>
+                      <div className="text-xs text-gray-700">{alert.message}</div>
                     </div>
                   ))}
                 </div>
@@ -770,8 +803,25 @@ export default function TableauBordGerant() {
                 <div className="bg-white rounded-2xl border shadow-sm p-4" style={{ borderColor: T.line }}>
                   <h3 className="text-xs font-bold text-purple-700 uppercase mb-3">💰 Écarts de Caisse ({alertesCaisse.length})</h3>
                   {alertesCaisse.map((alert, idx) => (
-                    <div key={idx} className="p-2 bg-purple-50 rounded-lg mb-2">
-                      <div className="font-bold text-purple-900 text-xs">{alert.message}</div>
+                    <div key={idx} className={`p-3 rounded-lg mb-2 ${alert.gravite === 'critique' ? 'bg-rose-50 border border-rose-200' : 'bg-purple-50 border border-purple-200'}`}>
+                      <div className="font-bold text-xs mb-1">
+                        {alert.gravite === 'critique' ? '🔴 CRITIQUE' : '🟡 MOYENNE'}
+                      </div>
+                      <div className="text-xs text-gray-700">{alert.message}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {alertesCreances.length > 0 && (
+                <div className="bg-white rounded-2xl border shadow-sm p-4" style={{ borderColor: T.line }}>
+                  <h3 className="text-xs font-bold text-blue-700 uppercase mb-3">📄 Créances Importantes ({alertesCreances.length})</h3>
+                  {alertesCreances.map((alert, idx) => (
+                    <div key={idx} className={`p-3 rounded-lg mb-2 ${alert.gravite === 'critique' ? 'bg-rose-50 border border-rose-200' : 'bg-blue-50 border border-blue-200'}`}>
+                      <div className="font-bold text-xs mb-1">
+                        {alert.gravite === 'critique' ? '🔴 CRITIQUE' : '🟡 MOYENNE'}
+                      </div>
+                      <div className="text-xs text-gray-700">{alert.message}</div>
                     </div>
                   ))}
                 </div>
