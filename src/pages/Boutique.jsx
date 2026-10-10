@@ -4,6 +4,7 @@ import { listProduitsBoutique, createVenteBoutique, listVentesBoutique, updatePr
 import { F, fmtDate, n, T, todayISO } from "../lib/calcul";
 import { Section, Row, Num, Loading, InputComptable } from "../components/ui";
 import { peutAgirProfil, peutVoirToutesLesEntrees } from "../lib/permissions";
+import { useFlash } from "../hooks/useFlash";
 
 export default function Boutique() {
   const { profil } = useAuth();
@@ -16,7 +17,7 @@ export default function Boutique() {
   const [ventes, setVentes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("pos"); // pos | stock | historique
-  const [msg, setMsg] = useState("");
+  const [msg, flash] = useFlash();
   const [recherche, setRecherche] = useState("");
   const [panier, setPanier] = useState([]);
   const [modePaiement, setModePaiement] = useState("ESPECES");
@@ -25,8 +26,6 @@ export default function Boutique() {
   const [selectedProd, setSelectedProd] = useState(null);
   const [ajustQte, setAjustQte] = useState("");
   const [ticketModal, setTicketModal] = useState(null);
-
-  const flash = (t) => { setMsg(t); setTimeout(() => setMsg(""), 3500); };
 
   const buildBoutiqueReceiptText = (v) => {
     const dateStr = fmtDate(v.date || todayISO());
