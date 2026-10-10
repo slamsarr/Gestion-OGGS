@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "../context/AuthContext";
 import { loadReferentiel, listDepenses, saveDepense, deleteDepense, createCategorie } from "../lib/api";
 import { F, fmtDate, n, T, todayISO, uuid } from "../lib/calcul";
@@ -103,6 +103,55 @@ export default function Depenses() {
   const totalBrouillon = depenses.filter((d) => d.statut !== "VALIDE").reduce((s, d) => s + n(d.montant), 0);
   const nbBrouillon = depenses.filter((d) => d.statut !== "VALIDE").length;
 
+  // Ventilation par catégorie (style BASE_DEPENSES Excel)
+  const ventilationParCategorie = useMemo(() => {
+    const vent = {};
+    depenses.forEach((d) => {
+      const catCode = d.categorie_code || "DIVERS";
+      const cat = cats.find((c) => c.code === catCode);
+      const catLibelle = cat?.libelle || "Divers";
+      
+      if (!vent[catCode]) {
+        vent[catCode] = {
+          code: catCode,
+          libelle: catLibelle,
+          total: 0,
+          nombre: 0,
+          nature: cat?.nature_depense || "FONCTIONNEMENT"
+        };
+      }
+      vent[catCode].total += n(d.montant);
+      vent[catCode].nombre += 1;
+    });
+    return Object.values(vent).sort((a, b) => b.total - a.total);
+  }, [depenses, cats]);
+
+  // Ventilation par mode de paiement
+  const ventilationParMode = useMemo(() => {
+    const vent = {};
+    depenses.forEach((d) => {
+      const mode = d.mode_paiement || "ESPECES";
+      if (!vent[mode]) {
+        vent[mode] = { mode, total: 0, nombre: 0 };
+      }
+      vent[mode].total += n(d.montant);
+      vent[mode].nombre += 1;
+    });
+    return Object.values(vent).sort((a, b) => b.total - a.total);
+  }, [depenses]);
+
+  // Ventilation par nature (FONCTIONNEMENT vs INVESTISSEMENT)
+  const ventilationParNature = useMemo(() => {
+    const vent = { FONCTIONNEMENT: 0, INVESTISSEMENT: 0 };
+    depenses.forEach((d) => {
+      const catCode = d.categorie_code || "DIVERS";
+      const cat = cats.find((c) => c.code === catCode);
+      const nature = cat?.nature_depense || "FONCTIONNEMENT";
+      vent[nature] += n(d.montant);
+    });
+    return vent;
+  }, [depenses, cats]);
+
   return (
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
@@ -159,6 +208,100 @@ export default function Depenses() {
           <div className="pb-2"><button onClick={saveCat} className="px-4 py-2 rounded text-sm font-medium" style={{ background: T.petrol, color: "white" }}>Ajouter la catégorie</button></div>
         </Section>
       )}
+
+      {/* Ventilation détaillée (style BASE_DEPENSES Excel) */}
+      <Section titre="📊 Ventilation Détaillée des Dépenses">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="p-4 bg-blue-50 rounded-xl">
+            <div className="text-[10px] font-bold text-blue-700 uppercase">Par Catégorie</div>
+            <div className="text-2xl font-black text-blue-900 tabular">{ventilationParCategorie.length}</div>
+            <div className="text-[10px] text-blue-600">catégorie(s)</div>
+          </div>
+          <div className="p-4 bg-purple-50 rounded-xl">
+            <div className="text-[10px] font-bold text-purple-700 uppercase">Par Mode Paiement</div>
+            <div className="text-2xl font-black text-purple-900 tabular">{ventilationParMode.length}</div>
+            <div className="text-[10px] text-purple-600">mode(s)</div>
+          </div>
+          <div className="p-4 bg-emerald-50 rounded-xl">
+            <div className="text-[10px] font-bold text-emerald-700 uppercase">Nature Dépenses</div>
+            <div className="text-lg font-black text-emerald-900 tabular mt-1">
+              Fonct: {F(ventilationParNature.FONCTIONNEMENT)} F
+            </div>
+            <div className="text-lg font-black text-emerald-900 tabular">
+              Invest: {F(ventilationParNature.INVESTISSEMENT)} F
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Ventilation par catégorie */}
+          <div>
+            <h3 className="text-xs font-bold text-gray-800 uppercase mb-3">Par Catégorie</h3>
+            <div className="bg-white rounded-2xl border shadow-sm overflow-x-auto" style={{ borderColor: T.line }}>
+              <table className="w-full text-xs">
+                <thead className="bg-gray-50 border-b text-gray-500 uppercase tracking-wider text-[10px]" style={{ borderColor: T.line }}>
+                  <tr>
+                    <th className="py-2.5 px-3 text-left">Catégorie</th>
+                    <th className="py-2.5 px-3 text-right">Nombre</th>
+                    <th className="py-2.5 px-3 text-right">Total</th>
+                    <th className="py-2.5 px-3 text-center">Nature</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y" style={{ borderColor: T.line }}>
+                  {ventilationParCategorie.map((v, idx) => (
+                    <tr key={idx} className="hover:bg-gray-50">
+                      <td className="py-2.5 px-3">
+                        <div className="font-bold text-gray-900">{v.libelle}</div>
+                        <div className="text-[10px] text-gray-400 font-mono">{v.code}</div>
+                      </td>
+                      <td className="py-2.5 px-3 text-right tabular">{v.nombre}</td>
+                      <td className="py-2.5 px-3 text-right tabular font-bold">{F(v.total)} F</td>
+                      <td className="py-2.5 px-3 text-center">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          v.nature === "FONCTIONNEMENT" ? "bg-blue-100 text-blue-800" :
+                          v.nature === "INVESTISSEMENT" ? "bg-purple-100 text-purple-800" :
+                          "bg-amber-100 text-amber-800"
+                        }`}>
+                          {v.nature}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Ventilation par mode de paiement */}
+          <div>
+            <h3 className="text-xs font-bold text-gray-800 uppercase mb-3">Par Mode de Paiement</h3>
+            <div className="bg-white rounded-2xl border shadow-sm overflow-x-auto" style={{ borderColor: T.line }}>
+              <table className="w-full text-xs">
+                <thead className="bg-gray-50 border-b text-gray-500 uppercase tracking-wider text-[10px]" style={{ borderColor: T.line }}>
+                  <tr>
+                    <th className="py-2.5 px-3 text-left">Mode</th>
+                    <th className="py-2.5 px-3 text-right">Nombre</th>
+                    <th className="py-2.5 px-3 text-right">Total</th>
+                    <th className="py-2.5 px-3 text-right">%</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y" style={{ borderColor: T.line }}>
+                  {ventilationParMode.map((v, idx) => (
+                    <tr key={idx} className="hover:bg-gray-50">
+                      <td className="py-2.5 px-3 font-bold text-gray-900">{v.mode}</td>
+                      <td className="py-2.5 px-3 text-right tabular">{v.nombre}</td>
+                      <td className="py-2.5 px-3 text-right tabular font-bold">{F(v.total)} F</td>
+                      <td className="py-2.5 px-3 text-right tabular">
+                        {total > 0 ? Math.round((v.total / total) * 100) : 0}%
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </Section>
 
       <Section titre="Liste des dépenses" aside={`${depenses.length} enregistrées · ${F(total)} F`}>
         {depenses.map((d, i) => (

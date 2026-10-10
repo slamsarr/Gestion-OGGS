@@ -19,6 +19,7 @@ const NAV_POLES = [
       { to: "/rapport", label: "Clôture Officielle", icon: "📋" },
       { to: "/historique", label: "Historique Clôtures", icon: "📁" },
       { to: "/etats", label: "États & Rapports", icon: "📊" },
+      { to: "/journal-index", label: "Journal Index", icon: "📝" },
     ],
   },
   {
@@ -57,6 +58,7 @@ const NAV_POLES = [
       { to: "/pompistes", label: "Équipe & Quarts", icon: "👥" },
       { to: "/gestion-quarts", label: "Planning Quarts", icon: "⏰" },
       { to: "/pistolets", label: "Pistolets & Pompes", icon: "🔫" },
+      { to: "/prix-carburant", label: "Prix Carburant", icon: "⛽" },
       { to: "/parametres", label: "Paramètres Réseau", icon: "👥" },
     ],
   },
