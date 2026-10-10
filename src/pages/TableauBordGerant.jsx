@@ -437,23 +437,23 @@ export default function TableauBordGerant() {
             </button>
             <button
               type="button"
-              onClick={() => navigate(`/clients-pro?tab=factures`)}
-              className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-colors shadow-md flex items-center gap-1.5"
-              title="Accéder à la facturation officielle OHADA"
-            >
-              <span>📄</span>
-              <span className="hidden sm:inline">Facturation OHADA</span>
-              <span className="sm:hidden">Factures</span>
-            </button>
-            <button
-              type="button"
               onClick={() => navigate("/comptes-clients-b2b")}
               className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors shadow-md flex items-center gap-1.5"
               title="Gérer les comptes clients B2B"
             >
-              <span>📊</span>
+              <span>�</span>
               <span className="hidden sm:inline">Comptes B2B</span>
               <span className="sm:hidden">B2B</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate("/depenses")}
+              className="px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-colors shadow-md flex items-center gap-1.5"
+              title="Gérer les dépenses réseau"
+            >
+              <span>�</span>
+              <span className="hidden sm:inline">Dépenses</span>
+              <span className="sm:hidden">Dépenses</span>
             </button>
             <button
               type="button"
