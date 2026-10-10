@@ -30,6 +30,7 @@ import ComptesClientsB2B from "./pages/ComptesClientsB2B";
 import PrixCarburant from "./pages/PrixCarburant";
 import JournalIndex from "./pages/JournalIndex";
 import LubrifiantsCEPSA from "./pages/LubrifiantsCEPSA";
+import ValidationCloture from "./pages/ValidationCloture";
 import { rolesRoute } from "./lib/permissions";
 
 function RequireAuth({ children }) {
@@ -107,6 +108,7 @@ export default function App() {
         <Route path="/prix-carburant" element={<RequireRole path="/prix-carburant"><PrixCarburant /></RequireRole>} />
         <Route path="/journal-index" element={<RequireRole path="/journal-index"><JournalIndex /></RequireRole>} />
         <Route path="/lubrifiants-cepsa" element={<RequireRole path="/lubrifiants-cepsa"><LubrifiantsCEPSA /></RequireRole>} />
+        <Route path="/validation-cloture" element={<RequireRole path="/validation-cloture"><ValidationCloture /></RequireRole>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

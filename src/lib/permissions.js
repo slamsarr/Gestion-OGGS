@@ -206,6 +206,7 @@ const ROUTES = {
   "/prix-carburant": ["admin", "gerant", "superviseur", "directeur", "comptable"],
   "/journal-index": ["admin", "gerant", "superviseur", "directeur", "comptable"],
   "/lubrifiants-cepsa": ["admin", "gerant", "superviseur", "directeur", "comptable"],
+  "/validation-cloture": ["admin", "gerant", "superviseur", "directeur"],
 };
 
 export function rolesRoute(role, route) {

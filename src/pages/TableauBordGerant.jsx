@@ -479,9 +479,9 @@ export default function TableauBordGerant() {
             </button>
             <button
               type="button"
-              onClick={() => navigate(`/rapport?station=${encodeURIComponent(stationCode)}&date=${encodeURIComponent(date)}`)}
+              onClick={() => navigate(`/validation-cloture?station=${encodeURIComponent(stationCode)}&date=${encodeURIComponent(date)}`)}
               className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black uppercase tracking-wide transition-colors shadow-md"
-              title="Clôture officielle et réconciliation comptable SYSCOHADA pour la Direction"
+              title="Validation de clôture journalière après vérification de cohérence"
             >
               📋 Clôture Officielle
             </button>
