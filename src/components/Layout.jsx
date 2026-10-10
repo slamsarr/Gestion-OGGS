@@ -205,15 +205,15 @@ export default function Layout() {
               </NavLink>
             </div>
 
-            <div className="flex items-center gap-2 text-xs">
+            <div className="flex items-center gap-2 text-sm">
               <span
-                className={`px-2.5 py-1 rounded-full flex items-center gap-1.5 text-[11px] font-semibold border backdrop-blur-sm ${
+                className={`px-3 py-1.5 rounded-full flex items-center gap-2 text-xs font-semibold border backdrop-blur-sm ${
                   online
                     ? "bg-emerald-500/15 text-emerald-300 border-emerald-400/30"
                     : "bg-red-500/15 text-red-300 border-red-400/30 animate-pulse"
                 }`}
               >
-                <span className={`w-1.5 h-1.5 rounded-full ${online ? "bg-emerald-400" : "bg-red-400"}`} />
+                <span className={`w-2 h-2 rounded-full ${online ? "bg-emerald-400" : "bg-red-400"}`} />
                 <span className="hidden sm:inline">{online ? "En ligne" : "Hors ligne"}</span>
                 {pending > 0 && (
                   <span className="bg-damel-yellow text-fuelos-950 font-bold px-1.5 rounded-full text-[10px]">

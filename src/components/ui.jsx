@@ -14,10 +14,10 @@ export function Button({
   fullWidth = false,
 }) {
   const sizeMap = {
-    xs: "px-2.5 py-1 text-[11px] rounded-md gap-1",
-    sm: "px-3 py-1.5 text-[11px] rounded-lg gap-1.5",
-    md: "px-3.5 py-2 text-xs rounded-lg gap-1.5",
-    lg: "px-4.5 py-2.5 text-sm rounded-xl gap-2",
+    xs: "px-3 py-1.5 text-xs rounded-md gap-1.5",
+    sm: "px-4 py-2 text-sm rounded-lg gap-2",
+    md: "px-5 py-2.5 text-sm rounded-xl gap-2",
+    lg: "px-6 py-3 text-base rounded-xl gap-2.5",
   };
   const variantMap = {
     primary:
@@ -62,7 +62,7 @@ export function Num({ value, onChange, disabled, placeholder = "0", w = "w-24", 
       disabled={disabled}
       placeholder={placeholder}
       onChange={(e) => onChange(e.target.value.replace(/[^\d.-]/g, ""))}
-      className={`${w} ${right ? "text-right" : ""} ${big ? "text-sm py-2.5 font-bold" : "py-2 text-xs"} px-3 rounded-lg border bg-white disabled:bg-surface-muted disabled:border-transparent disabled:text-slate-500 outline-none transition-all focus:ring-2 focus:ring-damel-blue/20 focus:border-damel-blue`}
+      className={`${w} ${right ? "text-right" : ""} ${big ? "text-base py-3 font-bold" : "py-2.5 text-sm"} px-4 rounded-lg border bg-white disabled:bg-surface-muted disabled:border-transparent disabled:text-slate-500 outline-none transition-all focus:ring-2 focus:ring-damel-blue/20 focus:border-damel-blue`}
       style={{ borderColor: disabled ? undefined : T.line, fontVariantNumeric: "tabular-nums" }}
     />
   );
@@ -135,7 +135,7 @@ export function InputComptable({
       <div
         className={`relative flex items-center rounded-xl border transition-all overflow-hidden shadow-inner-soft bg-white ${borderClass}`}
       >
-        <span className={`shrink-0 w-8 text-center text-[10px] font-black border-r py-3 ${badgeColor} transition-colors`}>
+        <span className={`shrink-0 w-10 text-center text-xs font-black border-r py-3.5 ${badgeColor} transition-colors`}>
           {badgeIcon}
         </span>
         <input
@@ -151,20 +151,20 @@ export function InputComptable({
           }}
           onBlur={() => setIsFocused(false)}
           onChange={handleChange}
-          className="flex-1 px-3 py-3 text-right text-sm font-mono font-bold bg-transparent disabled:text-slate-400 outline-none tabular-nums"
+          className="flex-1 px-4 py-3.5 text-right text-base font-mono font-bold bg-transparent disabled:text-slate-400 outline-none tabular-nums"
           style={{
             color: disabled ? "#94A3B8" : isInvalid ? "#DC2626" : "#0F172A",
             fontVariantNumeric: "tabular-nums",
           }}
         />
         {unit && (
-          <span className="shrink-0 px-3 py-3 text-[10px] font-bold text-slate-500 bg-slate-50 border-l border-surface-border">
+          <span className="shrink-0 px-4 py-3.5 text-xs font-bold text-slate-500 bg-slate-50 border-l border-surface-border">
             {unit}
           </span>
         )}
       </div>
       {isInvalid && (
-        <p className="text-[11px] text-red-600 font-semibold mt-0.5">
+        <p className="text-xs text-red-600 font-semibold mt-1">
           {numericValue < min
             ? `Valeur minimum : ${min.toLocaleString("fr-FR")} ${unit}`
             : max !== undefined && numericValue > max
@@ -180,21 +180,21 @@ export function InputComptable({
 }
 
 export const Row = ({ children, className = "" }) => (
-  <div className={`flex items-center justify-between gap-3 py-3 border-b border-surface-border last:border-b-0 ${className}`}>
+  <div className={`flex items-center justify-between gap-4 py-4 border-b border-surface-border last:border-b-0 ${className}`}>
     {children}
   </div>
 );
 
 export const Section = ({ titre, aside, children, icon }) => (
-  <section className="mb-6 animate-subtle-in">
-    <div className="flex items-baseline justify-between mb-2.5 px-0.5">
-      <h2 className="text-sm font-extrabold tracking-tight text-ink flex items-center gap-2" style={{ color: T.primaryInk }}>
-        {icon && <span className="text-base">{icon}</span>}
+  <section className="mb-8 animate-subtle-in">
+    <div className="flex items-baseline justify-between mb-3 px-0.5">
+      <h2 className="text-base font-extrabold tracking-tight text-ink flex items-center gap-2" style={{ color: T.primaryInk }}>
+        {icon && <span className="text-lg">{icon}</span>}
         {titre}
       </h2>
-      {aside && <span className="text-[11px] font-semibold" style={{ color: T.muted }}>{aside}</span>}
+      {aside && <span className="text-sm font-semibold" style={{ color: T.muted }}>{aside}</span>}
     </div>
-    <div className="bg-surface-card rounded-2xl px-4 sm:px-5 py-4 shadow-card border border-surface-border/80">
+    <div className="bg-surface-card rounded-2xl px-5 sm:px-6 py-5 shadow-card border border-surface-border/80">
       {children}
     </div>
   </section>
@@ -209,21 +209,21 @@ export const Alerte = ({ children, variant = "alert", icon }) => {
   };
   const v = variants[variant] || variants.alert;
   return (
-    <div className={`text-xs font-medium rounded-xl px-4 py-3 my-3 border ${v.bg} ${v.text} ${v.border} shadow-card flex items-start gap-2.5`}>
-      <span className="text-base leading-none mt-0.5">{v.icon}</span>
+    <div className={`text-sm font-medium rounded-xl px-5 py-4 my-4 border ${v.bg} ${v.text} ${v.border} shadow-card flex items-start gap-3`}>
+      <span className="text-lg leading-none mt-0.5">{v.icon}</span>
       <div className="flex-1">{children}</div>
     </div>
   );
 };
 
 export const Loading = ({ label = "Chargement…" }) => (
-  <div className="flex flex-col items-center justify-center gap-4 p-16 text-xs font-medium" style={{ color: T.muted }}>
+  <div className="flex flex-col items-center justify-center gap-6 p-20 text-sm font-medium" style={{ color: T.muted }}>
     <div className="relative">
-      <span className="inline-block w-10 h-10 rounded-full border-[3px] border-slate-200 border-t-damel-blue animate-spin" />
+      <span className="inline-block w-12 h-12 rounded-full border-[3px] border-slate-200 border-t-damel-blue animate-spin" />
     </div>
-    <div className="flex flex-col items-center gap-1">
-      <span className="text-sm font-semibold text-slate-600">{label}</span>
-      <span className="text-[10px] text-slate-400">FuelOS · DAMEL ENERGY</span>
+    <div className="flex flex-col items-center gap-2">
+      <span className="text-base font-semibold text-slate-600">{label}</span>
+      <span className="text-xs text-slate-400">FuelOS · DAMEL ENERGY</span>
     </div>
   </div>
 );
@@ -231,7 +231,7 @@ export const Loading = ({ label = "Chargement…" }) => (
 export const PageHeader = ({ icon, titre, subtitle, badge, actions, breadcrumb }) => (
   <div className="mb-6 pb-4 border-b border-surface-border animate-subtle-in">
     {breadcrumb && (
-      <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+      <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
         {breadcrumb}
       </div>
     )}
@@ -246,7 +246,7 @@ export const PageHeader = ({ icon, titre, subtitle, badge, actions, breadcrumb }
           <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-xl sm:text-2xl font-black tracking-tight text-ink" style={{ color: T.primaryInk }}>{titre}</h1>
             {badge && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full bg-damel-yellow/20 text-damel-gold border border-damel-yellow/40">
+              <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-damel-yellow/20 text-damel-gold border border-damel-yellow/40">
                 {badge}
               </span>
             )}
@@ -341,7 +341,7 @@ export const StatCard = ({ label, value, subtext, icon, color = "blue", onClick,
         <div className="flex items-center justify-between mt-2">
           {subtext && <div className="text-[11px] text-slate-400">{subtext}</div>}
           {trend !== undefined && (
-            <div className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+            <div className={`inline-flex items-center gap-1 text-xs font-bold px-1.5 py-0.5 rounded-md ${
               trend >= 0 ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
             }`}>
               <span>{trend >= 0 ? "↑" : "↓"}</span>
@@ -394,12 +394,12 @@ export const Card = ({ children, className = "", onClick, hover = true }) => (
 
 export function EmptyState({ icon = "📭", title, description, action }) {
   return (
-    <div className="flex flex-col items-center justify-center text-center py-12 px-6 rounded-2xl border-2 border-dashed border-surface-border bg-white/40">
-      <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mb-4 bg-gradient-to-br from-surface-muted to-white border border-surface-border shadow-card">
+    <div className="flex flex-col items-center justify-center text-center py-16 px-8 rounded-2xl border-2 border-dashed border-surface-border bg-white/40">
+      <div className="w-20 h-20 rounded-2xl flex items-center justify-center text-4xl mb-6 bg-gradient-to-br from-surface-muted to-white border border-surface-border shadow-card">
         {icon}
       </div>
-      <h3 className="text-sm font-extrabold text-slate-800 mb-1">{title}</h3>
-      {description && <p className="text-xs text-slate-500 max-w-sm mb-4">{description}</p>}
+      <h3 className="text-base font-extrabold text-slate-800 mb-2">{title}</h3>
+      {description && <p className="text-sm text-slate-500 max-w-md mb-6">{description}</p>}
       {action && <div>{action}</div>}
     </div>
   );
@@ -425,7 +425,7 @@ export function Divider({ label, className = "" }) {
     return (
       <div className={`flex items-center gap-3 my-5 ${className}`}>
         <div className="flex-1 h-px bg-surface-border" />
-        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</span>
+        <span className="text-xs font-bold uppercase tracking-wider text-slate-400">{label}</span>
         <div className="flex-1 h-px bg-surface-border" />
       </div>
     );
