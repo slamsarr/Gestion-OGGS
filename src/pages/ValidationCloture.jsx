@@ -1,15 +1,18 @@
 import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "../context/AuthContext";
-import { listDescentes, listPrestationsLavage, listVentesBoutique, listDepenses, listTousBonsStation, loadReferentiel } from "../lib/api";
-import { F, fmtDate, n, T, todayISO } from "../lib/calcul";
+import { useNavigate } from "react-router-dom";
+import { listDescentes, listPrestationsLavage, listVentesBoutique, listDepenses, listTousBonsStation, loadReferentiel, saveRapport, getRapport } from "../lib/api";
+import { F, fmtDate, n, T, todayISO, rapportVide } from "../lib/calcul";
 import { Section, Loading } from "../components/ui";
 
 export default function ValidationCloture() {
   const { profil } = useAuth();
+  const navigate = useNavigate();
   const stationId = profil?.station_id || "st-hann";
   const stationNom = profil?.stations?.nom || `Station ${stationId}`;
 
   const [loading, setLoading] = useState(true);
+  const [validating, setValidating] = useState(false);
   const [ref, setRef] = useState(null);
   const [date, setDate] = useState(todayISO());
   const [descentes, setDescentes] = useState([]);
@@ -120,7 +123,7 @@ export default function ValidationCloture() {
 
     // 4. Vérifier les créances importantes
     if (totalCreances > 100000) {
-      newAlertes({
+      newAlertes.push({
         type: "creances_elevees",
         message: `Créances clients élevées : ${F(totalCreances)} F`,
         gravite: "moyenne"
@@ -129,6 +132,32 @@ export default function ValidationCloture() {
 
     setAlertes(newAlertes);
     setCoherenceVerifiee(newAlertes.filter(a => a.gravite === "critique").length === 0);
+  };
+
+  // Valider la clôture
+  const validerCloture = async () => {
+    setValidating(true);
+    try {
+      // Créer ou mettre à jour le rapport
+      const existing = await getRapport(stationId, date);
+      const rapport = existing || rapportVide(ref, stationId, date, profil?.nom_complet);
+      
+      // Mettre à jour le statut
+      rapport.statut = "VALIDE";
+      rapport.valide_par = profil?.nom_complet;
+      rapport.date_validation = new Date().toISOString();
+      
+      // Sauvegarder
+      await saveRapport(rapport, profil, ref);
+      
+      alert("✅ Clôture validée avec succès !");
+      navigate("/gerant");
+    } catch (err) {
+      console.error("Erreur validation clôture:", err);
+      alert("❌ Erreur lors de la validation : " + err.message);
+    } finally {
+      setValidating(false);
+    }
   };
 
   if (loading) return <Loading label="Chargement des données de clôture..." />;
@@ -288,15 +317,15 @@ export default function ValidationCloture() {
           )}
 
           <button
-            onClick={() => alert("Clôture validée avec succès !")}
-            disabled={!coherenceVerifiee}
+            onClick={validerCloture}
+            disabled={!coherenceVerifiee || validating}
             className={`px-6 py-3 rounded-xl text-sm font-bold transition-colors shadow-md ${
-              !coherenceVerifiee
+              !coherenceVerifiee || validating
                 ? "bg-gray-300 text-gray-500 cursor-not-allowed"
                 : "bg-emerald-600 hover:bg-emerald-500 text-white"
             }`}
           >
-            ✅ Valider la Clôture Officielle
+            {validating ? "⏳ Validation en cours..." : "✅ Valider la Clôture Officielle"}
           </button>
         </div>
       </Section>
