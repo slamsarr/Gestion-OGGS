@@ -59,6 +59,7 @@ const NAV_POLES = [
       { to: "/gestion-quarts", label: "Planning Quarts", icon: "⏰" },
       { to: "/pistolets", label: "Pistolets & Pompes", icon: "🔫" },
       { to: "/prix-carburant", label: "Prix Carburant", icon: "⛽" },
+      { to: "/lubrifiants-cepsa", label: "Lubrifiants CEPSA", icon: "🛢️" },
       { to: "/parametres", label: "Paramètres Réseau", icon: "👥" },
     ],
   },
