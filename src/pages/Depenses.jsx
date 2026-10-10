@@ -18,29 +18,46 @@ export default function Depenses() {
   const [showCat, setShowCat] = useState(false);
   const [catForm, setCatForm] = useState(CAT_VIDE);
   const [dForm, setDForm] = useState({ categorie_code: "", libelle: "", montant: "", date_depense: todayISO(), mode_paiement: "ESPECES", station_id: stationId });
+  const [isMounted, setIsMounted] = useState(true);
 
   const peutDeclarer = useMemo(() => peutAgirProfil(profil, "depense", "declarer"), [profil]);
   const peutValider = useMemo(() => peutAgirProfil(profil, "depense", "valider"), [profil]);
 
-  const flash = (t) => { setMsg(t); setTimeout(() => setMsg(""), 3500); };
+  useEffect(() => {
+    setIsMounted(true);
+    return () => setIsMounted(false);
+  }, []);
+
+  const flash = (t) => { if (isMounted) { setMsg(t); setTimeout(() => { if (isMounted) setMsg(""); }, 3500); } };
 
   const load = async () => {
+    if (!isMounted) return;
     try {
       const r = await loadReferentiel();
-      setRef(r);
-      setCats(r?.categories || r?.categories_depenses || []);
-      const ds = await listDepenses(stationId);
-      setDeps(ds || []);
-    } finally { setLoading(false); }
+      if (isMounted) {
+        setRef(r);
+        setCats(r?.categories || r?.categories_depenses || []);
+        const ds = await listDepenses(stationId);
+        if (isMounted) setDeps(ds || []);
+      }
+    } catch (err) {
+      console.error("Erreur chargement dépenses:", err);
+    } finally {
+      if (isMounted) setLoading(false);
+    }
   };
-  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [stationId]);
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [stationId, isMounted]);
 
   const saveCat = async () => {
     if (!catForm.code.trim() || !catForm.libelle.trim()) return flash("Code + libellé requis");
     const { error } = await createCategorie(catForm);
     if (error) return flash("Erreur : " + error);
-    setCatForm(CAT_VIDE); setShowCat(false); flash("Catégorie de dépense ajoutée");
-    load();
+    if (isMounted) {
+      setCatForm(CAT_VIDE);
+      setShowCat(false);
+      flash("Catégorie de dépense ajoutée");
+      load();
+    }
   };
 
   const save = async () => {
@@ -60,10 +77,12 @@ export default function Depenses() {
     };
     const res = await saveDepense(payload);
     if (res?.error) return flash("Erreur : " + res.error);
-    setDForm({ categorie_code: "", libelle: "", montant: "", date_depense: todayISO(), mode_paiement: "ESPECES", station_id: stationId });
-    flash(peutValider ? "✅ Dépense validée" : "💾 Dépense enregistrée en brouillon — en attente de validation Direction");
-    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
-    load();
+    if (isMounted) {
+      setDForm({ categorie_code: "", libelle: "", montant: "", date_depense: todayISO(), mode_paiement: "ESPECES", station_id: stationId });
+      flash(peutValider ? "✅ Dépense validée" : "💾 Dépense enregistrée en brouillon — en attente de validation Direction");
+      if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+      load();
+    }
   };
 
   const del = async (id) => {
@@ -76,8 +95,10 @@ export default function Depenses() {
       ? "Supprimer ce brouillon de dépense ?"
       : "⚠️ Dépense VALIDÉE. Êtes-vous SÛR de vouloir la supprimer ? Cette action est tracée.")) return;
     await deleteDepense(id);
-    flash("Dépense supprimée");
-    load();
+    if (isMounted) {
+      flash("Dépense supprimée");
+      load();
+    }
   };
 
   const validerDepense = async (id) => {
@@ -93,8 +114,10 @@ export default function Depenses() {
     };
     const { error } = await saveDepense(miseAJour);
     if (error) return flash("Erreur : " + error);
-    flash("✅ Dépense validée — comptabilisée.");
-    load();
+    if (isMounted) {
+      flash("✅ Dépense validée — comptabilisée.");
+      load();
+    }
   };
 
   if (loading) return <Loading label="Chargement des dépenses…" />;
