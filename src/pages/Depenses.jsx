@@ -150,19 +150,6 @@ export default function Depenses() {
     }
   };
 
-  if (loading) return <Loading label="Chargement des dépenses…" />;
-
-  const depensesFiltrees = depenses.filter((d) => {
-    if (filtreStatut === "BROUILLON") return d.statut !== "VALIDE";
-    if (filtreStatut === "VALIDE") return d.statut === "VALIDE";
-    return true;
-  });
-
-  const total = depenses.reduce((s, d) => s + n(d.montant), 0);
-  const totalValide = depenses.filter((d) => d.statut === "VALIDE").reduce((s, d) => s + n(d.montant), 0);
-  const totalBrouillon = depenses.filter((d) => d.statut !== "VALIDE").reduce((s, d) => s + n(d.montant), 0);
-  const nbBrouillon = depenses.filter((d) => d.statut !== "VALIDE").length;
-
   // Normalisation de la nature : FONCTIONNEMENT vs INVESTISSEMENT vs EXCEPTIONNEL
   const getNatureNorm = (cat) => {
     const raw = (cat?.nature_depense || cat?.nature || "").toUpperCase();
@@ -224,6 +211,19 @@ export default function Depenses() {
     });
     return vent;
   }, [depenses, cats]);
+
+  if (loading) return <Loading label="Chargement des dépenses…" />;
+
+  const depensesFiltrees = depenses.filter((d) => {
+    if (filtreStatut === "BROUILLON") return d.statut !== "VALIDE";
+    if (filtreStatut === "VALIDE") return d.statut === "VALIDE";
+    return true;
+  });
+
+  const total = depenses.reduce((s, d) => s + n(d.montant), 0);
+  const totalValide = depenses.filter((d) => d.statut === "VALIDE").reduce((s, d) => s + n(d.montant), 0);
+  const totalBrouillon = depenses.filter((d) => d.statut !== "VALIDE").reduce((s, d) => s + n(d.montant), 0);
+  const nbBrouillon = depenses.filter((d) => d.statut !== "VALIDE").length;
 
   return (
     <div className="space-y-4">
