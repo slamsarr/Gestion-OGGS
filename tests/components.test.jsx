@@ -69,14 +69,24 @@ import Fournisseurs from "../src/pages/Fournisseurs.jsx";
 import Pistolets from "../src/pages/Pistolets.jsx";
 import Pompistes from "../src/pages/Pompistes.jsx";
 import Parametres from "../src/pages/Parametres.jsx";
+import Configuration from "../src/pages/Configuration.jsx";
+import Etats from "../src/pages/Etats.jsx";
 import DescentePompiste from "../src/pages/DescentePompiste.jsx";
 import Lavage from "../src/pages/Lavage.jsx";
+import Entretien from "../src/pages/Entretien.jsx";
 import Boutique from "../src/pages/Boutique.jsx";
 import CuvesCarburant from "../src/pages/CuvesCarburant.jsx";
 import Maintenance from "../src/pages/Maintenance.jsx";
 import Fidelite from "../src/pages/Fidelite.jsx";
 import BilanJournalierSite from "../src/pages/BilanJournalierSite.jsx";
 import EspaceClientFidelite from "../src/pages/EspaceClientFidelite.jsx";
+import TableauBordGerant from "../src/pages/TableauBordGerant.jsx";
+import GestionQuarts from "../src/pages/GestionQuarts.jsx";
+import ComptesClientsB2B from "../src/pages/ComptesClientsB2B.jsx";
+import PrixCarburant from "../src/pages/PrixCarburant.jsx";
+import JournalIndex from "../src/pages/JournalIndex.jsx";
+import LubrifiantsCEPSA from "../src/pages/LubrifiantsCEPSA.jsx";
+import ValidationCloture from "../src/pages/ValidationCloture.jsx";
 
 const mockAuthValue = {
   profil: {
@@ -109,14 +119,24 @@ describe("Affichage de toutes les pages sans crash", () => {
     ["Pistolets", Pistolets],
     ["Pompistes", Pompistes],
     ["Parametres", Parametres],
+    ["Configuration", Configuration],
+    ["Etats", Etats],
     ["DescentePompiste", DescentePompiste],
     ["Lavage", Lavage],
+    ["Entretien", Entretien],
     ["Boutique", Boutique],
     ["CuvesCarburant", CuvesCarburant],
     ["Maintenance", Maintenance],
     ["Fidelite", Fidelite],
     ["BilanJournalierSite", BilanJournalierSite],
     ["EspaceClientFidelite", EspaceClientFidelite],
+    ["TableauBordGerant", TableauBordGerant],
+    ["GestionQuarts", GestionQuarts],
+    ["ComptesClientsB2B", ComptesClientsB2B],
+    ["PrixCarburant", PrixCarburant],
+    ["JournalIndex", JournalIndex],
+    ["LubrifiantsCEPSA", LubrifiantsCEPSA],
+    ["ValidationCloture", ValidationCloture],
   ];
 
   for (const [nom, Component] of pages) {
