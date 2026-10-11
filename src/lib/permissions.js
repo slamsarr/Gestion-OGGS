@@ -89,11 +89,6 @@ const ENTITES = {
     valider: ["admin", "superviseur", "directeur"],
     recevoir: ["admin", "superviseur", "directeur", "stock"],
   },
-  depense: {
-    declarer: ["admin", "superviseur", "directeur", "comptable"],
-    valider: ["admin", "superviseur", "directeur"],
-    consulter: ["admin", "gerant", "superviseur", "directeur", "comptable"],
-  },
   maintenance: {
     creer: ["admin", "gerant", "superviseur", "directeur", "maintenance"],
     planifier: ["admin", "superviseur", "directeur", "maintenance"],
@@ -110,16 +105,16 @@ const ENTITES = {
     gerer: ["admin", "gerant", "superviseur", "directeur"],
   },
   depotage: {
-    creer: ["admin", "superviseur", "directeur", "stock"],
+    creer: ["admin", "gerant", "superviseur", "directeur", "stock"],
     consulter: ["admin", "gerant", "superviseur", "directeur", "stock", "comptable"],
     valider: ["admin", "superviseur", "directeur"],
   },
   lavage: {
     creer:         ["admin", "superviseur", "directeur", "lavage"],
-    annuler:       ["admin", "superviseur", "directeur"],
-    configurer:    ["admin", "superviseur", "directeur"],
+    annuler:       ["admin", "gerant", "superviseur", "directeur"],
+    configurer:    ["admin", "gerant", "superviseur", "directeur"],
     voir_rapports: ["admin", "gerant", "superviseur", "directeur", "comptable"],
-    gerer_bays:    ["admin", "superviseur", "directeur"],
+    gerer_bays:    ["admin", "gerant", "superviseur", "directeur"],
   },
   entretien: {
     creer:         ["admin", "superviseur", "directeur", "mecanicien"],
@@ -146,7 +141,6 @@ const ENTITES = {
     supprimer:     ["admin", "superviseur", "directeur"],
     consulter:     ["admin", "gerant", "superviseur", "directeur", "comptable"],
   },
-
 };
 
 export function peutAgir(role, entite, action, scope = null, roleScope = null) {

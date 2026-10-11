@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -11,9 +11,11 @@ import {
   listCollaborateurs,
   stocksTheoriques,
   listPrestationsEntretien,
+  listDepenses,
+  updateDescente,
 } from "../lib/api";
 import { F, fmtDate, n, T, todayISO } from "../lib/calcul";
-import { ROLE_LABELS } from "../lib/permissions";
+import { ROLE_LABELS, peutAgirProfil } from "../lib/permissions";
 import { Section, Row, Num, Loading } from "../components/ui";
 import { construireHistoire } from "../lib/histoireQuotidienne";
 import HistoireQuotidienne from "../components/HistoireQuotidienne";
@@ -48,6 +50,10 @@ export default function TableauBordGerant() {
 
   // Filtre Bons
   const [filtreBon, setFiltreBon] = useState("TOUS"); // TOUS | IMPAYES | REGLES
+  const [searchBon, setSearchBon] = useState("");
+  const [depensesJour, setDepensesJour] = useState([]);
+  const [lastRefresh, setLastRefresh] = useState(null);
+  const [validatingId, setValidatingId] = useState(null);
 
   const flash = (text, type = "ok") => {
     setMsg(text);
@@ -62,7 +68,7 @@ export default function TableauBordGerant() {
       const septJours = new Date(date); septJours.setDate(septJours.getDate() - 7);
       const septJoursISO = septJours.toISOString().slice(0, 10);
       const [r, dList, bList, lList, vList, jList, cList, stocks, ent,
-             lHier, vHier, lTous, vTous, descTous, descHier] = await Promise.all([
+             lHier, vHier, lTous, vTous, descTous, descHier, depList] = await Promise.all([
         loadReferentiel().catch(() => null),
         listDescentes(stationId, date).catch(() => []),
         listTousBonsStation(stationId).catch(() => []),
@@ -84,6 +90,7 @@ export default function TableauBordGerant() {
           const d = x.date; return d && d >= septJoursISO && d <= date;
         })).catch(() => []),
         listDescentes(stationId, hierISO).catch(() => []),
+        listDepenses(stationId, date).catch(() => []),
       ]);
       setRef(r);
       setDescentes(dList || []);
@@ -92,33 +99,42 @@ export default function TableauBordGerant() {
       setVentesBoutique(vList || []);
       setJauges(jList || []);
       setEquipe(cList || []);
-      setStocksStation((stocks || []).filter(s => s.station === stationCode || s.station === stationId));
+      const stocksFiltres = (stocks || []).filter(s => s.station === stationCode || s.station === stationId);
+      setStocksStation(stocksFiltres);
       setEntretiensJour(ent || []);
       setLavagesV(lHier || []);
       setVentesBoutiqueV(vHier || []);
+      setDepensesJour(depList || []);
+      setLastRefresh(new Date());
 
-      // ── Construire l'histoire quotidienne pour le gérant ─────────
-      const caCarbV = descHier.reduce((s, x) => s + (n(x.total_carburant) || n(x.montant_theorique) || 0), 0);
-      const caCarbM7 = descTous.reduce((s, x) => s + (n(x.total_carburant) || n(x.montant_theorique) || 0), 0) / Math.max(1, [...new Set(descTous.map(x => x.date))].length);
-      const caLavV = lHier.reduce((s, x) => s + n(x.montant_total), 0);
-      const caLavM7 = lTous.reduce((s, x) => s + n(x.montant_total), 0) / Math.max(1, [...new Set(lTous.map(x => x.date))].length);
-      const caBoutV = vHier.reduce((s, x) => s + n(x.total_montant), 0);
-      const caBoutM7 = vTous.reduce((s, x) => s + n(x.total_montant), 0) / Math.max(1, [...new Set(vTous.map(x => x.date))].length);
-      const caEnt = ent.reduce((s, e) => s + n(e.montant_total || (n(e.montant_services) + n(e.montant_produits)) || 0), 0);
-      const volCarb = dList.reduce((s, x) => s + (n(x.total_volume) || n(x.volume_vendu) || 0), 0);
+      // ── Construire l'histoire quotidienne — valeurs calculées LOCALEMENT ─────
+      // Bug fix: ne pas utiliser les useMemo (pas encore à jour) mais les variables locales
+      const caCarburantLocal = (dList || []).reduce((s, x) => s + (n(x.total_carburant) || n(x.montant_theorique) || 0), 0);
+      const caLavageLocal = (lList || []).reduce((s, x) => s + n(x.montant_total), 0);
+      const caBoutiqueLocal = (vList || []).reduce((s, x) => s + n(x.total_montant), 0);
+      const caCarbV = (descHier || []).reduce((s, x) => s + (n(x.total_carburant) || n(x.montant_theorique) || 0), 0);
+      const caCarbM7 = (descTous || []).reduce((s, x) => s + (n(x.total_carburant) || n(x.montant_theorique) || 0), 0) / Math.max(1, [...new Set((descTous || []).map(x => x.date))].length);
+      const caLavV = (lHier || []).reduce((s, x) => s + n(x.montant_total), 0);
+      const caLavM7 = (lTous || []).reduce((s, x) => s + n(x.montant_total), 0) / Math.max(1, [...new Set((lTous || []).map(x => x.date))].length);
+      const caBoutV = (vHier || []).reduce((s, x) => s + n(x.total_montant), 0);
+      const caBoutM7 = (vTous || []).reduce((s, x) => s + n(x.total_montant), 0) / Math.max(1, [...new Set((vTous || []).map(x => x.date))].length);
+      const caEnt = (ent || []).reduce((s, e) => s + n(e.montant_total || (n(e.montant_services) + n(e.montant_produits)) || 0), 0);
+      const volCarb = (dList || []).reduce((s, x) => s + (n(x.total_volume) || n(x.volume_vendu) || 0), 0);
+      const bonsImpayesLocal = (bList || []).filter(b => n(b.reste_a_payer ?? b.montant) > 0);
+      const totalResteBonsLocal = (bList || []).reduce((acc, b) => acc + n(b.reste_a_payer ?? b.montant), 0);
 
       const hist = construireHistoire({
         dateISO: date,
         stationNom: stationNom,
         stationCode,
-        caCarburantJ: totalCarburantJour,
-        caLavageJ: totalLavageJour,
-        caBoutiqueJ: totalBoutiqueJour,
+        caCarburantJ: caCarburantLocal,
+        caLavageJ: caLavageLocal,
+        caBoutiqueJ: caBoutiqueLocal,
         caEntretienJ: caEnt,
         volumeCarburantJ: volCarb,
-        nbLavagesJ: lList.length,
-        nbVentesBoutiqueJ: vList.length,
-        nbInterventionsEntretienJ: ent.length,
+        nbLavagesJ: (lList || []).length,
+        nbVentesBoutiqueJ: (vList || []).length,
+        nbInterventionsEntretienJ: (ent || []).length,
         descentesJ: dList,
         caCarburantV: caCarbV,
         caLavageV: caLavV,
@@ -126,10 +142,10 @@ export default function TableauBordGerant() {
         caCarburantM7: caCarbM7,
         caLavageM7: caLavM7,
         caBoutiqueM7: caBoutM7,
-        stocks: stocksStation,
-        ecartsDescente: dList.map(x => ({ ecart: n(x.ecart), pompiste_nom: x.pompiste_nom, pompiste_id: x.pompiste_id })),
-        bonsImpayes,
-        montantImpayes: totalResteBons,
+        stocks: stocksFiltres,
+        ecartsDescente: (dList || []).map(x => ({ ecart: n(x.ecart), pompiste_nom: x.pompiste_nom, pompiste_id: x.pompiste_id })),
+        bonsImpayes: bonsImpayesLocal,
+        montantImpayes: totalResteBonsLocal,
         role: profil?.role,
         nomUtilisateur: profil?.nom_complet,
       });
@@ -145,6 +161,7 @@ export default function TableauBordGerant() {
   useEffect(() => {
     loadStationData();
   }, [stationId, date]);
+
 
   // Totaux consolidés du jour
   const totalCarburantJour = useMemo(() => {
@@ -180,10 +197,31 @@ export default function TableauBordGerant() {
   const totalLitresBons = useMemo(() => tousBons.reduce((acc, b) => acc + n(b.volume_litres || 0), 0), [tousBons]);
 
   const bonsFiltres = useMemo(() => {
-    if (filtreBon === "IMPAYES") return tousBons.filter((b) => n(b.reste_a_payer ?? b.montant) > 0);
-    if (filtreBon === "REGLES") return tousBons.filter((b) => n(b.reste_a_payer ?? b.montant) === 0);
-    return tousBons;
-  }, [tousBons, filtreBon]);
+    let list = tousBons;
+    if (filtreBon === "IMPAYES") list = tousBons.filter((b) => n(b.reste_a_payer ?? b.montant) > 0);
+    if (filtreBon === "REGLES") list = tousBons.filter((b) => n(b.reste_a_payer ?? b.montant) === 0);
+    if (searchBon.trim()) {
+      const q = searchBon.trim().toLowerCase();
+      list = list.filter(b =>
+        (b.client_nom || "").toLowerCase().includes(q) ||
+        (b.client_code || "").toLowerCase().includes(q) ||
+        (b.numero_bon || "").toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [tousBons, filtreBon, searchBon]);
+
+  // Dépenses du jour
+  const totalDepensesJour = useMemo(() => depensesJour.reduce((acc, d) => acc + n(d.montant), 0), [depensesJour]);
+
+  // Tendances J-1 (données hier déjà stockées dans lavagesV / ventesBoutiqueV)
+  const tendanceCarb = useMemo(() => {
+    const hier = lavagesV; // Note: on n'a pas caCarbV en état, on l'estime depuis descentes hier = pas disponible ici
+    // on retourne null si pas de référence
+    return null; // sera calculé via des données séparées si nécessaire
+  }, []);
+
+
 
   // Calculs pour correspondre au journal Excel BASE_JOURS
   const volumesGasoil = useMemo(() => {
@@ -365,10 +403,17 @@ export default function TableauBordGerant() {
     return alerts;
   }, [bonsImpayes]);
 
-  // Toutes les alertes consolidées
+  // Toutes les alertes consolidées — critiques en premier
   const toutesAlertes = useMemo(() => {
-    return [...alertesIndex, ...alertesStock, ...alertesCaisse, ...alertesCreances];
+    const all = [...alertesIndex, ...alertesStock, ...alertesCaisse, ...alertesCreances];
+    return all.sort((a, b) => {
+      if (a.gravite === "critique" && b.gravite !== "critique") return -1;
+      if (a.gravite !== "critique" && b.gravite === "critique") return 1;
+      return 0;
+    });
   }, [alertesIndex, alertesStock, alertesCaisse, alertesCreances]);
+
+  const nbAlertesCritiques = useMemo(() => toutesAlertes.filter(a => a.gravite === "critique").length, [toutesAlertes]);
 
 
 
@@ -420,10 +465,15 @@ export default function TableauBordGerant() {
             </div>
             <button
               onClick={() => loadStationData()}
-              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-white transition-colors"
+              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-white transition-colors flex items-center gap-1"
               title="Rafraîchir les données de la station"
             >
-              🔄
+              <span>🔄</span>
+              {lastRefresh && (
+                <span className="text-[10px] text-blue-200 hidden sm:inline">
+                  {lastRefresh.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+                </span>
+              )}
             </button>
             <button
               type="button"
@@ -441,7 +491,7 @@ export default function TableauBordGerant() {
               className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors shadow-md flex items-center gap-1.5"
               title="Gérer les comptes clients B2B"
             >
-              <span>�</span>
+              <span>🏢</span>
               <span className="hidden sm:inline">Comptes B2B</span>
               <span className="sm:hidden">B2B</span>
             </button>
@@ -451,7 +501,7 @@ export default function TableauBordGerant() {
               className="px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-colors shadow-md flex items-center gap-1.5"
               title="Gérer les dépenses réseau"
             >
-              <span>�</span>
+              <span>💳</span>
               <span className="hidden sm:inline">Dépenses</span>
               <span className="sm:hidden">Dépenses</span>
             </button>
@@ -489,7 +539,7 @@ export default function TableauBordGerant() {
         </div>
 
         {/* ── KPIs OPÉRATIONNELS DU SITE (Style BASE_JOURS Excel) ── */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 pt-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 pt-4">
           <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
             <div className="text-xs font-bold text-amber-300 uppercase">CA Total Jour</div>
             <div className="text-lg font-black text-white tabular mt-1">{F(totalRecetteStation)} F</div>
@@ -526,6 +576,12 @@ export default function TableauBordGerant() {
               {totalEcartDescentes >= 0 ? "+" : ""}{F(totalEcartDescentes)} F
             </div>
             <div className="text-xs text-gray-300">{descentes.length} descente(s)</div>
+          </div>
+
+          <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
+            <div className="text-xs font-bold text-orange-300 uppercase">Dépenses Jour</div>
+            <div className="text-lg font-black text-orange-200 tabular mt-1">{F(totalDepensesJour)} F</div>
+            <div className="text-xs text-orange-300/80">{depensesJour.length} opération(s)</div>
           </div>
         </div>
       </div>
@@ -839,7 +895,7 @@ export default function TableauBordGerant() {
               Supervision des Descentes Pompistes du {fmtDate(date)}
             </h2>
             <div className="text-xs text-gray-500">
-              Visualisation uniquement · Pas de saisie opérationnelle
+              Lecture seule · Validation disponible pour les descentes soumises
             </div>
           </div>
 
@@ -852,22 +908,25 @@ export default function TableauBordGerant() {
             <div className="bg-white rounded-2xl border shadow-sm divide-y" style={{ borderColor: T.line }}>
               {descentes.map((d) => {
                 const isTerminee = d.statut === "TERMINEE";
+                const isValidee = d.statut === "VALIDEE";
                 const ecartVal = n(d.ecart);
+                const peutValider = peutAgirProfil(profil, "rapport", "valider") && isTerminee && !isValidee;
                 return (
                   <div key={d.id} className="p-4 hover:bg-gray-50/70 transition-colors">
                     {/* En-tête pompiste */}
                     <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-700">
                           {d.numero || d.id?.slice(0, 8)}
                         </span>
                         <span className="font-black text-sm text-gray-900">{d.pompiste_nom || "Pompiste"}</span>
                         <span
                           className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            isValidee ? "bg-blue-100 text-blue-800" :
                             isTerminee ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900"
                           }`}
                         >
-                          {isTerminee ? "✓ Soumise" : "🟡 En cours"}
+                          {isValidee ? "✓ Validée" : isTerminee ? "✓ Soumise" : "🟡 En cours"}
                         </span>
                         {d.quart && (
                           <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800">
@@ -875,10 +934,32 @@ export default function TableauBordGerant() {
                           </span>
                         )}
                       </div>
-                      <div className="text-right">
-                        <div className="text-[10px] text-gray-400 font-bold uppercase">Écart Caisse</div>
-                        <div className={`font-black text-sm tabular ${ecartVal >= 0 ? "text-emerald-700" : "text-rose-600"}`}>
-                          {ecartVal >= 0 ? "+" : ""}{F(ecartVal)} FCFA
+                      <div className="flex items-center gap-2">
+                        {peutValider && (
+                          <button
+                            disabled={validatingId === d.id}
+                            onClick={async () => {
+                              setValidatingId(d.id);
+                              try {
+                                await updateDescente(d.id, { statut: "VALIDEE", valide_par: profil?.id, valide_le: new Date().toISOString() });
+                                flash(`Descente de ${d.pompiste_nom} validée ✓`);
+                                await loadStationData();
+                              } catch (e) {
+                                flash("Erreur lors de la validation", "error");
+                              } finally {
+                                setValidatingId(null);
+                              }
+                            }}
+                            className="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-bold disabled:opacity-50 transition-colors"
+                          >
+                            {validatingId === d.id ? "..." : "✓ Valider"}
+                          </button>
+                        )}
+                        <div className="text-right">
+                          <div className="text-[10px] text-gray-400 font-bold uppercase">Écart Caisse</div>
+                          <div className={`font-black text-sm tabular ${ecartVal >= 0 ? "text-emerald-700" : "text-rose-600"}`}>
+                            {ecartVal >= 0 ? "+" : ""}{F(ecartVal)} FCFA
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -994,9 +1075,9 @@ export default function TableauBordGerant() {
             </div>
           </div>
 
-          {/* Filtres (visualisation uniquement) */}
-          <div className="flex items-center gap-1.5 text-xs pt-1">
-            <span className="text-gray-500 font-bold mr-1">Filtrer :</span>
+          {/* Filtres + recherche */}
+          <div className="flex flex-wrap items-center gap-2 text-xs pt-1">
+            <span className="text-gray-500 font-bold">Filtrer :</span>
             <button
               onClick={() => setFiltreBon("TOUS")}
               className={`px-3 py-1 rounded-lg font-bold text-xs transition-colors ${
@@ -1021,6 +1102,18 @@ export default function TableauBordGerant() {
             >
               Soldés ({tousBons.length - bonsImpayes.length})
             </button>
+            <div className="ml-auto flex items-center gap-1.5">
+              <input
+                type="search"
+                placeholder="Rechercher client, n° bon..."
+                value={searchBon}
+                onChange={e => setSearchBon(e.target.value)}
+                className="px-3 py-1.5 rounded-lg border border-gray-200 text-xs w-48 focus:outline-none focus:ring-1 focus:ring-blue-400"
+              />
+              {searchBon && (
+                <button onClick={() => setSearchBon("")} className="text-gray-400 hover:text-gray-700 text-xs font-bold">✕</button>
+              )}
+            </div>
           </div>
 
           {/* Table complète des Bons */}
@@ -1201,51 +1294,99 @@ export default function TableauBordGerant() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-            {(ref?.cuves || [
-              { code: "CUV-GO-1", nom: "Cuve Gasoil 1", produit: "GASOIL", capacite: 30000, stock: 18500 },
-              { code: "CUV-GO-2", nom: "Cuve Gasoil 2", produit: "GASOIL", capacite: 30000, stock: 14200 },
-              { code: "CUV-SU-1", nom: "Cuve Super 1", produit: "SUPER", capacite: 20000, stock: 9800 },
-            ]).map((c) => {
-              const cap = n(c.capacite) || 30000;
-              const stk = n(c.stock) || 15000;
-              const pct = cap > 0 ? Math.min(100, Math.round((stk / cap) * 100)) : 50;
-              const creux = Math.max(0, cap - stk);
+          {/* Jaugeages physiques du jour */}
+          {jauges.length > 0 && (
+            <div className="mb-2">
+              <h4 className="text-xs font-bold text-gray-700 uppercase mb-2">📏 Jaugeages physiques — {fmtDate(date)}</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                {jauges.map((j, idx) => {
+                  const stk = n(j.niveau_litre || j.stock || j.niveau);
+                  const cap = n(j.capacite) || 30000;
+                  const pct = cap > 0 ? Math.min(100, Math.round((stk / cap) * 100)) : 0;
+                  return (
+                    <div key={j.id || idx} className="p-3 rounded-xl border bg-blue-50/40 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-xs text-gray-900">{j.nom_cuve || j.cuve_code || `Cuve ${idx + 1}`}</span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${(j.produit || "").includes("SUP") ? "bg-emerald-100 text-emerald-900" : "bg-blue-100 text-blue-900"}`}>
+                          {j.produit || "GASOIL"}
+                        </span>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-[11px]">
+                          <span className="text-gray-500">Niveau jaugé :</span>
+                          <span className="font-black text-gray-900 tabular">{F(stk)} L ({pct}%)</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all"
+                            style={{ width: `${pct}%`, background: pct < 20 ? "#DC2626" : pct < 40 ? "#D97706" : "#2563EB" }}
+                          />
+                        </div>
+                        {j.heure_jauge && <div className="text-[10px] text-gray-500">Relevé à {j.heure_jauge}</div>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
-              return (
-                <div key={c.code} className="p-3 rounded-xl border bg-gray-50/60 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-xs text-gray-900">{c.nom || c.code}</span>
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${c.produit === "GASOIL" ? "bg-blue-100 text-blue-900" : "bg-emerald-100 text-emerald-900"}`}>
-                      {c.produit}
-                    </span>
-                  </div>
+          {/* Stocks théoriques depuis les descentes */}
+          <div>
+            <h4 className="text-xs font-bold text-gray-700 uppercase mb-2">📊 Stocks Théoriques (calcul descentes)</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {(stocksStation.length > 0 ? stocksStation : (ref?.cuves || [
+                { code: "CUV-GO-1", nom: "Cuve Gasoil 1", produit: "GASOIL", capacite: 30000, stock: 18500 },
+                { code: "CUV-GO-2", nom: "Cuve Gasoil 2", produit: "GASOIL", capacite: 30000, stock: 14200 },
+                { code: "CUV-SU-1", nom: "Cuve Super 1", produit: "SUPER", capacite: 20000, stock: 9800 },
+              ])).map((c) => {
+                const cap = n(c.capacite) || 30000;
+                const stk = n(c.stock) || 0;
+                const pct = cap > 0 ? Math.min(100, Math.round((stk / cap) * 100)) : 50;
+                const creux = Math.max(0, cap - stk);
 
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-[11px]">
-                      <span className="text-gray-500">Stock actuel :</span>
-                      <span className="font-black text-gray-900 tabular">{F(stk)} L ({pct}%)</span>
+                return (
+                  <div key={c.code} className="p-3 rounded-xl border bg-gray-50/60 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-xs text-gray-900">{c.nom || c.code}</span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${c.produit === "GASOIL" ? "bg-blue-100 text-blue-900" : "bg-emerald-100 text-emerald-900"}`}>
+                        {c.produit}
+                      </span>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all"
-                        style={{
-                          width: `${pct}%`,
-                          background: pct < 20 ? "#DC2626" : pct < 40 ? "#D97706" : c.produit === "GASOIL" ? "#2563EB" : "#059669",
-                        }}
-                      />
-                    </div>
-                    <div className="flex justify-between text-[10px] text-gray-500">
-                      <span>Capacité: {F(cap)} L</span>
-                      <span className="font-semibold text-amber-800">Creux: {F(creux)} L</span>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[11px]">
+                        <span className="text-gray-500">Stock actuel :</span>
+                        <span className="font-black text-gray-900 tabular">{F(stk)} L ({pct}%)</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all"
+                          style={{
+                            width: `${pct}%`,
+                            background: pct < 20 ? "#DC2626" : pct < 40 ? "#D97706" : c.produit === "GASOIL" ? "#2563EB" : "#059669",
+                          }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-[10px] text-gray-500">
+                        <span>Capacité: {F(cap)} L</span>
+                        <span className="font-semibold text-amber-800">Creux: {F(creux)} L</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
+
+          {jauges.length === 0 && stocksStation.length === 0 && (
+            <p className="text-center text-xs text-gray-400 py-4">
+              Aucune donnée de jauge saisie pour le {fmtDate(date)}. Les valeurs affichées sont des données de référence.
+            </p>
+          )}
         </div>
       )}
+
 
       {/* ── TAB 5 : MON ÉQUIPE & COMPTES COLLABORATEURS ── */}
       {activeTab === "equipe" && (
@@ -1262,12 +1403,27 @@ export default function TableauBordGerant() {
                 Pompistes, agents de lavage, vendeurs boutique et techniciens rattachés à votre site (visualisation).
               </p>
             </div>
+            <button
+              onClick={() => navigate("/configuration")}
+              className="px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center gap-1.5 transition-colors shadow-md"
+              title="Gérer les collaborateurs dans la configuration"
+            >
+              <span>➕</span>
+              <span className="hidden sm:inline">Nouveau Collaborateur</span>
+              <span className="sm:hidden">Ajouter</span>
+            </button>
           </div>
 
           {equipe.length === 0 ? (
             <div className="text-center py-8 text-xs text-gray-500">
               <p className="font-bold text-gray-700">Aucun collaborateur rattaché à cette station pour l'instant.</p>
-              <p className="text-gray-400 mt-1">Cliquez sur « Nouveau Collaborateur » pour créer un compte pompiste, lavage ou boutique.</p>
+              <p className="text-gray-400 mt-1 mb-4">Créez un compte pompiste, lavage ou boutique pour votre équipe.</p>
+              <button
+                onClick={() => navigate("/configuration")}
+                className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-colors shadow-md"
+              >
+                ➕ Créer un collaborateur
+              </button>
             </div>
           ) : (
             <div className="overflow-x-auto border rounded-xl" style={{ borderColor: T.line }}>

@@ -569,16 +569,32 @@ export async function updateProduit(id, patch) {
 // ── CRUD Catégories ──
 export async function createCategorie(cat) {
   const sb = getSupabase();
-  const row = { code: cat.code, libelle: cat.libelle, nature: cat.nature || "VARIABLE", compte_syscohada: cat.compte_syscohada || "6588" };
-  if (sb) { const { error } = await sb.from("categories_depense").insert(row); if (error) return { error: error.message }; }
-  const ref = await getLocalRef(); ref.categories = [...(ref.categories || []), row]; await setLocalRef(ref);
-  return { ok: true };
+  const natureVal = cat.nature_depense || cat.nature || "FONCTIONNEMENT";
+  const row = {
+    code: cat.code,
+    libelle: cat.libelle,
+    nature: natureVal,
+    nature_depense: natureVal,
+    compte_syscohada: cat.compte_syscohada || "6588",
+  };
+  if (sb) {
+    // Dans Supabase schema.sql, la colonne est 'nature'
+    const sbRow = { code: row.code, libelle: row.libelle, nature: row.nature, compte_syscohada: row.compte_syscohada };
+    const { error } = await sb.from("categories_depense").insert(sbRow);
+    if (error) return { error: error.message };
+  }
+  const ref = await getLocalRef();
+  ref.categories = [...(ref.categories || []), row];
+  await setLocalRef(ref);
+  return { ok: true, row };
 }
 export async function updateCategorie(id, patch) {
   const sb = getSupabase();
-  if (sb) { const { error } = await sb.from("categories_depense").update(patch).eq("id", id); if (error) return { error: error.message }; }
+  const patchClean = { ...patch };
+  if (patch.nature_depense && !patch.nature) patchClean.nature = patch.nature_depense;
+  if (sb) { const { error } = await sb.from("categories_depense").update(patchClean).eq("id", id); if (error) return { error: error.message }; }
   const ref = await getLocalRef();
-  ref.categories = (ref.categories || []).map((c) => (c.id === id || c.code === id) ? { ...c, ...patch } : c);
+  ref.categories = (ref.categories || []).map((c) => (c.id === id || c.code === id) ? { ...c, ...patch, ...patchClean } : c);
   await setLocalRef(ref);
   return { ok: true };
 }

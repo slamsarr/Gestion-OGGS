@@ -9,6 +9,8 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    env:
+      FTP_SERVER: ${{ secrets.HOSTINGER_FTP_SERVER }}
     steps:
       - name: Récupérer le code source
         uses: actions/checkout@v4
@@ -31,8 +33,6 @@ jobs:
       - name: Déploiement FTP Hostinger (si secrets configurés)
         if: "${{ env.FTP_SERVER != '' }}"
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        env:
-          FTP_SERVER: ${{ secrets.HOSTINGER_FTP_SERVER }}
         with:
           server: ${{ secrets.HOSTINGER_FTP_SERVER }}
           username: ${{ secrets.HOSTINGER_FTP_USER }}
