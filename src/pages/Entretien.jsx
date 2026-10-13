@@ -14,6 +14,9 @@ import EntretienServiceCard from "../components/entretien/EntretienServiceCard";
 import EntretienQueue from "../components/entretien/EntretienQueue";
 import EntretienTicket from "../components/entretien/EntretienTicket";
 import EntretienConfigPanel from "../components/entretien/EntretienConfigPanel";
+import StarCareGrilleModal from "../components/entretien/StarCareGrilleModal";
+import StarCareDiagnostic from "../components/entretien/StarCareDiagnostic";
+import StarCarePacksSelector, { STAR_PACKS } from "../components/entretien/StarCarePacksSelector";
 
 import {
   PageHeader,
@@ -121,8 +124,14 @@ export default function Entretien() {
   const [bays, setBays] = useState([]);
   const [catalogueProduits, setCatalogueProduits] = useState([]);
 
-  // Checklist diagnostic state
+  // Checklist diagnostic state & Star Care
   const [checklistDiag, setChecklistDiag] = useState({});
+  const [niveauDiag, setNiveauDiag] = useState(20);
+  const [isGrilleModalOpen, setIsGrilleModalOpen] = useState(false);
+  const [selectedPackId, setSelectedPackId] = useState(null);
+  const [option10w40, setOption10w40] = useState(false);
+  const [serviceCatFilter, setServiceCatFilter] = useState("ALL");
+  const [serviceSearch, setServiceSearch] = useState("");
   const toggleDiag = (k) => setChecklistDiag((c) => ({ ...c, [k]: !c[k] }));
 
   const load = useCallback(async () => {
@@ -341,6 +350,107 @@ export default function Entretien() {
     }
   };
 
+  const handleSelectPack = (pack) => {
+    if (!pack) {
+      setSelectedPackId(null);
+      setOption10w40(false);
+      setForm((f) => ({
+        ...f,
+        selectedServices: f.selectedServices.filter((s) => s.categorie !== "PACK" && !s.code?.startsWith("PACK_")),
+        selectedProduits: f.selectedProduits.filter((p) => !p.fourni_par_pack),
+      }));
+      return;
+    }
+
+    setSelectedPackId(pack.id);
+    setNiveauDiag(pack.ptsControle);
+
+    const prixPack = pack.id === "PACK_ESSENTIEL" && option10w40
+      ? pack.prix + pack.optionGrade.supplement
+      : pack.prix;
+
+    const srvPack = {
+      id: `srv-${pack.id.toLowerCase()}`,
+      code: pack.serviceCode,
+      nom: `${pack.nom} (${pack.ptsControle} Pts)`,
+      description: `${pack.pointsDescription} · ${pack.filtres}`,
+      prix_base: prixPack,
+      prix: prixPack,
+      categorie: "PACK",
+      duree_min: pack.id === "PACK_PREMIUM" ? 75 : pack.id === "PACK_CONFORT" ? 50 : 35,
+      emoji: pack.emoji,
+    };
+
+    const huileCode = pack.id === "PACK_ESSENTIEL" && option10w40
+      ? pack.optionGrade.huileAltCode
+      : pack.huileCode;
+    const huileNom = pack.id === "PACK_ESSENTIEL" && option10w40
+      ? pack.optionGrade.huileAlt
+      : pack.huile;
+
+    setForm((f) => ({
+      ...f,
+      selectedServices: [
+        ...f.selectedServices.filter((s) => s.categorie !== "PACK" && !s.code?.startsWith("PACK_")),
+        srvPack,
+      ],
+      selectedProduits: [
+        ...f.selectedProduits.filter((p) => !p.fourni_par_pack),
+        {
+          code: huileCode,
+          designation: `${huileNom} (Fournie dans forfait)`,
+          prix_unitaire: 0,
+          quantite: 1,
+          total: 0,
+          fourni_par_pack: true,
+        },
+      ],
+    }));
+  };
+
+  const handleToggleOption10w40 = () => {
+    const next = !option10w40;
+    setOption10w40(next);
+    const pack = STAR_PACKS.find((p) => p.id === "PACK_ESSENTIEL");
+    if (pack && selectedPackId === "PACK_ESSENTIEL") {
+      const prixPack = next ? pack.prix + pack.optionGrade.supplement : pack.prix;
+      const huileCode = next ? pack.optionGrade.huileAltCode : pack.huileCode;
+      const huileNom = next ? pack.optionGrade.huileAlt : pack.huile;
+
+      setForm((f) => ({
+        ...f,
+        selectedServices: f.selectedServices.map((s) =>
+          s.code === "PACK_ESSENTIEL" ? { ...s, prix_base: prixPack, prix: prixPack } : s
+        ),
+        selectedProduits: f.selectedProduits.map((p) =>
+          p.fourni_par_pack
+            ? { ...p, code: huileCode, designation: `${huileNom} (Fournie dans forfait)` }
+            : p
+        ),
+      }));
+    }
+  };
+
+  const handleAddServiceFromGrille = (item) => {
+    if (item.cat === "FORFAITS") {
+      const pack = STAR_PACKS.find((p) => p.id === item.code);
+      if (pack) handleSelectPack(pack);
+      return;
+    }
+    const exist = services.find((s) => s.code === item.code);
+    const serviceToAdd = exist || {
+      id: `srv-${item.code.toLowerCase()}`,
+      code: item.code,
+      nom: item.nom,
+      description: item.description,
+      prix_base: item.prix,
+      prix: item.prix,
+      categorie: item.cat,
+      emoji: item.emoji,
+    };
+    toggleService(serviceToAdd);
+  };
+
   const handleAddProduct = () => {
     if (!selProdCode) return;
     const prod = catalogueProduits.find((p) => p.code === selProdCode);
@@ -434,6 +544,9 @@ export default function Entretien() {
         setTicket(res.prestation);
         setForm(initForm);
         setChecklistDiag({});
+        setSelectedPackId(null);
+        setOption10w40(false);
+        setNiveauDiag(20);
         setPromoMsg(null);
         setVehiculeConnu(null);
         load();
@@ -514,13 +627,22 @@ export default function Entretien() {
   return (
     <div className="pb-10">
       <PageHeader
-        icon="🔧"
-        titre="Baie d'Entretien, Vidange & Mécanique Rapide"
-        subtitle={`DAMEL SERVICES AUTO & BAIE · Station ${stationNom} · ${date}`}
+        icon="⭐"
+        titre="Star Premium Car Care · Baie d'Entretien"
+        subtitle={`STAR OIL · Station Hann Maristes (Dakar) · 📞 RDV : 77 44 39 690 · ${date}`}
         badge={stocksFaibles.length > 0 ? `⚠ Stock faible : ${stocksFaibles.length} produit(s)` : `⏱ Temps moyen ${kpis.tempsMoy || 30} min`}
-        breadcrumb="Pilotage > Opérations > Centre Entretien"
+        breadcrumb="Pilotage > Opérations > Star Premium Car Care"
         actions={
           <>
+            <Button
+              variant="accent"
+              icon="📖"
+              onClick={() => setIsGrilleModalOpen(true)}
+              size="sm"
+              className="!bg-gradient-to-r !from-amber-500 !to-orange-500 !text-white font-bold shadow-md hover:!brightness-105"
+            >
+              Grille Tarifaire Star Care
+            </Button>
             <input
               type="date"
               value={date}
@@ -531,6 +653,52 @@ export default function Entretien() {
           </>
         }
       />
+
+      {/* Bandeau officiel Star Premium Car Care & Engagements */}
+      <div className="mb-5 p-4 rounded-3xl bg-gradient-to-r from-fuelos-950 via-amber-950 to-fuelos-900 border border-amber-500/30 text-white shadow-xl relative overflow-hidden">
+        <div className="relative z-10 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-2xl shadow-lg shadow-amber-500/30">
+              ⭐
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-[10px] font-black uppercase tracking-widest text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-full border border-amber-400/30">
+                  STAR OIL · HANN MARISTES
+                </span>
+                <span className="text-[11px] text-amber-200/80">Atelier Haute Performance</span>
+              </div>
+              <h3 className="text-base sm:text-lg font-black tracking-tight text-white mt-0.5">
+                STAR PREMIUM CAR CARE — Dakar
+              </h3>
+              <p className="text-xs text-amber-100/80 font-medium">
+                📞 RDV Atelier : <b className="text-white">77 44 39 690</b> · ⏱ <b>7j/7</b> — 06h30 à 22h00
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-2.5 py-1 rounded-xl text-xs font-bold">
+              ✓ Pièces certifiées d'origine
+            </span>
+            <span className="bg-blue-500/20 text-blue-300 border border-blue-400/30 px-2.5 py-1 rounded-xl text-xs font-bold">
+              ✓ Sans RDV
+            </span>
+            <span className="bg-amber-500/20 text-amber-300 border border-amber-400/30 px-2.5 py-1 rounded-xl text-xs font-bold">
+              ✓ Devis transparent &amp; gratuit
+            </span>
+            <Button
+              variant="secondary"
+              size="sm"
+              icon="🔍"
+              onClick={() => setIsGrilleModalOpen(true)}
+              className="!bg-white/10 !text-amber-200 hover:!bg-white/20 !border-white/20 !text-xs font-bold"
+            >
+              Voir tous les tarifs
+            </Button>
+          </div>
+        </div>
+      </div>
 
       <KpiGrid cols={4}>
         <StatCard label="CA Atelier" value={`${F(kpis.ca)} F`} icon="💰" color="damel"
@@ -738,89 +906,117 @@ export default function Entretien() {
               </div>
             </Section>
 
-            {/* 3. Diagnostic préalable */}
-            <Section titre="3. Diagnostic préalable (10 points)" icon="🔍"
-              aside={`${Object.values(checklistDiag).filter(Boolean).length}/10 vérifiés`}>
-              <p className="text-[11.5px] text-slate-500 mb-3">
-                Cochez les anomalies détectées — FuelOS suggère automatiquement les services associés.
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {DIAGNOSTIC_PREABLE.map((d) => {
-                  const checked = !!checklistDiag[d.key];
-                  return (
-                    <label
-                      key={d.key}
-                      className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border cursor-pointer transition-all ${
-                        checked
-                          ? "border-red-400 bg-red-50 shadow-card"
-                          : "border-surface-border bg-white hover:border-damel-blue/40 hover:bg-fuelos-50/60"
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleDiag(d.key)}
-                        className={`w-4 h-4 ${checked ? "accent-red-500" : "accent-damel-blue"}`}
-                      />
-                      <span className="text-base">{d.icon}</span>
-                      <div className="flex-1 min-w-0">
-                        <div className={`text-[12px] font-bold ${checked ? "text-red-800" : "text-slate-800"} truncate`}>
-                          {d.label}
-                        </div>
-                        <div className="text-[10.5px] text-slate-400">{d.categorie}</div>
-                      </div>
-                      {checked && <Badge variant="danger">Anomalie</Badge>}
-                    </label>
-                  );
-                })}
-              </div>
-              {servicesSuggeresParDiag.length > 0 && (
-                <div className="mt-4 p-3 rounded-xl bg-damel-yellow/10 border-2 border-dashed border-damel-gold/50">
-                  <div className="text-[11px] font-black uppercase tracking-wider text-amber-800 mb-2 flex items-center gap-1.5">
-                    💡 FuelOS Suggest — Prestations recommandées ({servicesSuggeresParDiag.length})
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {servicesSuggeresParDiag.map((s) => {
-                      const selected = form.selectedServices.some((x) => x.id === s.id);
-                      return (
-                        <button
-                          key={s.id}
-                          type="button"
-                          onClick={() => toggleService(s)}
-                          className={`px-3 py-1.5 rounded-lg text-[11.5px] font-bold transition-all border ${
-                            selected
-                              ? "bg-damel-blue text-white border-damel-blue shadow-button"
-                              : "bg-white text-amber-900 border-amber-300 hover:bg-amber-50"
-                          }`}
-                        >
-                          {selected ? "✓ " : "+ "}{s.nom}
-                          <span className="ml-1.5 opacity-80 tabular">{F(Number(s.prix_base || s.prix || 0))} F</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+            {/* 3. Diagnostic Star Care */}
+            <Section
+              titre={`3. Rapport de Diagnostic Star Care (${niveauDiag} points)`}
+              icon="🔍"
+              aside={
+                <button
+                  type="button"
+                  onClick={() => setIsGrilleModalOpen(true)}
+                  className="text-xs font-bold text-amber-700 hover:text-amber-900 underline"
+                >
+                  📖 Grille &amp; Tarifs
+                </button>
+              }
+            >
+              <StarCareDiagnostic
+                checklist={checklistDiag}
+                onChange={setChecklistDiag}
+                niveau={niveauDiag}
+                onNiveauChange={setNiveauDiag}
+              />
             </Section>
 
-            {/* 4. Prestations */}
-            <Section titre="4. Prestations d'entretien" icon="🛠️"
-              aside={`${form.selectedServices.length} prestation(s) · ≈ ${dureeEstimee} min`}>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-80 overflow-y-auto pr-1">
-                {services.map((srv) => (
-                  <EntretienServiceCard
-                    key={srv.id}
-                    service={srv}
-                    selected={form.selectedServices.some((s) => s.id === srv.id)}
-                    onToggle={toggleService}
-                  />
-                ))}
-                {services.length === 0 && (
-                  <div className="sm:col-span-2">
-                    <EmptyState icon="🛠️" title="Aucun service configuré"
-                      description={canConfig ? "Ajoutez des services dans l'onglet ⚙️ Configuration." : "Contactez votre gérant."} />
+            {/* 4. Prestations & Grands Forfaits Star Care */}
+            <Section
+              titre="4. Prestations & Grands Forfaits Star Care"
+              icon="🛠️"
+              aside={`${form.selectedServices.length} prestation(s) · ≈ ${dureeEstimee} min`}
+            >
+              {/* Sélecteur des 3 Grands Forfaits Clés en Main */}
+              <div className="mb-4">
+                <StarCarePacksSelector
+                  selectedPackId={selectedPackId}
+                  option10w40={option10w40}
+                  onSelectPack={handleSelectPack}
+                  onToggleOption10w40={handleToggleOption10w40}
+                />
+              </div>
+
+              {/* Filtres par catégorie & Recherche pour les prestations à la carte */}
+              <div className="pt-3 border-t border-slate-200/80">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                  <div className="text-xs font-extrabold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                    <span>⚙️</span> Prestations &amp; Réparations à la carte
                   </div>
-                )}
+                  <input
+                    type="text"
+                    placeholder="🔍 Filtrer les prestations…"
+                    value={serviceSearch}
+                    onChange={(e) => setServiceSearch(e.target.value)}
+                    className="input-base !py-1 !px-2.5 !w-48 !text-xs"
+                  />
+                </div>
+
+                {/* Badges de catégories */}
+                <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-2 mb-2">
+                  {[
+                    { id: "ALL", label: "Toutes", icon: "📑" },
+                    { id: "VIDANGE", label: "Vidange", icon: "🛢️" },
+                    { id: "TRANSMISSION", label: "Boîte & Pont", icon: "⚙️" },
+                    { id: "FREINAGE", label: "Freinage", icon: "🛑" },
+                    { id: "CLIMATISATION", label: "Clim", icon: "❄️" },
+                    { id: "PNEUMATIQUE", label: "Pneus & Géométrie", icon: "🛞" },
+                    { id: "ELECTRICITE", label: "Électricité", icon: "⚡" },
+                    { id: "CONTROLE_TECHNIQUE", label: "Contrôle Tech.", icon: "📋" },
+                    { id: "ESTHETIQUE", label: "Lavage & Cire", icon: "🧼" },
+                  ].map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => setServiceCatFilter(c.id)}
+                      className={`px-2.5 py-1 rounded-xl text-[11px] font-bold whitespace-nowrap transition-all flex items-center gap-1 ${
+                        serviceCatFilter === c.id
+                          ? "bg-slate-900 text-white shadow-sm"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      }`}
+                    >
+                      <span>{c.icon}</span>
+                      <span>{c.label}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-80 overflow-y-auto pr-1">
+                  {services
+                    .filter((srv) => {
+                      if (serviceCatFilter !== "ALL" && srv.categorie !== serviceCatFilter) return false;
+                      if (!serviceSearch.trim()) return true;
+                      const q = serviceSearch.toLowerCase();
+                      return (
+                        (srv.nom || "").toLowerCase().includes(q) ||
+                        (srv.description || "").toLowerCase().includes(q)
+                      );
+                    })
+                    .map((srv) => (
+                      <EntretienServiceCard
+                        key={srv.id}
+                        service={srv}
+                        selected={form.selectedServices.some((s) => s.id === srv.id)}
+                        onToggle={toggleService}
+                      />
+                    ))}
+                  {services.length === 0 && (
+                    <div className="sm:col-span-2">
+                      <EmptyState
+                        icon="🛠️"
+                        title="Aucun service configuré"
+                        description={canConfig ? "Ajoutez des services dans l'onglet ⚙️ Configuration." : "Contactez votre gérant."}
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
             </Section>
 
@@ -1347,6 +1543,13 @@ export default function Entretien() {
           onClose={() => setTicket(null)}
         />
       )}
+
+      {/* Modale de la grille tarifaire officielle Star Premium Car Care */}
+      <StarCareGrilleModal
+        isOpen={isGrilleModalOpen}
+        onClose={() => setIsGrilleModalOpen(false)}
+        onSelectService={handleAddServiceFromGrille}
+      />
     </div>
   );
 }

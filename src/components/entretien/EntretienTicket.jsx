@@ -26,9 +26,17 @@ export default function EntretienTicket({ prestation, onClose, stationNom = "Sta
   const modePaiement = prestation.mode_paiement || "ESPECES";
   const prochainKm = km ? km + 10000 : null;
 
+  const diagChecklist = prestation.diagnostic_checklist || {};
+  const diagEntries = Object.entries(diagChecklist);
+  const nbDiagOK = diagEntries.filter(([_, v]) => v === "OK" || v === true).length;
+  const nbDiagSurv = diagEntries.filter(([_, v]) => v === "SURVEILLER").length;
+  const nbDiagUrg = diagEntries.filter(([_, v]) => v === "URGENT").length;
+  const aDiagnostic = diagEntries.length > 0;
+
   const ticketText = () => {
-    let t = `🔧 *${stationNom} — CENTRE D'ENTRETIEN RAPIDE*\n`;
+    let t = `⭐ *STAR PREMIUM CAR CARE — STAR OIL HANN MARISTES*\n`;
     t += `📋 *ORDRE DE RÉPARATION : ${orNum}*\n`;
+    t += `📞 RDV Atelier : 77 44 39 690 · 7j/7 (06h30 - 22h00)\n`;
     t += `────────────────────────────\n`;
     t += `📅 Date : ${date} à ${heure}\n`;
     t += `🚗 Véhicule : ${immat}${marqueModele ? ` (${marqueModele})` : ""}\n`;
@@ -50,6 +58,13 @@ export default function EntretienTicket({ prestation, onClose, stationNom = "Sta
         t += `  • ${p.designation} (x${p.quantite}) : ${F(p.total || p.prix_unitaire * p.quantite)} FCFA\n`;
       });
     }
+    if (aDiagnostic) {
+      t += `\n🔍 *RAPPORT D'ÉTAT DU VÉHICULE :*\n`;
+      t += `  • Points vérifiés : ${diagEntries.length}\n`;
+      t += `  • Conformes (OK) : ${nbDiagOK}\n`;
+      if (nbDiagSurv > 0) t += `  • À surveiller : ${nbDiagSurv}\n`;
+      if (nbDiagUrg > 0) t += `  • 🚨 URGENT : ${nbDiagUrg}\n`;
+    }
     t += `────────────────────────────\n`;
     if (reduction > 0) t += `🏷️ Réduction : -${F(reduction)} FCFA\n`;
     t += `💰 *TOTAL TTC : ${F(total)} FCFA*\n`;
@@ -59,7 +74,7 @@ export default function EntretienTicket({ prestation, onClose, stationNom = "Sta
       t += `────────────────────────────\n`;
       t += `💡 Prochaine vidange conseillée à : ${prochainKm.toLocaleString()} km\n`;
     }
-    t += `────────────────────────────\nMerci pour votre confiance ! Bonne route 🚗💨`;
+    t += `────────────────────────────\nMerci pour votre confiance ! Bonne route avec Star Oil 🚗💨`;
     return t;
   };
 
@@ -81,9 +96,9 @@ export default function EntretienTicket({ prestation, onClose, stationNom = "Sta
       .row { display: flex; justify-content: space-between; margin: 3px 0; }
       .bold { font-weight: bold; }
     </style></head><body>
-    <h2>DAMEL ENERGY</h2>
-    <p class="center small">SERVICES MÉCANIQUES &amp; BAIE RAPIDE</p>
-    <p class="center small">Station : ${stationNom} (Enseigne : Star Energy)</p>
+    <h2>STAR PREMIUM CAR CARE</h2>
+    <p class="center small">STATION STAR OIL HANN MARISTES (DAKAR)</p>
+    <p class="center small">RDV : 77 44 39 690 · 7j/7 06h30 - 22h00</p>
     <p class="center bold">ORDRE DE RÉPARATION : ${orNum}</p>
     <div class="sep"></div>
     <div class="row"><span>Date :</span><span>${date} ${heure}</span></div>
@@ -102,6 +117,14 @@ export default function EntretienTicket({ prestation, onClose, stationNom = "Sta
       <p class="bold">PIÈCES & LUBRIFIANTS :</p>
       ${produits.map(p => `<div class="row"><span style="max-width:200px">${p.designation} (x${p.quantite})</span><span>${F(p.total || p.prix_unitaire * p.quantite)} F</span></div>`).join("")}
     ` : ""}
+    ${aDiagnostic ? `
+      <div class="sep"></div>
+      <p class="bold">BILAN CHECK-UP STAR CARE :</p>
+      <div class="row"><span>Points vérifiés :</span><span>${diagEntries.length}</span></div>
+      <div class="row"><span>Conformes (OK) :</span><span>${nbDiagOK}</span></div>
+      ${nbDiagSurv > 0 ? `<div class="row"><span>À surveiller :</span><span>${nbDiagSurv}</span></div>` : ""}
+      ${nbDiagUrg > 0 ? `<div class="row"><span class="bold">🚨 URGENTS :</span><span class="bold">${nbDiagUrg}</span></div>` : ""}
+    ` : ""}
     <div class="sep"></div>
     <div class="row"><span>Total Services :</span><span>${F(montantServices)} F</span></div>
     ${montantProduits > 0 ? `<div class="row"><span>Total Pièces/Huiles :</span><span>${F(montantProduits)} F</span></div>` : ""}
@@ -115,7 +138,7 @@ export default function EntretienTicket({ prestation, onClose, stationNom = "Sta
       <p class="small center">Prochaine vidange conseillée : <strong>${prochainKm.toLocaleString()} km</strong></p>
     ` : ""}
     <div class="sep"></div>
-    <p class="center small">Merci pour votre confiance !<br/>Bonne route et à bientôt.</p>
+    <p class="center small">Merci pour votre confiance !<br/>Bonne route avec Star Oil 🚗💨</p>
     </body></html>`);
     win.document.close();
     win.focus();
@@ -127,13 +150,13 @@ export default function EntretienTicket({ prestation, onClose, stationNom = "Sta
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl flex flex-col max-h-[92vh]">
         {/* En-tête */}
-        <div className="bg-gradient-to-r from-amber-600 to-orange-500 px-6 py-4 text-white flex justify-between items-center">
+        <div className="bg-gradient-to-r from-fuelos-900 via-amber-950 to-fuelos-950 px-6 py-4 text-white flex justify-between items-center border-b border-amber-500/30">
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-2xl">🔧</span>
-              <h3 className="font-bold text-lg">Ordre de Réparation Validé</h3>
+              <span className="text-2xl">⭐</span>
+              <h3 className="font-bold text-lg">STAR PREMIUM CAR CARE</h3>
             </div>
-            <p className="text-amber-100 text-xs mt-0.5">{orNum} · {stationNom}</p>
+            <p className="text-amber-200 text-xs mt-0.5">OR N° {orNum} · Station Star Oil Hann Maristes</p>
           </div>
           <button
             onClick={onClose}
@@ -204,6 +227,34 @@ export default function EntretienTicket({ prestation, onClose, stationNom = "Sta
                 <div className="pt-2 flex justify-between text-xs font-bold text-gray-600">
                   <span>Sous-total Pièces / Huiles</span>
                   <span>{F(montantProduits)} F</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Bilan Diagnostic & Points de contrôle */}
+          {aDiagnostic && (
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 space-y-2">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <span>🔍</span> Rapport Contrôle Star Care ({diagEntries.length} Pts)
+                </h4>
+                <span className="text-[10px] bg-amber-100 text-amber-800 font-extrabold px-2 py-0.5 rounded-full">
+                  Check-up Atelier
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                <div className="p-2 rounded-xl bg-emerald-50 border border-emerald-200">
+                  <div className="font-black text-emerald-800 text-base">{nbDiagOK}</div>
+                  <div className="text-[10px] text-emerald-600 font-bold">Points OK ✓</div>
+                </div>
+                <div className="p-2 rounded-xl bg-amber-50 border border-amber-200">
+                  <div className="font-black text-amber-800 text-base">{nbDiagSurv}</div>
+                  <div className="text-[10px] text-amber-600 font-bold">À surveiller ⚠</div>
+                </div>
+                <div className="p-2 rounded-xl bg-red-50 border border-red-200">
+                  <div className="font-black text-red-800 text-base">{nbDiagUrg}</div>
+                  <div className="text-[10px] text-red-600 font-bold">Urgents 🚨</div>
                 </div>
               </div>
             </div>

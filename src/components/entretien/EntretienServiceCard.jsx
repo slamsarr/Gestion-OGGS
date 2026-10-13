@@ -1,11 +1,16 @@
 import React from "react";
 
 const CATEGORIE_COLORS = {
+  PACK: { bg: "bg-gradient-to-r from-amber-500 to-orange-500", text: "text-white font-extrabold shadow-sm", border: "border-amber-400" },
   VIDANGE: { bg: "bg-amber-100", text: "text-amber-800", border: "border-amber-300" },
   FREINAGE: { bg: "bg-red-100", text: "text-red-800", border: "border-red-300" },
   ELECTRICITE: { bg: "bg-yellow-100", text: "text-yellow-800", border: "border-yellow-300" },
   REFROIDISSEMENT: { bg: "bg-cyan-100", text: "text-cyan-800", border: "border-cyan-300" },
   CLIMATISATION: { bg: "bg-sky-100", text: "text-sky-800", border: "border-sky-300" },
+  PNEUMATIQUE: { bg: "bg-emerald-100", text: "text-emerald-800", border: "border-emerald-300" },
+  TRANSMISSION: { bg: "bg-orange-100", text: "text-orange-800", border: "border-orange-300" },
+  CONTROLE_TECHNIQUE: { bg: "bg-blue-100", text: "text-blue-800", border: "border-blue-300" },
+  ESTHETIQUE: { bg: "bg-teal-100", text: "text-teal-800", border: "border-teal-300" },
   MOTEUR: { bg: "bg-indigo-100", text: "text-indigo-800", border: "border-indigo-300" },
   DIAGNOSTIC: { bg: "bg-purple-100", text: "text-purple-800", border: "border-purple-300" },
   DIVERS: { bg: "bg-gray-100", text: "text-gray-800", border: "border-gray-300" },

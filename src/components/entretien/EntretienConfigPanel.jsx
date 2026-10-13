@@ -9,11 +9,16 @@ import {
 const F = (v) => Number(v || 0).toLocaleString("fr-FR");
 
 const CATEGORIES = [
+  "PACK",
   "VIDANGE",
+  "TRANSMISSION",
   "FREINAGE",
-  "ELECTRICITE",
-  "REFROIDISSEMENT",
   "CLIMATISATION",
+  "PNEUMATIQUE",
+  "ELECTRICITE",
+  "CONTROLE_TECHNIQUE",
+  "ESTHETIQUE",
+  "REFROIDISSEMENT",
   "MOTEUR",
   "DIAGNOSTIC",
   "DIVERS",
