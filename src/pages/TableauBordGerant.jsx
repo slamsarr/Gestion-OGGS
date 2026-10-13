@@ -422,166 +422,171 @@ export default function TableauBordGerant() {
   return (
     <div className="space-y-4 max-w-6xl mx-auto pb-12">
       {/* ── BANDEAU COCKPIT GÉRANT ── */}
-      <div className="bg-gradient-to-r from-[#102A43] via-[#0B4EA2] to-[#08336D] text-white rounded-2xl p-4 sm:p-5 shadow-lg border-2 border-amber-400">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-blue-900/80">
+      <div className="bg-gradient-to-br from-[#0B2545] via-[#103B6B] to-[#0D2D52] text-white rounded-2xl p-5 sm:p-6 shadow-xl border border-blue-800/60 space-y-5">
+        
+        {/* Ligne 1 : Marque & Titre & Contrôles Temps */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-white/10">
           <div>
-            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-              <div className="h-6 px-2 bg-white rounded-md flex items-center justify-center">
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
+              <div className="h-6 px-2.5 bg-white rounded-md flex items-center justify-center shadow-xs">
                 <img src="/branding/damel-energy/damel-energy-logo.svg" alt="DAMEL ENERGY" className="h-3.5 w-auto object-contain" />
               </div>
-              <span className="text-[10px] font-black px-2 py-0.5 rounded bg-blue-500 text-white uppercase tracking-wider">
-                DAMEL STATION MANAGEMENT
+              <span className="text-[10px] font-black px-2 py-0.5 rounded bg-blue-500/90 text-white uppercase tracking-wider">
+                DAMEL MANAGEMENT
               </span>
-              <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-black/40 text-amber-300 px-2 py-0.5 rounded-full border border-purple-400/40">
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-white/10 text-amber-300 px-2 py-0.5 rounded-full border border-white/10">
                 <img src="/star_energy_logo.jpg" alt="Star Energy" className="w-3 h-3 object-contain rounded-xs" />
                 <span>Réseau Star Energy</span>
               </span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-2xl">🏪</span>
-              <div>
-                <h1 className="text-lg sm:text-xl font-black tracking-tight text-white flex items-center gap-2">
-                  <span>Poste de Commande — {stationNom}</span>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-black bg-amber-400 text-slate-950 uppercase">
-                    Gérant Site
-                  </span>
-                </h1>
-                <p className="text-xs text-blue-200/90 font-medium">
-                  Supervision en direct des descentes, des bons carburant, du lavage et de la boutique
-                </p>
-              </div>
+
+            <div className="flex items-baseline gap-2.5 flex-wrap">
+              <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">
+                {stationNom}
+              </h1>
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-amber-400 text-slate-950 uppercase tracking-wide shadow-xs">
+                Poste Gérant
+              </span>
             </div>
+            <p className="text-xs text-blue-200/80 mt-1 font-medium">
+              Supervision en direct : descentes pompistes, créances, carburant et services
+            </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 bg-purple-950/80 px-3 py-1.5 rounded-xl border border-purple-800 text-xs">
-              <span className="text-gray-300 font-medium">Date :</span>
+          {/* Date & Actualisation & Action Clôture Prioritaire */}
+          <div className="flex items-center gap-2.5 flex-wrap self-start lg:self-center">
+            <div className="flex items-center gap-2 bg-black/25 px-3 py-2 rounded-xl border border-white/10 text-xs">
+              <span className="text-blue-200 font-semibold">Date :</span>
               <input
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="bg-transparent text-white font-bold border-none outline-none cursor-pointer"
+                className="bg-transparent text-white font-bold outline-none cursor-pointer"
               />
             </div>
+
             <button
               onClick={() => loadStationData()}
-              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-white transition-colors flex items-center gap-1"
+              className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-white transition-all flex items-center gap-1.5 border border-white/10 active:scale-95"
               title="Rafraîchir les données de la station"
             >
               <span>🔄</span>
               {lastRefresh && (
-                <span className="text-[10px] text-blue-200 hidden sm:inline">
+                <span className="text-[10px] text-blue-200 hidden sm:inline font-mono">
                   {lastRefresh.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
                 </span>
               )}
             </button>
+
+            <button
+              type="button"
+              onClick={() => navigate(`/validation-cloture?station=${encodeURIComponent(stationCode)}&date=${encodeURIComponent(date)}`)}
+              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 text-xs font-black uppercase tracking-wider transition-all shadow-lg active:scale-95 flex items-center gap-1.5"
+              title="Validation de clôture journalière après vérification de cohérence"
+            >
+              <span>📋</span>
+              <span>Clôture Officielle</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Ligne 2 : Liens d'accès rapide aux modules complémentaires */}
+        <div className="flex items-center justify-between gap-2 flex-wrap text-xs">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-blue-200/70">
+            Modules rapides :
+          </span>
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               type="button"
               onClick={() => navigate(`/clients-pro?tab=factures`)}
-              className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-colors shadow-md flex items-center gap-1.5"
-              title="Accéder à la facturation officielle OHADA"
+              className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-all border border-white/10 flex items-center gap-1.5"
             >
               <span>📄</span>
-              <span className="hidden sm:inline">Facturation OHADA</span>
-              <span className="sm:hidden">Factures</span>
+              <span>Facturation OHADA</span>
             </button>
             <button
               type="button"
               onClick={() => navigate("/comptes-clients-b2b")}
-              className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors shadow-md flex items-center gap-1.5"
-              title="Gérer les comptes clients B2B"
+              className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-all border border-white/10 flex items-center gap-1.5"
             >
               <span>🏢</span>
-              <span className="hidden sm:inline">Comptes B2B</span>
-              <span className="sm:hidden">B2B</span>
+              <span>Comptes B2B</span>
             </button>
             <button
               type="button"
               onClick={() => navigate("/depenses")}
-              className="px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-colors shadow-md flex items-center gap-1.5"
-              title="Gérer les dépenses réseau"
+              className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-all border border-white/10 flex items-center gap-1.5"
             >
               <span>💳</span>
-              <span className="hidden sm:inline">Dépenses</span>
-              <span className="sm:hidden">Dépenses</span>
+              <span>Dépenses</span>
             </button>
             <button
               type="button"
               onClick={() => navigate("/gestion-quarts")}
-              className="px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition-colors shadow-md flex items-center gap-1.5"
-              title="Gérer les quarts et affectations"
+              className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-all border border-white/10 flex items-center gap-1.5"
             >
               <span>⏰</span>
-              <span className="hidden sm:inline">Planning Quarts</span>
-              <span className="sm:hidden">Quarts</span>
+              <span>Planning Quarts</span>
             </button>
             <button
               type="button"
               onClick={() => setActiveTab("equipe")}
-              className={`px-3 py-2 rounded-xl text-white text-xs font-bold transition-colors shadow-md flex items-center gap-1.5 ${
-                activeTab === "equipe" ? "bg-purple-800 ring-2 ring-amber-400" : "bg-purple-700 hover:bg-purple-600"
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border flex items-center gap-1.5 ${
+                activeTab === "equipe"
+                  ? "bg-purple-600 text-white border-purple-400"
+                  : "bg-white/10 hover:bg-white/20 text-white border-white/10"
               }`}
-              title="Gérer l'équipe de la station et créer des comptes collaborateurs"
             >
               <span>👥</span>
-              <span className="hidden sm:inline">Mon Équipe &amp; Comptes ({equipe.length})</span>
-              <span className="sm:hidden">Équipe ({equipe.length})</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate(`/validation-cloture?station=${encodeURIComponent(stationCode)}&date=${encodeURIComponent(date)}`)}
-              className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black uppercase tracking-wide transition-colors shadow-md"
-              title="Validation de clôture journalière après vérification de cohérence"
-            >
-              📋 Clôture Officielle
+              <span>Équipe ({equipe.length})</span>
             </button>
           </div>
         </div>
 
         {/* ── KPIs OPÉRATIONNELS DU SITE (Style BASE_JOURS Excel) ── */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 pt-4">
-          <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
-            <div className="text-xs font-bold text-amber-300 uppercase">CA Total Jour</div>
-            <div className="text-lg font-black text-white tabular mt-1">{F(totalRecetteStation)} F</div>
-            <div className="text-xs text-gray-300">Tous services</div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-2.5 pt-2">
+          <div className="bg-white/[0.08] hover:bg-white/[0.12] transition-colors border border-white/10 p-3 rounded-xl backdrop-blur-xs">
+            <div className="text-[10px] font-bold text-amber-300 uppercase tracking-wider">CA Total Jour</div>
+            <div className="text-base sm:text-lg font-black text-white tabular mt-1">{F(totalRecetteStation)} F</div>
+            <div className="text-[11px] text-blue-200/70 font-medium">Tous services</div>
           </div>
 
-          <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
-            <div className="text-xs font-bold text-blue-300 uppercase">Volume GASOIL</div>
-            <div className="text-lg font-black text-white tabular mt-1">{F(volumesGasoil)} L</div>
-            <div className="text-xs text-blue-200 font-semibold">{F(caGasoil)} F</div>
+          <div className="bg-white/[0.08] hover:bg-white/[0.12] transition-colors border border-white/10 p-3 rounded-xl backdrop-blur-xs">
+            <div className="text-[10px] font-bold text-blue-300 uppercase tracking-wider">Volume GASOIL</div>
+            <div className="text-base sm:text-lg font-black text-white tabular mt-1">{F(volumesGasoil)} L</div>
+            <div className="text-[11px] text-blue-200 font-semibold">{F(caGasoil)} F</div>
           </div>
 
-          <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
-            <div className="text-xs font-bold text-emerald-300 uppercase">Volume SUPER</div>
-            <div className="text-lg font-black text-white tabular mt-1">{F(volumesSuper)} L</div>
-            <div className="text-xs text-emerald-200 font-semibold">{F(caSuper)} F</div>
+          <div className="bg-white/[0.08] hover:bg-white/[0.12] transition-colors border border-white/10 p-3 rounded-xl backdrop-blur-xs">
+            <div className="text-[10px] font-bold text-emerald-300 uppercase tracking-wider">Volume SUPER</div>
+            <div className="text-base sm:text-lg font-black text-white tabular mt-1">{F(volumesSuper)} L</div>
+            <div className="text-[11px] text-emerald-200 font-semibold">{F(caSuper)} F</div>
           </div>
 
-          <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
-            <div className="text-xs font-bold text-purple-300 uppercase">Marge Théorique</div>
-            <div className="text-lg font-black text-white tabular mt-1">{F(margeTheorique)} F</div>
-            <div className="text-xs text-gray-300">Carburant</div>
+          <div className="bg-white/[0.08] hover:bg-white/[0.12] transition-colors border border-white/10 p-3 rounded-xl backdrop-blur-xs">
+            <div className="text-[10px] font-bold text-purple-300 uppercase tracking-wider">Marge Théorique</div>
+            <div className="text-base sm:text-lg font-black text-white tabular mt-1">{F(margeTheorique)} F</div>
+            <div className="text-[11px] text-purple-200/70 font-medium">Carburant</div>
           </div>
 
-          <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
-            <div className="text-xs font-bold text-rose-300 uppercase">Créances Clients</div>
-            <div className="text-lg font-black text-white tabular mt-1">{F(totalResteBons)} F</div>
-            <div className="text-xs text-rose-200 font-bold">{bonsImpayes.length} bon(s)</div>
+          <div className="bg-white/[0.08] hover:bg-white/[0.12] transition-colors border border-white/10 p-3 rounded-xl backdrop-blur-xs">
+            <div className="text-[10px] font-bold text-rose-300 uppercase tracking-wider">Créances Clients</div>
+            <div className="text-base sm:text-lg font-black text-white tabular mt-1">{F(totalResteBons)} F</div>
+            <div className="text-[11px] text-rose-300 font-bold">{bonsImpayes.length} bon(s)</div>
           </div>
 
-          <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
-            <div className="text-xs font-bold text-amber-300 uppercase">Écart Caisse</div>
-            <div className={`text-lg font-black tabular mt-1 ${totalEcartDescentes >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+          <div className="bg-white/[0.08] hover:bg-white/[0.12] transition-colors border border-white/10 p-3 rounded-xl backdrop-blur-xs">
+            <div className="text-[10px] font-bold text-amber-300 uppercase tracking-wider">Écart Caisse</div>
+            <div className={`text-base sm:text-lg font-black tabular mt-1 ${totalEcartDescentes >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
               {totalEcartDescentes >= 0 ? "+" : ""}{F(totalEcartDescentes)} F
             </div>
-            <div className="text-xs text-gray-300">{descentes.length} descente(s)</div>
+            <div className="text-[11px] text-blue-200/70 font-medium">{descentes.length} descente(s)</div>
           </div>
 
-          <div className="bg-white/5 border border-white/10 p-3 rounded-xl">
-            <div className="text-xs font-bold text-orange-300 uppercase">Dépenses Jour</div>
-            <div className="text-lg font-black text-orange-200 tabular mt-1">{F(totalDepensesJour)} F</div>
-            <div className="text-xs text-orange-300/80">{depensesJour.length} opération(s)</div>
+          <div className="bg-white/[0.08] hover:bg-white/[0.12] transition-colors border border-white/10 p-3 rounded-xl backdrop-blur-xs col-span-2 sm:col-span-1">
+            <div className="text-[10px] font-bold text-orange-300 uppercase tracking-wider">Dépenses Jour</div>
+            <div className="text-base sm:text-lg font-black text-orange-200 tabular mt-1">{F(totalDepensesJour)} F</div>
+            <div className="text-[11px] text-orange-300/80 font-medium">{depensesJour.length} opération(s)</div>
           </div>
         </div>
       </div>
