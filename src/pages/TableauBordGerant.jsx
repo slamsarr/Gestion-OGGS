@@ -628,102 +628,101 @@ export default function TableauBordGerant() {
         </div>
       )}
 
-      {/* ── ONGLETS DU POSTE DE COMMANDE GÉRANT ── */}
-      <div className="flex flex-wrap gap-2 border-b pb-2" style={{ borderColor: T.line }}>
-        <button
-          onClick={() => setActiveTab("tableau_bord")}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs ${
-            activeTab === "tableau_bord"
-              ? "bg-[#431454] text-white shadow-md ring-2 ring-amber-400"
-              : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-200"
-          }`}
-        >
-          <span>📊 Tableau de Bord</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab("descentes")}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs ${
-            activeTab === "descentes"
-              ? "bg-[#431454] text-white shadow-md ring-2 ring-amber-400"
-              : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-200"
-          }`}
-        >
-          <span>⛽ Descentes Pompistes ({descentes.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab("bons")}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs ${
-            activeTab === "bons"
-              ? "bg-[#431454] text-white shadow-md ring-2 ring-amber-400"
-              : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-200"
-          }`}
-        >
-          <span>🎫 Tous les Bons de Carburant ({tousBons.length})</span>
-          {bonsImpayes.length > 0 && (
-            <span className="px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[10px] font-black">
-              {bonsImpayes.length}
-            </span>
-          )}
-        </button>
-
-        <button
-          onClick={() => setActiveTab("services")}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs ${
-            activeTab === "services"
-              ? "bg-[#431454] text-white shadow-md ring-2 ring-amber-400"
-              : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-200"
-          }`}
-        >
-          <span>🚿 Lavage & 🛒 Boutique ({lavages.length + ventesBoutique.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab("cuves")}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs ${
-            activeTab === "cuves"
-              ? "bg-[#431454] text-white shadow-md ring-2 ring-amber-400"
-              : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-200"
-          }`}
-        >
-          <span>🛢️ Cuves & Jauges ({jauges.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab("alertes")}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs ${
-            activeTab === "alertes"
-              ? "bg-[#431454] text-white shadow-md ring-2 ring-amber-400"
-              : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-200"
-          }`}
-        >
-          <span>⚠️ Alertes ({toutesAlertes.length})</span>
-          {toutesAlertes.length > 0 && (
-            <span className="px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[10px] font-black">
-              {toutesAlertes.length}
-            </span>
-          )}
-        </button>
-
-        <button
-          onClick={() => setActiveTab("equipe")}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs ${
-            activeTab === "equipe"
-              ? "bg-[#431454] text-white shadow-md ring-2 ring-amber-400"
-              : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-200"
-          }`}
-        >
-          <span>👥 Équipe ({equipe.length})</span>
-        </button>
-
-        <div className="ml-auto flex items-center gap-2">
+      {/* ── NAVIGATION PAR ONGLETS ÉPURÉE ── */}
+      <div className="bg-white rounded-2xl p-2 border border-slate-200/80 shadow-xs">
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar scroll-smooth">
           <button
-            onClick={() => navigate(`/rapport?station=${encodeURIComponent(stationCode)}&date=${encodeURIComponent(date)}`)}
-            className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors"
-            title="Clôture officielle après vérification de cohérence"
+            onClick={() => setActiveTab("tableau_bord")}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 shrink-0 ${
+              activeTab === "tableau_bord"
+                ? "bg-[#0B2545] text-white shadow-sm ring-1 ring-blue-900"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+            }`}
           >
-            <span>� Clôture Officielle</span>
+            <span>📊</span>
+            <span>Tableau de Bord</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("descentes")}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 shrink-0 ${
+              activeTab === "descentes"
+                ? "bg-[#0B2545] text-white shadow-sm ring-1 ring-blue-900"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+            }`}
+          >
+            <span>⛽</span>
+            <span>Descentes ({descentes.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("bons")}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 shrink-0 ${
+              activeTab === "bons"
+                ? "bg-[#0B2545] text-white shadow-sm ring-1 ring-blue-900"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+            }`}
+          >
+            <span>🎫</span>
+            <span>Bons Carburant ({tousBons.length})</span>
+            {bonsImpayes.length > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[10px] font-black">
+                {bonsImpayes.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab("services")}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 shrink-0 ${
+              activeTab === "services"
+                ? "bg-[#0B2545] text-white shadow-sm ring-1 ring-blue-900"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+            }`}
+          >
+            <span>🚿</span>
+            <span>Lavage & Boutique ({lavages.length + ventesBoutique.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("cuves")}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 shrink-0 ${
+              activeTab === "cuves"
+                ? "bg-[#0B2545] text-white shadow-sm ring-1 ring-blue-900"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+            }`}
+          >
+            <span>🛢️</span>
+            <span>Cuves & Jauges ({jauges.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("alertes")}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 shrink-0 ${
+              activeTab === "alertes"
+                ? "bg-[#0B2545] text-white shadow-sm ring-1 ring-blue-900"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+            }`}
+          >
+            <span>⚠️</span>
+            <span>Alertes ({toutesAlertes.length})</span>
+            {toutesAlertes.length > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[10px] font-black">
+                {toutesAlertes.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab("equipe")}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 shrink-0 ${
+              activeTab === "equipe"
+                ? "bg-[#0B2545] text-white shadow-sm ring-1 ring-blue-900"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+            }`}
+          >
+            <span>👥</span>
+            <span>Équipe ({equipe.length})</span>
           </button>
         </div>
       </div>
