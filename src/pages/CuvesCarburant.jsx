@@ -388,65 +388,80 @@ export default function CuvesCarburant() {
 
   return (
     <div className="max-w-6xl mx-auto py-4 px-3">
-      {/* En-tête de page */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b" style={{ borderColor: T.line }}>
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-2xl">🛢️</span>
-            <h1 className="text-xl font-bold" style={{ color: T.petrol }}>
-              Cuves, Dépotages & Stocks Carburant
-            </h1>
-            <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-blue-100 text-blue-900 border border-blue-200">
-              Rapprochement Pétrolier
-            </span>
+      {/* En-tête de page moderne & aéré */}
+      <div className="space-y-4 mb-5 pb-4 border-b" style={{ borderColor: T.line }}>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <span className="text-2xl">🛢️</span>
+              <h1 className="text-xl sm:text-2xl font-black tracking-tight" style={{ color: T.petrol }}>
+                Cuves & Dépotages Carburant
+              </h1>
+              <span className="text-[11px] px-2.5 py-0.5 rounded-full font-bold bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs">
+                Rapprochement Pétrolier
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-1 font-medium">
+              Jauges physiques quotidiennes, contrôle anti-débordement, PV de dépotage citerne et tolérances transport
+            </p>
           </div>
-          <p className="text-xs mt-0.5" style={{ color: T.muted }}>
-            Jauges physiques, contrôle anti-débordement, PV de dépotage citerne et tolérances de transport
-          </p>
         </div>
 
-        {/* Boutons d'onglets */}
-        <div className="flex flex-wrap gap-1.5">
-          <button
-            type="button"
-            onClick={() => setTab("jauge")}
-            className={`text-xs px-3 py-1.5 rounded-lg border font-semibold transition-all ${
-              tab === "jauge" ? "bg-amber-400 text-gray-900 shadow-sm" : "bg-white text-gray-700 hover:bg-gray-50"
-            }`}
-            style={{ borderColor: T.line }}
-          >
-            📏 Jauge Quotidienne
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab("depotage")}
-            className={`text-xs px-3 py-1.5 rounded-lg border font-semibold transition-all ${
-              tab === "depotage" ? "bg-amber-400 text-gray-900 shadow-sm" : "bg-white text-gray-700 hover:bg-gray-50"
-            }`}
-            style={{ borderColor: T.line }}
-          >
-            🚚 Nouveau Dépotage (PV)
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab("rapports")}
-            className={`text-xs px-3 py-1.5 rounded-lg border font-semibold transition-all ${
-              tab === "rapports" ? "bg-amber-400 text-gray-900 shadow-sm" : "bg-white text-gray-700 hover:bg-gray-50"
-            }`}
-            style={{ borderColor: T.line }}
-          >
-            📄 Rapports de Dépotage ({rapportsDepotage.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab("ecarts")}
-            className={`text-xs px-3 py-1.5 rounded-lg border font-semibold transition-all ${
-              tab === "ecarts" ? "bg-amber-400 text-gray-900 shadow-sm" : "bg-white text-gray-700 hover:bg-gray-50"
-            }`}
-            style={{ borderColor: T.line }}
-          >
-            📊 Historique Jauges ({jauges.length})
-          </button>
+        {/* Barre d'onglets de navigation épurée */}
+        <div className="bg-white rounded-2xl p-1.5 border border-slate-200/90 shadow-2xs">
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar scroll-smooth">
+            <button
+              type="button"
+              onClick={() => setTab("jauge")}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 shrink-0 ${
+                tab === "jauge"
+                  ? "bg-[#0B2545] text-white shadow-xs ring-1 ring-blue-950"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+              }`}
+            >
+              <span>📏</span>
+              <span>Jauge Quotidienne</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setTab("depotage")}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 shrink-0 ${
+                tab === "depotage"
+                  ? "bg-[#0B2545] text-white shadow-xs ring-1 ring-blue-950"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+              }`}
+            >
+              <span>🚚</span>
+              <span>Nouveau Dépotage (PV)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setTab("rapports")}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 shrink-0 ${
+                tab === "rapports"
+                  ? "bg-[#0B2545] text-white shadow-xs ring-1 ring-blue-950"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+              }`}
+            >
+              <span>📄</span>
+              <span>Rapports Dépotage ({rapportsDepotage.length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setTab("ecarts")}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 shrink-0 ${
+                tab === "ecarts"
+                  ? "bg-[#0B2545] text-white shadow-xs ring-1 ring-blue-950"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+              }`}
+            >
+              <span>📊</span>
+              <span>Historique Jauges ({jauges.length})</span>
+            </button>
+          </div>
         </div>
       </div>
 
