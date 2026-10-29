@@ -1,4 +1,4 @@
-name: Déploiement Star Energy Hostinger
+﻿name: Deploiement Star Energy Hostinger
 
 on:
   push:
@@ -12,7 +12,7 @@ jobs:
     env:
       FTP_SERVER: ${{ secrets.HOSTINGER_FTP_SERVER }}
     steps:
-      - name: Récupérer le code source
+      - name: Recuperer le code source
         uses: actions/checkout@v4
 
       - name: Configuration de Node.js
@@ -21,16 +21,32 @@ jobs:
           node-version: 20
           cache: 'npm'
 
-      - name: Installer les dépendances
+      - name: Installer les dependances
         run: npm ci
 
-      - name: Exécuter les tests unitaires et de cohérence
+      - name: Executer les tests unitaires et de coherence
         run: npm test
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_DEMO_MODE: "false"
 
       - name: Compiler l'application pour la production (Vite)
         run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_DEMO_MODE: "false"
 
-      - name: Déploiement FTP Hostinger (si secrets configurés)
+      - name: Verifier que Supabase est bien configure dans le build
+        run: |
+          if grep -qr "VOTRE-PROJET" dist/ 2>/dev/null; then
+            echo "ERREUR URL Supabase manquante dans le build"
+            exit 1
+          fi
+          echo "Build Supabase OK"
+
+      - name: Deploiement FTP Hostinger (si secrets configures)
         if: "${{ env.FTP_SERVER != '' }}"
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
