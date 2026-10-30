@@ -184,15 +184,16 @@ export default function BilanJournalierSite() {
       const enc = d.encaissements || {};
       const especes = n(enc.especes) || 0;
       const wave = n(enc.wave) || 0;
-      const om = n(enc.om) || 0;
-      const cb = n(enc.cb) || 0;
+      const om = n(enc.om ?? enc.orange_money) || 0;
+      const cb = n(enc.cb ?? enc.carte_bancaire ?? enc.tpe ?? enc.carte) || 0;
       const petrosen = n(enc.petrosen) || 0;
-      const codeElec = n(enc.code_electronique) || 0;
+      const codeElec = n(enc.code_electronique ?? enc.codeElec) || 0;
       const tickets = n(enc.tickets) || 0;
-      const credits = n(enc.credits) || 0;
-      const depensesPompiste = n(d.depenses_valeur ?? d.depenses_montant ?? d.depenses) || 0;
+      const credits = n(enc.credits ?? enc.credit_client ?? enc.bons ?? d.total_bons) || 0;
+      const autre = n(enc.autre) || 0;
+      const depensesPompiste = n(d.depenses_valeur ?? d.depenses_montant ?? d.depense ?? d.depenses) || 0;
       const totalVerse =
-        especes + wave + om + cb + petrosen + codeElec + tickets + credits + depensesPompiste;
+        especes + wave + om + cb + petrosen + codeElec + tickets + credits + autre + depensesPompiste;
       const ecart = totalVerse - totalTheorique;
 
       return {
@@ -215,6 +216,7 @@ export default function BilanJournalierSite() {
         codeElec,
         tickets,
         credits,
+        autre,
         totalVerse,
         ecart,
       };
@@ -239,6 +241,7 @@ export default function BilanJournalierSite() {
           codeElec: acc.codeElec + p.codeElec,
           tickets: acc.tickets + p.tickets,
           credits: acc.credits + p.credits,
+          autre: acc.autre + p.autre,
           totalVerse: acc.totalVerse + p.totalVerse,
           ecart: acc.ecart + p.ecart,
         }),
@@ -257,6 +260,7 @@ export default function BilanJournalierSite() {
           codeElec: 0,
           tickets: 0,
           credits: 0,
+          autre: 0,
           totalVerse: 0,
           ecart: 0,
         }
@@ -728,32 +732,41 @@ export default function BilanJournalierSite() {
 
               {/* Carte 2 : Ventilation détaillée des encaissements */}
               <div className="p-3.5 rounded-xl border bg-slate-50 space-y-2 text-xs" style={{ borderColor: T.line }}>
-                <div className="font-bold text-gray-900 uppercase text-[11px] tracking-wide pb-1 border-b">
-                  Cumul des Encaissements Pompistes par Mode
+                <div className="font-bold text-gray-900 uppercase text-[11px] tracking-wide pb-1 border-b flex items-center justify-between">
+                  <span>Cumul des Encaissements Pompistes par Mode</span>
+                  <span className="text-[10px] font-bold text-blue-900 bg-blue-100 px-2 py-0.5 rounded-full">
+                    {descentes.length} descente(s)
+                  </span>
                 </div>
-                <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
                   {[
-                    { label: "💵 Espèces Remises", val: totPompes.especes, color: "text-emerald-800 font-black" },
-                    { label: "📱 Wave", val: totPompes.wave, color: "text-blue-700" },
-                    { label: "📱 Orange Money", val: totPompes.om, color: "text-orange-700" },
-                    { label: "💳 Carte Bancaire (CB)", val: totPompes.cb, color: "text-indigo-700" },
-                    { label: "🛢️ Paiement Petrosen", val: totPompes.petrosen, color: "text-gray-700" },
-                    { label: "📟 Code Électronique", val: totPompes.codeElec, color: "text-purple-700" },
-                    { label: "🎫 Tickets Valeur", val: totPompes.tickets, color: "text-teal-700" },
-                    { label: "📋 Bons & Crédits Clients", val: totPompes.credits, color: "text-amber-800" },
-                    { label: "💸 Dépenses Pompistes Déduites", val: totPompes.depenses, color: "text-rose-700" },
+                    { label: "💵 Espèces Remises", val: totPompes.especes, color: "text-emerald-800 font-black", bg: "bg-emerald-50/50" },
+                    { label: "📱 Wave", val: totPompes.wave, color: "text-blue-700 font-bold", bg: "bg-blue-50/40" },
+                    { label: "📱 Orange Money", val: totPompes.om, color: "text-orange-700 font-bold", bg: "bg-orange-50/40" },
+                    { label: "💳 Carte TPE / Bancaire (CB)", val: totPompes.cb, color: "text-indigo-700 font-bold", bg: "bg-indigo-50/40" },
+                    { label: "📋 Bons & Crédits Clients", val: totPompes.credits, color: "text-amber-800 font-bold", bg: "bg-amber-50/40" },
+                    { label: "🎫 Tickets Valeur", val: totPompes.tickets, color: "text-teal-700 font-bold", bg: "bg-teal-50/40" },
+                    { label: "🛢️ Paiement Petrosen", val: totPompes.petrosen, color: "text-gray-700 font-bold", bg: "bg-gray-50/40" },
+                    { label: "📟 Code Électronique", val: totPompes.codeElec, color: "text-purple-700 font-bold", bg: "bg-purple-50/40" },
+                    { label: "🔄 Autre Paiement", val: totPompes.autre, color: "text-slate-700 font-bold", bg: "bg-slate-50/40" },
+                    { label: "💸 Dépenses Pompistes Déduites", val: totPompes.depenses, color: "text-rose-700 font-bold", bg: "bg-rose-50/40" },
                   ]
                     .filter((m) => m.val > 0)
                     .map((m) => (
-                      <div key={m.label} className="flex justify-between items-center">
-                        <span className="text-gray-600">{m.label} :</span>
+                      <div key={m.label} className={`flex justify-between items-center p-1 px-1.5 rounded ${m.bg || ""}`}>
+                        <span className="text-gray-700 font-medium">{m.label} :</span>
                         <span className={`font-mono tabular ${m.color}`}>{F(m.val)} F</span>
                       </div>
                     ))}
+                  {totPompes.totalVerse === 0 && (
+                    <div className="text-xs text-gray-400 italic py-2 text-center">
+                      Aucun encaissement pompiste enregistré
+                    </div>
+                  )}
                 </div>
                 <div className="border-t pt-1.5 flex justify-between items-center font-black text-sm text-gray-900">
                   <span>TOTAL JUSTIFIÉ / VERSÉ :</span>
-                  <span className="tabular text-blue-900">{F(totPompes.totalVerse)} F</span>
+                  <span className="tabular text-blue-900 font-mono text-base">{F(totPompes.totalVerse)} F</span>
                 </div>
               </div>
 
@@ -1102,7 +1115,7 @@ export default function BilanJournalierSite() {
                       {F(caBrutCarburant)} F
                     </td>
                     <td className="py-2 px-3 text-right font-mono tabular text-blue-400">
-                      {F(totPompes.wave + totPompes.om + totPompes.cb + totPompes.codeElec)} F
+                      {F(totPompes.wave + totPompes.om + totPompes.cb + totPompes.codeElec + totPompes.autre)} F
                     </td>
                     <td className="py-2 px-3 text-right font-mono tabular text-amber-400">
                       {F(totPompes.credits + totPompes.tickets + totPompes.petrosen)} F
@@ -1377,15 +1390,16 @@ export default function BilanJournalierSite() {
               <div className="font-bold text-gray-700 mb-2 uppercase text-[11px]">Détail Encaissements Pompistes par Mode</div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {[
-                  { label: "Espèces", val: totPompes.especes },
-                  { label: "Wave", val: totPompes.wave },
-                  { label: "Orange Money", val: totPompes.om },
-                  { label: "Carte Bancaire", val: totPompes.cb },
-                  { label: "Petrosen", val: totPompes.petrosen },
-                  { label: "Code Électronique", val: totPompes.codeElec },
-                  { label: "Tickets", val: totPompes.tickets },
-                  { label: "Crédit / Bon", val: totPompes.credits },
-                  { label: "Dépenses Pompiste", val: totPompes.depenses },
+                  { label: "💵 Espèces Remises", val: totPompes.especes },
+                  { label: "📱 Wave", val: totPompes.wave },
+                  { label: "📱 Orange Money", val: totPompes.om },
+                  { label: "💳 Carte TPE / Bancaire", val: totPompes.cb },
+                  { label: "📋 Bons & Crédits Clients", val: totPompes.credits },
+                  { label: "🎫 Tickets Valeur", val: totPompes.tickets },
+                  { label: "🛢️ Petrosen", val: totPompes.petrosen },
+                  { label: "📟 Code Électronique", val: totPompes.codeElec },
+                  { label: "🔄 Autre Paiement", val: totPompes.autre },
+                  { label: "💸 Dépenses Pompiste", val: totPompes.depenses },
                 ]
                   .filter((m) => m.val > 0)
                   .map((m) => (

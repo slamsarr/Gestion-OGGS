@@ -19,6 +19,7 @@ import { ROLE_LABELS, peutAgirProfil } from "../lib/permissions";
 import { Section, Row, Num, Loading } from "../components/ui";
 import { construireHistoire } from "../lib/histoireQuotidienne";
 import HistoireQuotidienne from "../components/HistoireQuotidienne";
+import { normalizeDescente } from "./DescentePompiste";
 
 export default function TableauBordGerant() {
   const { profil } = useAuth();
@@ -48,7 +49,8 @@ export default function TableauBordGerant() {
   const [afficherHistoire, setAfficherHistoire] = useState(true);
   const [histoire, setHistoire] = useState(null);
 
-  // Filtre Bons
+  // Filtres
+  const [pompisteFiltre, setPompisteFiltre] = useState("TOUS"); // TOUS | id_pompiste
   const [filtreBon, setFiltreBon] = useState("TOUS"); // TOUS | IMPAYES | REGLES
   const [searchBon, setSearchBon] = useState("");
   const [depensesJour, setDepensesJour] = useState([]);
@@ -93,7 +95,8 @@ export default function TableauBordGerant() {
         listDepenses(stationId, date).catch(() => []),
       ]);
       setRef(r);
-      setDescentes(dList || []);
+      const dListNorm = (dList || []).map(normalizeDescente).filter(Boolean);
+      setDescentes(dListNorm);
       setTousBons(bList || []);
       setLavages(lList || []);
       setVentesBoutique(vList || []);
@@ -220,6 +223,168 @@ export default function TableauBordGerant() {
     // on retourne null si pas de référence
     return null; // sera calculé via des données séparées si nécessaire
   }, []);
+
+  // ── SUPERVISION DESCENTES POMPISTES : FILTRE & ÉTAT RÉEL DE LA JOURNÉE ──
+  const listePompistes = useMemo(() => {
+    const map = new Map();
+    // 1. Depuis le référentiel pompistes
+    (ref?.pompistes || []).forEach((p) => {
+      const key = p.code || p.id;
+      if (key) {
+        map.set(key, {
+          id: p.id || p.code,
+          code: p.code || p.id,
+          nom: p.nom || p.nom_complet || p.code,
+        });
+      }
+    });
+    // 2. Depuis les collaborateurs de l'équipe (rôle pompiste)
+    (equipe || [])
+      .filter((e) => (e.role || "").toLowerCase() === "pompiste")
+      .forEach((e) => {
+        const key = e.id || e.code;
+        if (key && !map.has(key)) {
+          map.set(key, {
+            id: e.id,
+            code: e.code || e.id,
+            nom: e.nom_complet || e.nom || e.identifiant || "Pompiste",
+          });
+        }
+      });
+    // 3. Depuis les descentes chargées pour le jour
+    (descentes || []).forEach((d) => {
+      const key = d.pompiste_id || d.pompiste_nom;
+      if (key && !map.has(key)) {
+        map.set(key, {
+          id: d.pompiste_id || key,
+          code: d.pompiste_id || key,
+          nom: d.pompiste_nom || "Pompiste",
+        });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.nom.localeCompare(b.nom));
+  }, [ref, equipe, descentes]);
+
+  const descentesFiltrees = useMemo(() => {
+    if (pompisteFiltre === "TOUS") return descentes;
+    return descentes.filter(
+      (d) =>
+        d.pompiste_id === pompisteFiltre ||
+        d.pompiste_nom === pompisteFiltre ||
+        d.pompiste === pompisteFiltre
+    );
+  }, [descentes, pompisteFiltre]);
+
+  const pompisteSelectionne = useMemo(() => {
+    if (pompisteFiltre === "TOUS") return null;
+    return (
+      listePompistes.find(
+        (p) => p.id === pompisteFiltre || p.nom === pompisteFiltre || p.code === pompisteFiltre
+      ) || { nom: pompisteFiltre, id: pompisteFiltre, code: pompisteFiltre }
+    );
+  }, [listePompistes, pompisteFiltre]);
+
+  const etatReelPompiste = useMemo(() => {
+    if (pompisteFiltre === "TOUS" || descentesFiltrees.length === 0) return null;
+    let totalVolume = 0;
+    let totalCarburant = 0;
+    let totalLubrifiants = 0;
+    let totalRemiseCuve = 0;
+    let totalRemiseCuveLitres = 0;
+    let totalDepenses = 0;
+    let totalTheorique = 0;
+    let especes = 0;
+    let wave = 0;
+    let om = 0;
+    let cb = 0;
+    let petrosen = 0;
+    let codeElec = 0;
+    let tickets = 0;
+    let credits = 0;
+    let autre = 0;
+    let totalVerse = 0;
+    let ecart = 0;
+    const tousPompes = [];
+    const tousBons = [];
+    const tousLubs = [];
+    const motifsDepenses = [];
+    const motifsRemise = [];
+
+    for (const d of descentesFiltrees) {
+      const vol = n(d.total_volume || d.volume_vendu || 0);
+      const carb = n(d.total_carburant || d.montant_theorique || 0);
+      const lub = n(d.total_lubrifiants || 0);
+      const rem = n(d.remise_cuve_valeur || d.remise_en_cuve || 0);
+      const remLit = n(d.remise_cuve_litres || 0);
+      const dep = n(d.depenses_valeur ?? d.depenses_montant ?? d.depense ?? d.depenses ?? 0);
+      const theo = n(d.net_theorique ?? (carb + lub - rem));
+
+      totalVolume += vol;
+      totalCarburant += carb;
+      totalLubrifiants += lub;
+      totalRemiseCuve += rem;
+      totalRemiseCuveLitres += remLit;
+      totalDepenses += dep;
+      totalTheorique += theo;
+
+      const enc = d.encaissements || {};
+      const espD = n(enc.especes ?? d.especes ?? 0);
+      const wavD = n(enc.wave ?? 0);
+      const omD = n(enc.om ?? enc.orange_money ?? d.mobile_money ?? 0);
+      const cbD = n(enc.cb ?? enc.carte_bancaire ?? enc.tpe ?? d.carte_bancaire ?? 0);
+      const petD = n(enc.petrosen ?? 0);
+      const codD = n(enc.code_electronique ?? 0);
+      const ticD = n(enc.tickets ?? 0);
+      const creD = n(enc.credits ?? enc.credit_client ?? enc.bons ?? d.total_bons ?? 0);
+      const autD = n(enc.autre ?? 0);
+      const verD = n(d.total_encaisse ?? (espD + wavD + omD + cbD + petD + codD + ticD + creD + autD + dep));
+
+      especes += espD;
+      wave += wavD;
+      om += omD;
+      cb += cbD;
+      petrosen += petD;
+      codeElec += codD;
+      tickets += ticD;
+      credits += creD;
+      autre += autD;
+      totalVerse += verD;
+      ecart += (verD - theo);
+
+      (d.pompes || []).forEach((p) => tousPompes.push(p));
+      (d.bons || []).forEach((b) => tousBons.push(b));
+      (d.lubrifiants || []).forEach((l) => tousLubs.push(l));
+      if (d.depenses_motif) motifsDepenses.push(d.depenses_motif);
+      if (d.remise_cuve_motif) motifsRemise.push(d.remise_cuve_motif);
+    }
+
+    return {
+      nbQuarts: descentesFiltrees.length,
+      totalVolume,
+      totalCarburant,
+      totalLubrifiants,
+      totalRemiseCuve,
+      totalRemiseCuveLitres,
+      motifsRemise: motifsRemise.filter(Boolean).join(" · "),
+      totalDepenses,
+      motifsDepenses: motifsDepenses.filter(Boolean).join(" · "),
+      totalTheorique,
+      especes,
+      wave,
+      om,
+      cb,
+      petrosen,
+      codeElec,
+      tickets,
+      credits,
+      autre,
+      totalVerse,
+      ecart,
+      pompes: tousPompes,
+      bons: tousBons,
+      lubrifiants: tousLubs,
+    };
+  }, [descentesFiltrees, pompisteFiltre]);
 
 
 
@@ -891,159 +1056,756 @@ export default function TableauBordGerant() {
         </div>
       )}
 
-      {/* ── TAB 1 : DESCENTES POMPISTES (VISUALISATION SEULE) ── */}
+      {/* ── TAB 1 : DESCENTES POMPISTES & ÉTAT RÉEL DU POMPISTE ── */}
       {activeTab === "descentes" && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide">
-              Supervision des Descentes Pompistes du {fmtDate(date)}
-            </h2>
-            <div className="text-xs text-gray-500">
-              Lecture seule · Validation disponible pour les descentes soumises
+        <div className="space-y-4">
+          {/* En-tête supervision & Sélecteur rapide */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1 border-b" style={{ borderColor: T.line }}>
+            <div>
+              <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide flex items-center gap-2">
+                <span>⛽ Supervision des Descentes &amp; État Réel des Pompistes</span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-black bg-blue-100 text-blue-900">
+                  {fmtDate(date)}
+                </span>
+              </h2>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Sélectionnez un pompiste pour consulter l'état réel et complet de sa journée (index, pompes, encaissements et écart).
+              </p>
+            </div>
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              <span className="text-xs text-gray-500 font-semibold">Pompiste :</span>
+              <select
+                value={pompisteFiltre}
+                onChange={(e) => setPompisteFiltre(e.target.value)}
+                className="border rounded-xl px-3 py-1.5 text-xs font-bold bg-white text-gray-900 border-gray-300 focus:ring-2 focus:ring-blue-500 shadow-2xs"
+              >
+                <option value="TOUS">-- Tous les Pompistes ({descentes.length}) --</option>
+                {listePompistes.map((p) => {
+                  const count = descentes.filter(
+                    (d) =>
+                      d.pompiste_id === p.id ||
+                      d.pompiste_nom === p.nom ||
+                      d.pompiste === p.code ||
+                      d.pompiste_id === p.code
+                  ).length;
+                  return (
+                    <option key={p.id || p.code} value={p.id || p.nom}>
+                      {p.nom} {count > 0 ? `(${count} descente${count > 1 ? "s" : ""})` : "(0 descente)"}
+                    </option>
+                  );
+                })}
+              </select>
             </div>
           </div>
 
-          {descentes.length === 0 ? (
-            <div className="bg-white p-8 rounded-2xl border text-center text-gray-500 text-xs shadow-sm">
-              <p className="font-bold text-gray-700 text-sm">Aucune descente pompiste enregistrée pour le {fmtDate(date)}.</p>
-              <p className="text-gray-400 mt-1">Dès qu'un pompiste démarre ou soumet son quart, il apparaîtra ici avec ses index et modes d'encaissement.</p>
+          {/* SÉLECTEUR VISUEL RAPIDE DE POMPISTES (BOUTONS / BADGES HORIZONTAUX) */}
+          <div className="bg-white p-3 rounded-2xl border shadow-xs space-y-2" style={{ borderColor: T.line }}>
+            <div className="text-[11px] font-bold text-gray-600 uppercase tracking-wider">
+              Pompistes en service à la station :
             </div>
-          ) : (
-            <div className="bg-white rounded-2xl border shadow-sm divide-y" style={{ borderColor: T.line }}>
-              {descentes.map((d) => {
-                const isTerminee = d.statut === "TERMINEE";
-                const isValidee = d.statut === "VALIDEE";
-                const ecartVal = n(d.ecart);
-                const peutValider = peutAgirProfil(profil, "rapport", "valider") && isTerminee && !isValidee;
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+              <button
+                type="button"
+                onClick={() => setPompisteFiltre("TOUS")}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
+                  pompisteFiltre === "TOUS"
+                    ? "bg-[#0B2545] text-white shadow-sm ring-1 ring-blue-900"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                }`}
+              >
+                <span>👥</span>
+                <span>Tous les Pompistes ({descentes.length})</span>
+              </button>
+
+              {listePompistes.map((p) => {
+                const countDescentes = descentes.filter(
+                  (d) =>
+                    d.pompiste_id === p.id ||
+                    d.pompiste_nom === p.nom ||
+                    d.pompiste === p.code ||
+                    d.pompiste_id === p.code
+                ).length;
+                const isSelected =
+                  pompisteFiltre === p.id || pompisteFiltre === p.nom || pompisteFiltre === p.code;
+
                 return (
-                  <div key={d.id} className="p-4 hover:bg-gray-50/70 transition-colors">
-                    {/* En-tête pompiste */}
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-700">
-                          {d.numero || d.id?.slice(0, 8)}
-                        </span>
-                        <span className="font-black text-sm text-gray-900">{d.pompiste_nom || "Pompiste"}</span>
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            isValidee ? "bg-blue-100 text-blue-800" :
-                            isTerminee ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900"
-                          }`}
-                        >
-                          {isValidee ? "✓ Validée" : isTerminee ? "✓ Soumise" : "🟡 En cours"}
-                        </span>
-                        {d.quart && (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800">
-                            {d.quart}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {peutValider && (
+                  <button
+                    key={p.id || p.code}
+                    type="button"
+                    onClick={() => setPompisteFiltre(isSelected ? "TOUS" : (p.id || p.nom))}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 border ${
+                      isSelected
+                        ? "bg-amber-400 text-slate-950 border-amber-500 shadow-sm font-black ring-1 ring-amber-500"
+                        : countDescentes > 0
+                        ? "bg-emerald-50 text-emerald-950 border-emerald-300 hover:bg-emerald-100"
+                        : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50 opacity-70"
+                    }`}
+                  >
+                    <span>{countDescentes > 0 ? "⛽" : "👤"}</span>
+                    <span>{p.nom}</span>
+                    {countDescentes > 0 && (
+                      <span
+                        className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                          isSelected ? "bg-slate-900 text-white" : "bg-emerald-600 text-white"
+                        }`}
+                      >
+                        {countDescentes} quart{countDescentes > 1 ? "s" : ""}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ══════════════════════════════════════════════════════════════════════════════ */}
+          {/* CAS 1 : UN POMPISTE PARTICULIER EST SÉLECTIONNÉ */}
+          {/* ══════════════════════════════════════════════════════════════════════════════ */}
+          {pompisteFiltre !== "TOUS" && (
+            <div>
+              {/* SOUS-CAS 1.A : Le pompiste n'a AUCUNE descente pour cette date */}
+              {descentesFiltrees.length === 0 ? (
+                <div className="bg-white p-8 rounded-2xl border text-center shadow-xs space-y-3" style={{ borderColor: T.line }}>
+                  <div className="text-3xl">⚠️</div>
+                  <h3 className="font-black text-sm text-gray-900">
+                    Aucune descente enregistrée pour {pompisteSelectionne?.nom || pompisteFiltre} le {fmtDate(date)}
+                  </h3>
+                  <p className="text-xs text-gray-500 max-w-md mx-auto">
+                    Ce collaborateur n'a pas encore de quart ou de descente clôturée pour cette date. Vous pouvez basculer vers un autre pompiste ou ouvrir le formulaire de descente.
+                  </p>
+                  <div className="pt-2 flex flex-wrap justify-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPompisteFiltre("TOUS")}
+                      className="px-3.5 py-2 rounded-xl border text-xs font-bold text-gray-700 hover:bg-gray-100 transition-colors"
+                      style={{ borderColor: T.line }}
+                    >
+                      ← Voir tous les pompistes
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => navigate("/descente")}
+                      className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5"
+                    >
+                      <span>➕</span>
+                      <span>Saisir une Descente Pompiste</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* SOUS-CAS 1.B : ÉTAT RÉEL ET CONSOLIDÉ DE LA JOURNÉE DU POMPISTE */
+                etatReelPompiste && (
+                  <div className="space-y-4">
+                    {/* CARTE MAÎTRESSE : ÉTAT RÉEL DU POMPISTE */}
+                    <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-blue-950 text-white rounded-2xl p-5 shadow-xl border border-slate-800 space-y-4">
+                      {/* En-tête Pompiste */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-800 gap-3">
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs uppercase font-extrabold text-amber-400 tracking-wider">
+                              Fiche d'Évaluation Quotidienne · {fmtDate(date)}
+                            </span>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-500/20 text-blue-300 border border-blue-400/30">
+                              {etatReelPompiste.nbQuarts} quart{etatReelPompiste.nbQuarts > 1 ? "s" : ""} enregistré{etatReelPompiste.nbQuarts > 1 ? "s" : ""}
+                            </span>
+                          </div>
+                          <h3 className="text-xl font-black text-white mt-0.5 flex items-center gap-2">
+                            <span>👤</span>
+                            <span>{pompisteSelectionne?.nom || pompisteFiltre}</span>
+                          </h3>
+                        </div>
+
+                        <div className="flex items-center gap-2">
                           <button
-                            disabled={validatingId === d.id}
-                            onClick={async () => {
-                              setValidatingId(d.id);
-                              try {
-                                await updateDescente(d.id, { statut: "VALIDEE", valide_par: profil?.id, valide_le: new Date().toISOString() });
-                                flash(`Descente de ${d.pompiste_nom} validée ✓`);
-                                await loadStationData();
-                              } catch (e) {
-                                flash("Erreur lors de la validation", "error");
-                              } finally {
-                                setValidatingId(null);
-                              }
-                            }}
-                            className="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-bold disabled:opacity-50 transition-colors"
+                            type="button"
+                            onClick={() => setPompisteFiltre("TOUS")}
+                            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-gray-300 hover:text-white text-xs font-bold transition-colors"
                           >
-                            {validatingId === d.id ? "..." : "✓ Valider"}
+                            ✕ Fermer filtre
                           </button>
-                        )}
-                        <div className="text-right">
-                          <div className="text-[10px] text-gray-400 font-bold uppercase">Écart Caisse</div>
-                          <div className={`font-black text-sm tabular ${ecartVal >= 0 ? "text-emerald-700" : "text-rose-600"}`}>
-                            {ecartVal >= 0 ? "+" : ""}{F(ecartVal)} FCFA
+                        </div>
+                      </div>
+
+                      {/* 4 GRANDS KPIS DE SA JOURNÉE */}
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+                        <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+                          <div className="text-[10px] uppercase font-bold text-blue-300">Volume Total Carburant</div>
+                          <div className="text-xl font-black font-mono text-white tabular mt-1">
+                            {F(etatReelPompiste.totalVolume)} L
+                          </div>
+                          <div className="text-[11px] text-gray-400">Total distribué aux pompes</div>
+                        </div>
+
+                        <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+                          <div className="text-[10px] uppercase font-bold text-amber-300">CA Carburant Brut</div>
+                          <div className="text-xl font-black font-mono text-amber-300 tabular mt-1">
+                            {F(etatReelPompiste.totalCarburant)} F
+                          </div>
+                          <div className="text-[11px] text-gray-400">
+                            {etatReelPompiste.totalLubrifiants > 0 ? `+ ${F(etatReelPompiste.totalLubrifiants)} F (Lubrifiants)` : "Sans lubrifiants"}
+                          </div>
+                        </div>
+
+                        <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+                          <div className="text-[10px] uppercase font-bold text-cyan-300">Total Théorique Net</div>
+                          <div className="text-xl font-black font-mono text-cyan-200 tabular mt-1">
+                            {F(etatReelPompiste.totalTheorique)} F
+                          </div>
+                          <div className="text-[11px] text-gray-400">Net exigible à justifier</div>
+                        </div>
+
+                        <div className={`border rounded-xl p-3 ${
+                          etatReelPompiste.ecart === 0
+                            ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-300"
+                            : etatReelPompiste.ecart > 0
+                            ? "bg-blue-500/20 border-blue-500/40 text-blue-300"
+                            : "bg-rose-500/20 border-rose-500/40 text-rose-300"
+                        }`}>
+                          <div className="text-[10px] uppercase font-black tracking-wider">
+                            {etatReelPompiste.ecart === 0
+                              ? "Caisse Équilibrée"
+                              : etatReelPompiste.ecart > 0
+                              ? "Excédent de Caisse (+)"
+                              : "Déficit / Manquant (-)"}
+                          </div>
+                          <div className="text-xl font-black font-mono tabular mt-1">
+                            {etatReelPompiste.ecart >= 0 ? "+" : ""}{F(etatReelPompiste.ecart)} F CFA
+                          </div>
+                          <div className="text-[11px] opacity-80">
+                            Versé: {F(etatReelPompiste.totalVerse)} F
                           </div>
                         </div>
                       </div>
-                    </div>
 
-                    {/* Détails index */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-gray-50 p-3 rounded-lg mb-3">
-                      <div>
-                        <div className="text-[10px] text-gray-500 font-bold uppercase">Index Départ</div>
-                        <div className="font-mono text-sm font-bold text-gray-800">{d.index_depart || "—"}</div>
-                      </div>
-                      <div>
-                        <div className="text-[10px] text-gray-500 font-bold uppercase">Index Fin</div>
-                        <div className="font-mono text-sm font-bold text-gray-800">{d.index_fin || "—"}</div>
-                      </div>
-                      <div>
-                        <div className="text-[10px] text-gray-500 font-bold uppercase">Volume</div>
-                        <div className="font-mono text-sm font-bold text-gray-800">{F(d.total_volume || d.volume_vendu || 0)} L</div>
-                      </div>
-                      <div>
-                        <div className="text-[10px] text-gray-500 font-bold uppercase">Valeur</div>
-                        <div className="font-mono text-sm font-bold text-gray-800">{F(d.total_carburant || d.montant_theorique || 0)} F</div>
-                      </div>
-                    </div>
-
-                    {/* Modes d'encaissement */}
-                    <div className="mb-3">
-                      <div className="text-[10px] text-gray-500 font-bold uppercase mb-2">Modes d'Encaissement</div>
-                      <div className="flex flex-wrap gap-2">
-                        <span className="px-2 py-1 rounded bg-emerald-100 text-emerald-800 text-xs font-medium">
-                          Espèces : {F(d.especes || 0)} F
-                        </span>
-                        {Array.isArray(d.bons) && d.bons.length > 0 && (
-                          <span className="px-2 py-1 rounded bg-rose-100 text-rose-800 text-xs font-medium">
-                            Bons : {d.bons.length} bon(s) ({F(d.total_bons || 0)} F)
-                          </span>
-                        )}
-                        {d.mobile_money && (
-                          <span className="px-2 py-1 rounded bg-blue-100 text-blue-800 text-xs font-medium">
-                            Mobile Money : {F(d.mobile_money)} F
-                          </span>
-                        )}
-                        {d.carte_bancaire && (
-                          <span className="px-2 py-1 rounded bg-purple-100 text-purple-800 text-xs font-medium">
-                            Carte Bancaire : {F(d.carte_bancaire)} F
-                          </span>
-                        )}
-                        <span className="px-2 py-1 rounded bg-gray-100 text-gray-800 text-xs font-medium">
-                          Total Caisse : {F(d.total_caisse || d.montant_theorique || 0)} F
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Lubrifiants */}
-                    {n(d.total_lubrifiants) > 0 && (
-                      <div className="mb-3">
-                        <div className="text-[10px] text-gray-500 font-bold uppercase mb-2">Lubrifiants</div>
-                        <div className="bg-amber-50 p-2 rounded-lg">
-                          <span className="text-sm font-medium text-amber-900">
-                            {F(d.total_lubrifiants)} F
-                          </span>
+                      {/* SECTION A : TABLEAU DES POMPES & INDEX DE SA JOURNÉE */}
+                      <div className="space-y-2 pt-1">
+                        <div className="text-xs font-bold text-gray-300 uppercase tracking-wide flex items-center gap-1.5">
+                          <span>⛽ Index &amp; Pistolets Tournés par le Pompiste</span>
+                        </div>
+                        <div className="overflow-x-auto border border-slate-800 rounded-xl bg-slate-950/70">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="border-b border-slate-800 text-gray-400 uppercase text-[10px] font-bold">
+                                <th className="py-2.5 px-3 text-left">Pistolet / Caisse</th>
+                                <th className="py-2.5 px-3 text-left">Produit</th>
+                                <th className="py-2.5 px-3 text-right">Index Départ</th>
+                                <th className="py-2.5 px-3 text-right">Index Fin</th>
+                                <th className="py-2.5 px-3 text-right">Volume (L)</th>
+                                <th className="py-2.5 px-3 text-right">Prix Unitaire</th>
+                                <th className="py-2.5 px-3 text-right text-amber-400">Montant CA</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-800/60 font-mono">
+                              {etatReelPompiste.pompes.length === 0 ? (
+                                <tr>
+                                  <td colSpan={7} className="py-3 px-3 text-center text-gray-500 font-sans italic">
+                                    Aucune pompe détaillée trouvée pour cette session.
+                                  </td>
+                                </tr>
+                              ) : (
+                                etatReelPompiste.pompes.map((p, idx) => {
+                                  const vol = n(p.volume_vendu ?? (n(p.index_fin) >= n(p.index_debut) ? n(p.index_fin) - n(p.index_debut) : 0));
+                                  const mt = n(p.montant ?? vol * n(p.prix_unitaire));
+                                  return (
+                                    <tr key={p.id || idx} className="hover:bg-slate-800/40">
+                                      <td className="py-2 px-3 font-sans font-bold text-gray-200">
+                                        {p.caisseId ? `${p.caisseId} · ` : ""}{p.pistolet_code || p.id || `P-${idx + 1}`}
+                                      </td>
+                                      <td className="py-2 px-3 font-sans">
+                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                          (p.produit || "").includes("GASOIL")
+                                            ? "bg-blue-900/60 text-blue-300 border border-blue-700/50"
+                                            : "bg-emerald-900/60 text-emerald-300 border border-emerald-700/50"
+                                        }`}>
+                                          {p.produit || "GASOIL"}
+                                        </span>
+                                      </td>
+                                      <td className="py-2 px-3 text-right tabular text-gray-300">{F(n(p.index_debut))}</td>
+                                      <td className="py-2 px-3 text-right tabular text-gray-200 font-bold">{F(n(p.index_fin))}</td>
+                                      <td className="py-2 px-3 text-right tabular text-blue-300 font-bold">{F(vol)} L</td>
+                                      <td className="py-2 px-3 text-right tabular text-gray-400">{F(n(p.prix_unitaire))} F</td>
+                                      <td className="py-2 px-3 text-right tabular text-amber-300 font-bold">{F(mt)} F</td>
+                                    </tr>
+                                  );
+                                })
+                              )}
+                            </tbody>
+                            <tfoot className="border-t border-slate-700 bg-slate-900/90 font-bold">
+                              <tr>
+                                <td colSpan={4} className="py-2.5 px-3 uppercase text-gray-300 font-sans">
+                                  TOTAL POMPES
+                                </td>
+                                <td className="py-2.5 px-3 text-right font-mono tabular text-blue-300 font-black">
+                                  {F(etatReelPompiste.totalVolume)} L
+                                </td>
+                                <td></td>
+                                <td className="py-2.5 px-3 text-right font-mono tabular text-amber-300 font-black">
+                                  {F(etatReelPompiste.totalCarburant)} F CFA
+                                </td>
+                              </tr>
+                            </tfoot>
+                          </table>
                         </div>
                       </div>
-                    )}
 
-                    {/* Versements */}
-                    {Array.isArray(d.versements) && d.versements.length > 0 && (
-                      <div>
-                        <div className="text-[10px] text-gray-500 font-bold uppercase mb-2">Versements</div>
-                        <div className="flex flex-wrap gap-2">
-                          {d.versements.map((v, i) => (
-                            <span key={i} className="px-2 py-1 rounded bg-emerald-50 text-emerald-800 text-xs font-medium">
-                              Versement {i + 1} : {F(v)} F
-                            </span>
-                          ))}
+                      {/* SECTION B : DÉTAIL DES ENCAISSEMENTS PAR MODE */}
+                      <div className="space-y-2 pt-2">
+                        <div className="text-xs font-bold text-gray-300 uppercase tracking-wide flex items-center justify-between">
+                          <span>💳 Ventilation Exhaustive de ses Encaissements Réels Reçus</span>
+                          <span className="text-amber-400 font-mono text-sm">
+                            Total Versé : {F(etatReelPompiste.totalVerse)} F CFA
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 text-xs">
+                          <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800">
+                            <div className="text-[10px] text-gray-400 uppercase font-semibold">💵 Espèces Remises</div>
+                            <div className="text-base font-black font-mono text-emerald-400 tabular mt-1">
+                              {F(etatReelPompiste.especes)} F
+                            </div>
+                          </div>
+
+                          <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800">
+                            <div className="text-[10px] text-gray-400 uppercase font-semibold">📱 Wave</div>
+                            <div className="text-base font-black font-mono text-blue-400 tabular mt-1">
+                              {F(etatReelPompiste.wave)} F
+                            </div>
+                          </div>
+
+                          <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800">
+                            <div className="text-[10px] text-gray-400 uppercase font-semibold">📱 Orange Money</div>
+                            <div className="text-base font-black font-mono text-orange-400 tabular mt-1">
+                              {F(etatReelPompiste.om)} F
+                            </div>
+                          </div>
+
+                          <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800">
+                            <div className="text-[10px] text-gray-400 uppercase font-semibold">💳 Carte TPE / Bancaire</div>
+                            <div className="text-base font-black font-mono text-indigo-400 tabular mt-1">
+                              {F(etatReelPompiste.cb)} F
+                            </div>
+                          </div>
+
+                          <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800">
+                            <div className="text-[10px] text-gray-400 uppercase font-semibold">📋 Bons &amp; Crédits</div>
+                            <div className="text-base font-black font-mono text-amber-400 tabular mt-1">
+                              {F(etatReelPompiste.credits)} F
+                            </div>
+                          </div>
+
+                          <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800">
+                            <div className="text-[10px] text-gray-400 uppercase font-semibold">🎫 Tickets Valeur</div>
+                            <div className="text-base font-black font-mono text-teal-400 tabular mt-1">
+                              {F(etatReelPompiste.tickets)} F
+                            </div>
+                          </div>
+
+                          <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800">
+                            <div className="text-[10px] text-gray-400 uppercase font-semibold">🛢️ Petrosen</div>
+                            <div className="text-base font-black font-mono text-gray-300 tabular mt-1">
+                              {F(etatReelPompiste.petrosen)} F
+                            </div>
+                          </div>
+
+                          <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800">
+                            <div className="text-[10px] text-gray-400 uppercase font-semibold">📟 Code Électronique</div>
+                            <div className="text-base font-black font-mono text-purple-400 tabular mt-1">
+                              {F(etatReelPompiste.codeElec)} F
+                            </div>
+                          </div>
+
+                          <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800">
+                            <div className="text-[10px] text-gray-400 uppercase font-semibold">🔄 Autre Paiement</div>
+                            <div className="text-base font-black font-mono text-slate-300 tabular mt-1">
+                              {F(etatReelPompiste.autre)} F
+                            </div>
+                          </div>
+
+                          <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800">
+                            <div className="text-[10px] text-gray-400 uppercase font-semibold">💸 Dépenses Pompiste</div>
+                            <div className="text-base font-black font-mono text-rose-400 tabular mt-1">
+                              {F(etatReelPompiste.totalDepenses)} F
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    )}
+
+                      {/* SECTION C : LUBRIFIANTS, REMISES EN CUVE & DÉPENSES AVEC MOTIFS */}
+                      {(etatReelPompiste.totalLubrifiants > 0 || etatReelPompiste.totalRemiseCuve > 0 || etatReelPompiste.totalDepenses > 0) && (
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-xs">
+                          {etatReelPompiste.totalLubrifiants > 0 && (
+                            <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl space-y-1">
+                              <span className="text-[10px] uppercase font-bold text-amber-400">Ventes de Lubrifiants sur Piste</span>
+                              <div className="font-mono font-bold text-amber-300 text-sm">+{F(etatReelPompiste.totalLubrifiants)} F</div>
+                              <div className="text-[11px] text-gray-400">{etatReelPompiste.lubrifiants.length} produit(s) vendu(s)</div>
+                            </div>
+                          )}
+
+                          {etatReelPompiste.totalRemiseCuve > 0 && (
+                            <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl space-y-1">
+                              <span className="text-[10px] uppercase font-bold text-rose-400">Remise en Cuve (Étalonnage / Test)</span>
+                              <div className="font-mono font-bold text-rose-300 text-sm">-{F(etatReelPompiste.totalRemiseCuve)} F</div>
+                              <div className="text-[11px] text-gray-400">{etatReelPompiste.motifsRemise || "Test jauge"}</div>
+                            </div>
+                          )}
+
+                          {etatReelPompiste.totalDepenses > 0 && (
+                            <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl space-y-1">
+                              <span className="text-[10px] uppercase font-bold text-rose-400">Dépenses de Piste Justifiées</span>
+                              <div className="font-mono font-bold text-rose-300 text-sm">-{F(etatReelPompiste.totalDepenses)} F</div>
+                              <div className="text-[11px] text-gray-400 italic">Motif : {etatReelPompiste.motifsDepenses || "Dépense justifiée"}</div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* SECTION D : LISTE DES BONS CLIENTS (SI PRÉSENTS) */}
+                      {etatReelPompiste.bons.length > 0 && (
+                        <div className="space-y-1.5 pt-1">
+                          <div className="text-xs font-bold text-amber-300 uppercase tracking-wide">
+                            📋 Détail des Bons de Carburant Acceptés ({etatReelPompiste.bons.length})
+                          </div>
+                          <div className="overflow-x-auto border border-slate-800 rounded-xl bg-slate-950/60">
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="border-b border-slate-800 text-gray-400 uppercase text-[10px]">
+                                  <th className="py-2 px-3 text-left">N° Bon</th>
+                                  <th className="py-2 px-3 text-left">Client Débiteur</th>
+                                  <th className="py-2 px-3 text-right">Volume</th>
+                                  <th className="py-2 px-3 text-right text-amber-300">Montant</th>
+                                  <th className="py-2 px-3 text-left">Observation</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-800/60 font-mono">
+                                {etatReelPompiste.bons.map((b, idx) => (
+                                  <tr key={b.id || idx}>
+                                    <td className="py-1.5 px-3 font-bold text-white">{b.numero_bon || `BON-${idx + 1}`}</td>
+                                    <td className="py-1.5 px-3 font-sans text-gray-300">{b.client_nom || b.client_code || "Client Pro"}</td>
+                                    <td className="py-1.5 px-3 text-right tabular text-gray-400">{n(b.volume_litres)} L</td>
+                                    <td className="py-1.5 px-3 text-right tabular text-amber-300 font-bold">{F(b.montant)} F</td>
+                                    <td className="py-1.5 px-3 font-sans text-gray-500 italic text-[11px]">{b.observation || "—"}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* DÉTAIL DE CHAQUE SESSION / QUART DU POMPISTE */}
+                    <div className="space-y-2">
+                      <div className="text-xs font-bold text-gray-700 uppercase tracking-wide">
+                        Sessions / Quarts Individuels ({descentesFiltrees.length})
+                      </div>
+                      <div className="space-y-2">
+                        {descentesFiltrees.map((d) => {
+                          const isTerminee = d.statut === "TERMINEE";
+                          const isValidee = d.statut === "VALIDEE";
+                          const ecartVal = n(d.ecart);
+                          const peutValider = peutAgirProfil(profil, "rapport", "valider") && isTerminee && !isValidee;
+
+                          return (
+                            <div key={d.id} className="bg-white rounded-xl border p-3 shadow-xs space-y-2" style={{ borderColor: T.line }}>
+                              <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b" style={{ borderColor: T.line }}>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-700">
+                                    {d.numero || d.id?.slice(0, 8)}
+                                  </span>
+                                  <span className="font-bold text-xs text-gray-900">
+                                    {d.quart ? `Quart : ${d.quart}` : "Session de service"}
+                                  </span>
+                                  <span
+                                    className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                      isValidee
+                                        ? "bg-blue-100 text-blue-800"
+                                        : isTerminee
+                                        ? "bg-emerald-100 text-emerald-800"
+                                        : "bg-amber-100 text-amber-900"
+                                    }`}
+                                  >
+                                    {isValidee ? "✓ Validée par gérant" : isTerminee ? "✓ Soumise par pompiste" : "🟡 En cours"}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  {peutValider && (
+                                    <button
+                                      type="button"
+                                      disabled={validatingId === d.id}
+                                      onClick={async () => {
+                                        setValidatingId(d.id);
+                                        try {
+                                          await updateDescente(d.id, {
+                                            statut: "VALIDEE",
+                                            valide_par: profil?.id,
+                                            valide_le: new Date().toISOString(),
+                                          });
+                                          flash(`Descente de ${d.pompiste_nom} validée ✓`);
+                                          await loadStationData();
+                                        } catch (e) {
+                                          flash("Erreur lors de la validation", "error");
+                                        } finally {
+                                          setValidatingId(null);
+                                        }
+                                      }}
+                                      className="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-bold disabled:opacity-50 transition-colors shadow-2xs"
+                                    >
+                                      {validatingId === d.id ? "..." : "✓ Valider ce Quart"}
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => navigate(`/descente?id=${d.id}`)}
+                                    className="px-2.5 py-1 rounded-lg border text-gray-700 hover:bg-gray-100 text-[11px] font-bold transition-colors"
+                                    style={{ borderColor: T.line }}
+                                  >
+                                    🔍 Consulter / Modifier
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="flex flex-wrap gap-3 text-xs">
+                                <div>
+                                  <span className="text-gray-500">Volume : </span>
+                                  <strong className="font-mono text-gray-900">{F(d.total_volume || d.volume_vendu || 0)} L</strong>
+                                </div>
+                                <div>
+                                  <span className="text-gray-500">CA Carburant : </span>
+                                  <strong className="font-mono text-gray-900">{F(d.total_carburant || d.montant_theorique || 0)} F</strong>
+                                </div>
+                                <div>
+                                  <span className="text-gray-500">Total Versé : </span>
+                                  <strong className="font-mono text-blue-900">{F(d.total_encaisse || 0)} F</strong>
+                                </div>
+                                <div>
+                                  <span className="text-gray-500">Écart Quart : </span>
+                                  <strong className={`font-mono tabular ${ecartVal >= 0 ? "text-emerald-700" : "text-rose-600"}`}>
+                                    {ecartVal >= 0 ? "+" : ""}{F(ecartVal)} F
+                                  </strong>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
-                );
-              })}
+                )
+              )}
+            </div>
+          )}
+
+          {/* ══════════════════════════════════════════════════════════════════════════════ */}
+          {/* CAS 2 : TOUS LES POMPISTES SONT SÉLECTIONNÉS */}
+          {/* ══════════════════════════════════════════════════════════════════════════════ */}
+          {pompisteFiltre === "TOUS" && (
+            <div>
+              {descentes.length === 0 ? (
+                <div className="bg-white p-8 rounded-2xl border text-center text-gray-500 text-xs shadow-sm">
+                  <p className="font-bold text-gray-700 text-sm">
+                    Aucune descente pompiste enregistrée pour le {fmtDate(date)}.
+                  </p>
+                  <p className="text-gray-400 mt-1">
+                    Dès qu'un pompiste démarre ou soumet son quart, il apparaîtra ici avec ses index et ses modes d'encaissement.
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-white rounded-2xl border shadow-sm divide-y" style={{ borderColor: T.line }}>
+                  {descentes.map((d) => {
+                    const isTerminee = d.statut === "TERMINEE";
+                    const isValidee = d.statut === "VALIDEE";
+                    const ecartVal = n(d.ecart);
+                    const peutValider = peutAgirProfil(profil, "rapport", "valider") && isTerminee && !isValidee;
+
+                    const enc = d.encaissements || {};
+                    const espD = n(enc.especes ?? d.especes ?? 0);
+                    const wavD = n(enc.wave ?? 0);
+                    const omD = n(enc.om ?? enc.orange_money ?? d.mobile_money ?? 0);
+                    const cbD = n(enc.cb ?? enc.carte_bancaire ?? enc.tpe ?? d.carte_bancaire ?? 0);
+                    const petD = n(enc.petrosen ?? 0);
+                    const codD = n(enc.code_electronique ?? 0);
+                    const ticD = n(enc.tickets ?? 0);
+                    const creD = n(enc.credits ?? enc.credit_client ?? enc.bons ?? d.total_bons ?? 0);
+                    const autD = n(enc.autre ?? 0);
+                    const depD = n(d.depenses_valeur ?? d.depenses_montant ?? d.depense ?? d.depenses ?? 0);
+
+                    return (
+                      <div key={d.id} className="p-4 hover:bg-gray-50/70 transition-colors">
+                        {/* En-tête pompiste */}
+                        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-700">
+                              {d.numero || d.id?.slice(0, 8)}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setPompisteFiltre(d.pompiste_id || d.pompiste_nom)}
+                              className="font-black text-sm text-blue-900 hover:underline flex items-center gap-1"
+                              title="Cliquer pour voir l'état réel complet de sa journée"
+                            >
+                              <span>👤</span>
+                              <span>{d.pompiste_nom || "Pompiste"}</span>
+                            </button>
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                isValidee
+                                  ? "bg-blue-100 text-blue-800"
+                                  : isTerminee
+                                  ? "bg-emerald-100 text-emerald-800"
+                                  : "bg-amber-100 text-amber-900"
+                              }`}
+                            >
+                              {isValidee ? "✓ Validée" : isTerminee ? "✓ Soumise" : "🟡 En cours"}
+                            </span>
+                            {d.quart && (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800">
+                                {d.quart}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setPompisteFiltre(d.pompiste_id || d.pompiste_nom)}
+                              className="px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-[11px] font-bold transition-colors"
+                            >
+                              🔎 État Réel
+                            </button>
+                            {peutValider && (
+                              <button
+                                type="button"
+                                disabled={validatingId === d.id}
+                                onClick={async () => {
+                                  setValidatingId(d.id);
+                                  try {
+                                    await updateDescente(d.id, {
+                                      statut: "VALIDEE",
+                                      valide_par: profil?.id,
+                                      valide_le: new Date().toISOString(),
+                                    });
+                                    flash(`Descente de ${d.pompiste_nom} validée ✓`);
+                                    await loadStationData();
+                                  } catch (e) {
+                                    flash("Erreur lors de la validation", "error");
+                                  } finally {
+                                    setValidatingId(null);
+                                  }
+                                }}
+                                className="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-bold disabled:opacity-50 transition-colors"
+                              >
+                                {validatingId === d.id ? "..." : "✓ Valider"}
+                              </button>
+                            )}
+                            <div className="text-right">
+                              <div className="text-[10px] text-gray-400 font-bold uppercase">Écart Caisse</div>
+                              <div
+                                className={`font-black text-sm tabular ${
+                                  ecartVal >= 0 ? "text-emerald-700" : "text-rose-600"
+                                }`}
+                              >
+                                {ecartVal >= 0 ? "+" : ""}{F(ecartVal)} FCFA
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Détails index & pompes */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-gray-50 p-3 rounded-xl mb-3">
+                          <div>
+                            <div className="text-[10px] text-gray-500 font-bold uppercase">Pompes / Pistolets</div>
+                            <div className="font-semibold text-xs text-gray-800">
+                              {(d.pompes && d.pompes.length > 0)
+                                ? d.pompes.map((p) => p.pistolet_code).join(", ")
+                                : d.pistolet_code || "—"}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-gray-500 font-bold uppercase">Produit(s)</div>
+                            <div className="font-bold text-xs text-blue-900">
+                              {d.produit || (d.pompes && d.pompes.map((p) => p.produit).join(", ")) || "GASOIL"}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-gray-500 font-bold uppercase">Volume Total</div>
+                            <div className="font-mono text-sm font-bold text-gray-900">
+                              {F(d.total_volume || d.volume_vendu || 0)} L
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-gray-500 font-bold uppercase">CA Carburant</div>
+                            <div className="font-mono text-sm font-bold text-amber-900">
+                              {F(d.total_carburant || d.montant_theorique || 0)} F
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Modes d'encaissement exhaustifs */}
+                        <div className="mb-2">
+                          <div className="text-[10px] text-gray-500 font-bold uppercase mb-1.5">
+                            Encaissements déclarés par mode :
+                          </div>
+                          <div className="flex flex-wrap gap-1.5 text-xs">
+                            {espD > 0 && (
+                              <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 font-bold">
+                                💵 Espèces : {F(espD)} F
+                              </span>
+                            )}
+                            {wavD > 0 && (
+                              <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-900 font-semibold">
+                                📱 Wave : {F(wavD)} F
+                              </span>
+                            )}
+                            {omD > 0 && (
+                              <span className="px-2 py-0.5 rounded bg-orange-100 text-orange-900 font-semibold">
+                                📱 OM : {F(omD)} F
+                              </span>
+                            )}
+                            {cbD > 0 && (
+                              <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-900 font-semibold">
+                                💳 Carte TPE : {F(cbD)} F
+                              </span>
+                            )}
+                            {creD > 0 && (
+                              <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 font-semibold">
+                                📋 Bons : {d.bons?.length || 1} bon(s) ({F(creD)} F)
+                              </span>
+                            )}
+                            {ticD > 0 && (
+                              <span className="px-2 py-0.5 rounded bg-teal-100 text-teal-900 font-semibold">
+                                🎫 Tickets : {F(ticD)} F
+                              </span>
+                            )}
+                            {petD > 0 && (
+                              <span className="px-2 py-0.5 rounded bg-gray-200 text-gray-900 font-semibold">
+                                🛢️ Petrosen : {F(petD)} F
+                              </span>
+                            )}
+                            {codD > 0 && (
+                              <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-900 font-semibold">
+                                📟 Code Élec : {F(codD)} F
+                              </span>
+                            )}
+                            {autD > 0 && (
+                              <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-800 font-semibold">
+                                🔄 Autre : {F(autD)} F
+                              </span>
+                            )}
+                            {depD > 0 && (
+                              <span className="px-2 py-0.5 rounded bg-rose-100 text-rose-900 font-semibold">
+                                💸 Dépenses : {F(depD)} F
+                              </span>
+                            )}
+                            <span className="px-2 py-0.5 rounded bg-gray-900 text-white font-bold ml-auto font-mono">
+                              Total : {F(d.total_encaisse || 0)} F
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>
