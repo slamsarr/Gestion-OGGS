@@ -305,27 +305,63 @@ export default function Entretien() {
     return prochaineVidangePreconisee(form.type_vehicule, km);
   }, [form.kilometrage, form.type_vehicule, vehiculeConnu]);
 
-  // Auto-suggestion de services à partir du diagnostic
+  // Auto-suggestion de services à partir du diagnostic Star Care
   const servicesSuggeresParDiag = useMemo(() => {
     const map = {
-      frein: ["FREIN", "FREINAGE", "PLAQUETTE", "DISQUE"],
-      huile: ["VIDANGE", "HUILE", "FILTRE"],
-      pneu: ["PNEU", "ROUE", "ALIGNEMENT"],
-      filtre: ["FILTRE", "VIDANGE"],
-      amort: ["AMORT", "SUSPENSION"],
-      batterie: ["BATTERIE", "ELECTRIQUE"],
-      courroie: ["COURROIE", "DISTRIBUTION"],
-      eclairage: ["ECLAIR", "AMPOULE"],
-      liquide: ["LIQUIDE", "REFROIDISSEMENT", "VIDANGE"],
-      carrosserie: ["CARROSSERIE", "ESTHETIQUE"],
+      plaq_av: ["PLAQUETTES", "DISQUES_PLAQUETTES", "FREIN_CONTROLE"],
+      plaq_ar: ["PLAQUETTES", "FREIN_CONTROLE"],
+      disques_av: ["DISQUES_PLAQUETTES", "FREIN_CONTROLE"],
+      flexibles_frein: ["PURGE_FREIN", "FREIN_CONTROLE"],
+      frein_stationnement: ["FREIN_CONTROLE"],
+      niv_frein: ["PURGE_FREIN", "FREIN_CONTROLE"],
+      niv_huile: ["VIDANGE_SIMPLE", "PACK_ESSENTIEL", "PACK_CONFORT"],
+      fuites_visibles: ["VIDANGE_COMPLETE", "MAIN_DOEUVRE"],
+      bouchon_carter: ["VIDANGE_SIMPLE"],
+      filtre_air: ["PACK_CONFORT", "PACK_PREMIUM"],
+      filtre_habitacle: ["FILTRE_HABITACLE", "CLIM_RECHARGE"],
+      clim_efficacite: ["CLIM_CONTROLE", "CLIM_RECHARGE", "CLIM_TRAITEMENT"],
+      pneu_av_g: ["PNEU_MONTAGE_2", "GEOMETRIE", "PNEU_PERMUTATION"],
+      pneu_av_d: ["PNEU_MONTAGE_2", "GEOMETRIE", "PNEU_PERMUTATION"],
+      pneu_ar_g: ["PNEU_MONTAGE_2", "PNEU_PERMUTATION"],
+      pneu_ar_d: ["PNEU_MONTAGE_2", "PNEU_PERMUTATION"],
+      geometrie_av: ["GEOMETRIE", "PNEU_PERMUTATION"],
+      carrossage: ["GEOMETRIE"],
+      amortisseurs_av: ["DIAG_SECURITE", "MAIN_DOEUVRE"],
+      amortisseurs_ar: ["DIAG_SECURITE", "MAIN_DOEUVRE"],
+      rotules_direction: ["GEOMETRIE", "MAIN_DOEUVRE"],
+      boite_niveau: ["BOITE_CONTROLE", "BOITE_VIDANGE"],
+      pont_differentiel: ["BOITE_PONT_VIDANGE"],
+      soufflets_cardan: ["MAIN_DOEUVRE"],
+      bat_tension: ["BAT_CONTROLE", "BATTERIE", "BAT_DEMARRAGE_DIAG"],
+      charge_alternateur: ["BAT_DEMARRAGE_DIAG", "BATTERIE"],
+      obd_diag: ["CT_DIAG_ELECTRONIQUE", "PACK_PREMIUM"],
+      obd_defauts: ["CT_DIAG_ELECTRONIQUE", "PACK_PREMIUM"],
+      niv_refroid: ["REFROIDISSEMENT"],
+      durites_refroid: ["REFROIDISSEMENT"],
+      bougies_allumage: ["BOUGIES"],
+      // Rétrocompatibilité avec les anciennes clés express
+      frein: ["FREIN", "FREINAGE", "PLAQUETTES"],
+      huile: ["VIDANGE", "HUILE"],
+      pneu: ["PNEU", "GEOMETRIE"],
+      filtre: ["FILTRE"],
+      amort: ["SUSPENSION"],
+      batterie: ["BATTERIE"],
     };
-    const codes = Object.keys(checklistDiag).filter((k) => checklistDiag[k]);
-    const keywords = new Set();
-    for (const c of codes) for (const kw of (map[c] || [])) keywords.add(kw.toLowerCase());
-    return services.filter((s) => {
-      const haystack = `${s.nom || ""} ${s.categorie || ""}`.toLowerCase();
-      return Array.from(keywords).some((kw) => haystack.includes(kw));
+
+    const anomalyKeys = Object.keys(checklistDiag).filter((k) => {
+      const val = checklistDiag[k];
+      return val === "SURVEILLER" || val === "URGENT" || val === true;
     });
+
+    if (anomalyKeys.length === 0) return [];
+
+    const suggestedCodes = new Set();
+    for (const k of anomalyKeys) {
+      const codes = map[k] || [];
+      for (const c of codes) suggestedCodes.add(c);
+    }
+
+    return services.filter((s) => suggestedCodes.has(s.code));
   }, [checklistDiag, services]);
 
   // Totaux formulaire
@@ -926,6 +962,38 @@ export default function Entretien() {
                 niveau={niveauDiag}
                 onNiveauChange={setNiveauDiag}
               />
+
+              {servicesSuggeresParDiag.length > 0 && (
+                <div className="mt-3.5 p-3 rounded-2xl bg-amber-500/10 border-2 border-dashed border-amber-400">
+                  <div className="text-[11px] font-black uppercase tracking-wider text-amber-900 mb-2 flex flex-wrap items-center justify-between gap-1">
+                    <span className="flex items-center gap-1.5">
+                      💡 Recommandations Star Care suite au contrôle ({servicesSuggeresParDiag.length})
+                    </span>
+                    <span className="text-[10px] text-amber-700 font-bold">Cliquer pour ajouter au devis</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {servicesSuggeresParDiag.map((s) => {
+                      const selected = form.selectedServices.some((x) => x.id === s.id || x.code === s.code);
+                      return (
+                        <button
+                          key={s.id || s.code}
+                          type="button"
+                          onClick={() => toggleService(s)}
+                          className={`px-3 py-1.5 rounded-xl text-[11.5px] font-bold transition-all border flex items-center gap-1.5 ${
+                            selected
+                              ? "bg-amber-600 text-white border-amber-600 shadow-sm"
+                              : "bg-white text-amber-950 border-amber-300 hover:bg-amber-100"
+                          }`}
+                        >
+                          <span>{selected ? "✓ " : "+ "}</span>
+                          <span>{s.nom}</span>
+                          <span className="ml-1 opacity-80 tabular">{F(Number(s.prix_base || s.prix || 0))} F</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </Section>
 
             {/* 4. Prestations & Grands Forfaits Star Care */}
