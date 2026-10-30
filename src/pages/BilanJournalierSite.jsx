@@ -6,9 +6,13 @@ import {
   listVentesBoutique,
   listDepenses,
   listPrestationsEntretien,
+  listReglementsCreditJour,
+  saveOperationCredit,
+  loadReferentiel,
 } from "../lib/api";
 import { F, fmtDate, n, T, todayISO } from "../lib/calcul";
 import { nombreEnLettres } from "../lib/facturation";
+import { listeClientsCredit } from "../lib/seed";
 import { Loading } from "../components/ui";
 import { normalizeDescente } from "./DescentePompiste";
 
@@ -33,24 +37,86 @@ export default function BilanJournalierSite() {
   const [ventesB, setVentesB] = useState([]);
   const [depenses, setDepenses] = useState([]);
   const [entretiens, setEntretiens] = useState([]);
+  const [reglementsBons, setReglementsBons] = useState([]);
+  const [clientsList, setClientsList] = useState([]);
+
+  // Modal d'encaissement direct d'un bon / créance client
+  const [modalReglementOpen, setModalReglementOpen] = useState(false);
+  const [reglementForm, setReglementForm] = useState({
+    client_code: "",
+    client_nom: "",
+    montant: "",
+    mode: "ESPECES",
+    reference: "",
+  });
+  const [savingReglement, setSavingReglement] = useState(false);
 
   const loadAll = async (d) => {
     setLoading(true);
     try {
-      const [des, lav, vb, dep, ent] = await Promise.all([
+      const [des, lav, vb, dep, ent, regs, ref] = await Promise.all([
         listDescentes(stationId, d).catch(() => []),
         listPrestationsLavage(stationId, d).catch(() => []),
         listVentesBoutique(stationId, d).catch(() => []),
         listDepenses(stationId, d).catch(() => []),
         listPrestationsEntretien(stationId, d).catch(() => []),
+        listReglementsCreditJour(stationId, d).catch(() => []),
+        loadReferentiel().catch(() => null),
       ]);
       setDescentes((des || []).map(normalizeDescente).filter(Boolean));
       setLavages(lav || []);
       setVentesB(vb || []);
       setDepenses(dep || []);
       setEntretiens(ent || []);
+      setReglementsBons(regs || []);
+      if (ref) setClientsList(listeClientsCredit(ref) || []);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleEnregistrerReglement = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const mt = n(reglementForm.montant);
+    if (!reglementForm.client_code) {
+      alert("Veuillez sélectionner un client.");
+      return;
+    }
+    if (mt <= 0) {
+      alert("Veuillez saisir un montant supérieur à 0.");
+      return;
+    }
+
+    setSavingReglement(true);
+    try {
+      const client = clientsList.find((c) => c.code === reglementForm.client_code);
+      const cNom = client?.nom_entreprise || client?.nom || reglementForm.client_code;
+      const refStr = reglementForm.reference ? ` - Réf: ${reglementForm.reference}` : "";
+      const matricule = `Règlement ${reglementForm.mode}${refStr} [Client: ${cNom}]`;
+
+      await saveOperationCredit({
+        client_code: reglementForm.client_code,
+        station_id: stationId,
+        date_op: date || todayISO(),
+        matricule,
+        volume_l: 0,
+        valeur_cons: 0,
+        depot: mt,
+      });
+
+      setModalReglementOpen(false);
+      setReglementForm({
+        client_code: "",
+        client_nom: "",
+        montant: "",
+        mode: "ESPECES",
+        reference: "",
+      });
+      await loadAll(date);
+    } catch (err) {
+      alert("Erreur lors de l'enregistrement : " + err.message);
+    } finally {
+      setSavingReglement(false);
     }
   };
 
@@ -287,7 +353,46 @@ export default function BilanJournalierSite() {
     };
   }, [entretiens]);
 
-  // ────────────────── 6. CALCULS DÉPENSES CAISSE STATION ──────────────────
+  // ────────────────── 6. CALCULS RÈGLEMENTS DES BONS & CRÉANCES CLIENTS ──────────────────
+  const totReglementsBons = useMemo(() => {
+    const total = reglementsBons.reduce((s, r) => s + n(r.depot || 0), 0);
+    const especes = reglementsBons
+      .filter((r) => r.mode_paiement === "ESPECES")
+      .reduce((s, r) => s + n(r.depot || 0), 0);
+    const wave = reglementsBons
+      .filter((r) => r.mode_paiement === "WAVE")
+      .reduce((s, r) => s + n(r.depot || 0), 0);
+    const om = reglementsBons
+      .filter((r) => r.mode_paiement === "OM")
+      .reduce((s, r) => s + n(r.depot || 0), 0);
+    const cheque = reglementsBons
+      .filter((r) => r.mode_paiement === "CHEQUE")
+      .reduce((s, r) => s + n(r.depot || 0), 0);
+    const virement = reglementsBons
+      .filter((r) => r.mode_paiement === "VIREMENT")
+      .reduce((s, r) => s + n(r.depot || 0), 0);
+    const tickets = reglementsBons
+      .filter((r) => r.mode_paiement === "TICKETS")
+      .reduce((s, r) => s + n(r.depot || 0), 0);
+    const cb = reglementsBons
+      .filter((r) => r.mode_paiement === "CB")
+      .reduce((s, r) => s + n(r.depot || 0), 0);
+
+    return {
+      nb: reglementsBons.length,
+      total,
+      especes,
+      wave,
+      om,
+      cheque,
+      virement,
+      tickets,
+      cb,
+      digitaux: wave + om + cb + cheque + virement,
+    };
+  }, [reglementsBons]);
+
+  // ────────────────── 7. CALCULS DÉPENSES CAISSE STATION ──────────────────
   const totDepenses = useMemo(() => {
     const total = depenses.reduce((s, d) => s + n(d.montant || 0), 0);
     const especes = depenses
@@ -302,22 +407,29 @@ export default function BilanJournalierSite() {
     };
   }, [depenses]);
 
-  // ────────────────── 7. SYNTHÈSE TOTALE DU CHIFFRE D'AFFAIRES & ESPÈCES BANQUE ──────────────────
+  // ────────────────── 8. SYNTHÈSE TOTALE DU CHIFFRE D'AFFAIRES & ESPÈCES BANQUE ──────────────────
   const caBrutCarburant = totPompes.caCarburant + totPompes.caLub;
   const caBrutLavage = totLavage.ca;
   const caBrutBoutique = totBoutique.ca;
   const caBrutEntretien = totEntretien.ca;
-  const caGlobalSite = caBrutCarburant + caBrutLavage + caBrutBoutique + caBrutEntretien;
+  const caReglementsBons = totReglementsBons.total;
+  const caGlobalSite =
+    caBrutCarburant + caBrutLavage + caBrutBoutique + caBrutEntretien + caReglementsBons;
 
   // Espèces nettes encaissées par chaque activité
   const especesCarburant = totPompes.especes;
   const especesLavage = totLavage.especes;
   const especesBoutique = totBoutique.especes;
   const especesEntretien = totEntretien.especes;
+  const especesReglementsBons = totReglementsBons.especes;
 
   // Cumul brut des espèces collectées avant dépenses de caisse centrale
   const totalEspecesCollectees =
-    especesCarburant + especesLavage + especesBoutique + especesEntretien;
+    especesCarburant +
+    especesLavage +
+    especesBoutique +
+    especesEntretien +
+    especesReglementsBons;
 
   // Dépenses de la station payées en espèces
   const depensesEspecesStation = totDepenses.especes;
@@ -692,28 +804,38 @@ export default function BilanJournalierSite() {
           </div>
 
           {/* ───────────────────────────────────────────────────────────────── */}
-          {/* SECTION 2 : AUTRES ACTIVITÉS (LAVAGE, BOUTIQUE, ENTRETIEN) */}
+          {/* SECTION 2 : AUTRES ACTIVITÉS & RÈGLEMENTS DE BONS CLIENTS */}
           {/* ───────────────────────────────────────────────────────────────── */}
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-black text-gray-900 flex items-center gap-2">
-                <span>🏪 2. Synthèse des Autres Activités de la Station</span>
-              </h2>
-              <span className="text-xs text-gray-500">
-                Lavage, Boutique / Gaz &amp; Entretien Atelier (Star Care)
-              </span>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-black text-gray-900 flex items-center gap-2">
+                  <span>🏪 2. Synthèse des Autres Activités &amp; Encaissements Bons Clients</span>
+                </h2>
+                <span className="text-xs text-gray-500">
+                  Lavage, Boutique / Gaz, Entretien Atelier &amp; Règlements des Bons Carburant
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalReglementOpen(true)}
+                className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors shrink-0"
+              >
+                <span>➕</span>
+                <span>Encaisser un Bon Client</span>
+              </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {/* ACTIVITÉ A : LAVAGE AUTO */}
-              <div className="bg-white rounded-xl border shadow-sm p-4 space-y-3" style={{ borderColor: T.line }}>
+              <div className="bg-white rounded-xl border shadow-sm p-3.5 space-y-3" style={{ borderColor: T.line }}>
                 <div className="flex items-center justify-between pb-2 border-b" style={{ borderColor: T.line }}>
                   <div className="flex items-center gap-1.5 font-bold text-xs text-cyan-950">
                     <span className="text-base">🚿</span>
                     <span>Lavage Automobile</span>
                   </div>
                   <span className="text-[10px] font-bold bg-cyan-100 text-cyan-900 px-2 py-0.5 rounded-full">
-                    {totLavage.nb} prestation(s)
+                    {totLavage.nb} lavage(s)
                   </span>
                 </div>
 
@@ -723,31 +845,27 @@ export default function BilanJournalierSite() {
                     <strong className="text-gray-900 font-mono tabular">{F(totLavage.ca)} F</strong>
                   </div>
                   <div className="flex justify-between text-gray-600">
-                    <span>Paiements Wave / OM :</span>
+                    <span>Wave / OM :</span>
                     <strong className="text-blue-700 font-mono tabular">{F(totLavage.digitaux)} F</strong>
                   </div>
                   <div className="flex justify-between text-gray-600">
-                    <span>Crédits / Bons lavage :</span>
+                    <span>Crédits / Bons :</span>
                     <strong className="text-amber-800 font-mono tabular">{F(totLavage.credit)} F</strong>
-                  </div>
-                  <div className="flex justify-between text-gray-600">
-                    <span>Dépenses propres :</span>
-                    <strong className="text-gray-400 font-mono tabular">0 F</strong>
                   </div>
                 </div>
 
-                <div className="p-2.5 rounded-lg bg-cyan-50 border border-cyan-200 text-center">
+                <div className="p-2 rounded-lg bg-cyan-50 border border-cyan-200 text-center">
                   <div className="text-[10px] uppercase font-bold text-cyan-900">
                     Net en Espèces (Lavage)
                   </div>
-                  <div className="text-lg font-black font-mono text-cyan-950 tabular">
+                  <div className="text-base font-black font-mono text-cyan-950 tabular">
                     {F(especesLavage)} F CFA
                   </div>
                 </div>
               </div>
 
               {/* ACTIVITÉ B : BOUTIQUE & GAZ */}
-              <div className="bg-white rounded-xl border shadow-sm p-4 space-y-3" style={{ borderColor: T.line }}>
+              <div className="bg-white rounded-xl border shadow-sm p-3.5 space-y-3" style={{ borderColor: T.line }}>
                 <div className="flex items-center justify-between pb-2 border-b" style={{ borderColor: T.line }}>
                   <div className="flex items-center gap-1.5 font-bold text-xs text-purple-950">
                     <span className="text-base">🏪</span>
@@ -764,38 +882,34 @@ export default function BilanJournalierSite() {
                     <strong className="text-gray-900 font-mono tabular">{F(totBoutique.ca)} F</strong>
                   </div>
                   <div className="flex justify-between text-gray-600">
-                    <span>Paiements Digitaux (Wave/OM/CB) :</span>
+                    <span>Wave / OM / CB :</span>
                     <strong className="text-blue-700 font-mono tabular">{F(totBoutique.digitaux)} F</strong>
                   </div>
                   <div className="flex justify-between text-gray-600">
                     <span>Crédits accordés :</span>
                     <strong className="text-amber-800 font-mono tabular">{F(totBoutique.credit)} F</strong>
                   </div>
-                  <div className="flex justify-between text-gray-600">
-                    <span>Dépenses propres :</span>
-                    <strong className="text-gray-400 font-mono tabular">0 F</strong>
-                  </div>
                 </div>
 
-                <div className="p-2.5 rounded-lg bg-purple-50 border border-purple-200 text-center">
+                <div className="p-2 rounded-lg bg-purple-50 border border-purple-200 text-center">
                   <div className="text-[10px] uppercase font-bold text-purple-900">
                     Net en Espèces (Boutique)
                   </div>
-                  <div className="text-lg font-black font-mono text-purple-950 tabular">
+                  <div className="text-base font-black font-mono text-purple-950 tabular">
                     {F(especesBoutique)} F CFA
                   </div>
                 </div>
               </div>
 
               {/* ACTIVITÉ C : ENTRETIEN & VIDANGE STAR CARE */}
-              <div className="bg-white rounded-xl border shadow-sm p-4 space-y-3" style={{ borderColor: T.line }}>
+              <div className="bg-white rounded-xl border shadow-sm p-3.5 space-y-3" style={{ borderColor: T.line }}>
                 <div className="flex items-center justify-between pb-2 border-b" style={{ borderColor: T.line }}>
                   <div className="flex items-center gap-1.5 font-bold text-xs text-amber-950">
                     <span className="text-base">🔧</span>
                     <span>Entretien &amp; Star Care</span>
                   </div>
                   <span className="text-[10px] font-bold bg-amber-100 text-amber-900 px-2 py-0.5 rounded-full">
-                    {totEntretien.nb} intervention(s)
+                    {totEntretien.nb} ordre(s)
                   </span>
                 </div>
 
@@ -805,29 +919,96 @@ export default function BilanJournalierSite() {
                     <strong className="text-gray-900 font-mono tabular">{F(totEntretien.ca)} F</strong>
                   </div>
                   <div className="flex justify-between text-gray-600">
-                    <span>Paiements Digitaux / TPE :</span>
+                    <span>Wave / OM / TPE :</span>
                     <strong className="text-blue-700 font-mono tabular">{F(totEntretien.digitaux)} F</strong>
                   </div>
                   <div className="flex justify-between text-gray-600">
                     <span>Bons &amp; Crédits pro :</span>
                     <strong className="text-amber-800 font-mono tabular">{F(totEntretien.credit)} F</strong>
                   </div>
-                  <div className="flex justify-between text-gray-600">
-                    <span>Dépenses propres :</span>
-                    <strong className="text-gray-400 font-mono tabular">0 F</strong>
-                  </div>
                 </div>
 
-                <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-center">
+                <div className="p-2 rounded-lg bg-amber-50 border border-amber-200 text-center">
                   <div className="text-[10px] uppercase font-bold text-amber-950">
                     Net en Espèces (Entretien)
                   </div>
-                  <div className="text-lg font-black font-mono text-amber-950 tabular">
+                  <div className="text-base font-black font-mono text-amber-950 tabular">
                     {F(especesEntretien)} F CFA
                   </div>
                 </div>
               </div>
+
+              {/* ACTIVITÉ D : RÈGLEMENTS DES BONS CLIENTS (CRÉANCES ENCAISSÉES) */}
+              <div className="bg-white rounded-xl border shadow-sm p-3.5 space-y-3 border-emerald-300 ring-1 ring-emerald-200">
+                <div className="flex items-center justify-between pb-2 border-b border-emerald-100">
+                  <div className="flex items-center gap-1.5 font-bold text-xs text-emerald-950">
+                    <span className="text-base">📋</span>
+                    <span>Règlement Bons Clients</span>
+                  </div>
+                  <span className="text-[10px] font-bold bg-emerald-100 text-emerald-900 px-2 py-0.5 rounded-full">
+                    {totReglementsBons.nb} reçu(s)
+                  </span>
+                </div>
+
+                <div className="space-y-1.5 text-xs">
+                  <div className="flex justify-between text-gray-600">
+                    <span>Total encaissé sur bons :</span>
+                    <strong className="text-emerald-900 font-mono tabular">{F(totReglementsBons.total)} F</strong>
+                  </div>
+                  <div className="flex justify-between text-gray-600">
+                    <span>Wave / OM / Chèque / Vir :</span>
+                    <strong className="text-blue-700 font-mono tabular">{F(totReglementsBons.digitaux)} F</strong>
+                  </div>
+                  <div className="flex justify-between text-gray-600">
+                    <span>Tickets valeur reçus :</span>
+                    <strong className="text-teal-700 font-mono tabular">{F(totReglementsBons.tickets)} F</strong>
+                  </div>
+                </div>
+
+                <div className="p-2 rounded-lg bg-emerald-50 border border-emerald-300 text-center">
+                  <div className="text-[10px] uppercase font-bold text-emerald-900">
+                    Net Espèces (Bons Payés)
+                  </div>
+                  <div className="text-base font-black font-mono text-emerald-950 tabular">
+                    +{F(especesReglementsBons)} F CFA
+                  </div>
+                </div>
+              </div>
             </div>
+
+            {/* DÉTAIL DES RÈGLEMENTS DE BONS ENREGISTRÉS DU JOUR */}
+            {reglementsBons.length > 0 && (
+              <div className="bg-emerald-50/50 border border-emerald-200 rounded-xl p-3.5 space-y-2 text-xs">
+                <div className="font-bold text-emerald-950 flex items-center justify-between pb-1 border-b border-emerald-200">
+                  <span>Détail des Règlements de Bons / Crédits enregistrés pour la journée ({reglementsBons.length}) :</span>
+                  <span className="font-extrabold text-emerald-900">Total : {F(totReglementsBons.total)} F</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pt-1">
+                  {reglementsBons.map((r, idx) => (
+                    <div key={r.id || idx} className="p-2 rounded bg-white border border-emerald-200 shadow-2xs flex items-center justify-between">
+                      <div>
+                        <div className="font-bold text-gray-900">{r.client_code}</div>
+                        <div className="text-[10.5px] text-gray-500 truncate max-w-xs">{r.matricule || "Règlement créance"}</div>
+                      </div>
+                      <div className="text-right">
+                        <span className={`inline-block px-1.5 py-0.5 rounded text-[9.5px] font-bold ${
+                          r.mode_paiement === "ESPECES" ? "bg-emerald-100 text-emerald-800" :
+                          r.mode_paiement === "WAVE" ? "bg-blue-100 text-blue-800" :
+                          r.mode_paiement === "OM" ? "bg-orange-100 text-orange-800" :
+                          r.mode_paiement === "CHEQUE" ? "bg-purple-100 text-purple-800" :
+                          "bg-gray-100 text-gray-800"
+                        }`}>
+                          {r.mode_paiement}
+                        </span>
+                        <div className="font-mono font-black text-gray-900 tabular mt-0.5">
+                          {F(r.depot)} F
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* ───────────────────────────────────────────────────────────────── */}
@@ -904,8 +1085,8 @@ export default function BilanJournalierSite() {
                   <tr className="border-b border-slate-800 text-gray-400 uppercase text-[10px] font-bold">
                     <th className="py-2.5 px-3 text-left">Activité de la Station</th>
                     <th className="py-2.5 px-3 text-right">CA Brut Total</th>
-                    <th className="py-2.5 px-3 text-right">Digitaux (Wave/OM/CB)</th>
-                    <th className="py-2.5 px-3 text-right">Bons &amp; Crédits</th>
+                    <th className="py-2.5 px-3 text-right">Digitaux (Wave/OM/CB/Vir)</th>
+                    <th className="py-2.5 px-3 text-right">Bons &amp; Tickets</th>
                     <th className="py-2.5 px-3 text-right">Dépenses Directes</th>
                     <th className="py-2.5 px-3 text-right font-black text-amber-400 bg-slate-900">
                       NET EN ESPÈCES
@@ -996,12 +1177,33 @@ export default function BilanJournalierSite() {
                       {F(especesEntretien)} F
                     </td>
                   </tr>
+
+                  <tr className="hover:bg-slate-800/30 bg-emerald-950/20">
+                    <td className="py-2 px-3 font-bold text-emerald-300 flex items-center gap-2">
+                      <span>📋</span> <span>Règlements Bons Clients (Créances)</span>
+                    </td>
+                    <td className="py-2 px-3 text-right font-mono tabular text-emerald-200">
+                      {F(caReglementsBons)} F
+                    </td>
+                    <td className="py-2 px-3 text-right font-mono tabular text-blue-400">
+                      {F(totReglementsBons.digitaux)} F
+                    </td>
+                    <td className="py-2 px-3 text-right font-mono tabular text-teal-400">
+                      {totReglementsBons.tickets > 0 ? `${F(totReglementsBons.tickets)} F (Tickets)` : "—"}
+                    </td>
+                    <td className="py-2 px-3 text-right font-mono tabular text-gray-500">
+                      —
+                    </td>
+                    <td className="py-2 px-3 text-right font-mono font-black tabular text-emerald-300 bg-slate-900">
+                      +{F(especesReglementsBons)} F
+                    </td>
+                  </tr>
                 </tbody>
 
                 <tfoot className="border-t-2 border-slate-700 bg-slate-900/90 font-bold">
                   <tr>
                     <td colSpan={5} className="py-2.5 px-3 uppercase text-gray-300">
-                      SOUS-TOTAL ESPÈCES COLLECTÉES (TOUTES ACTIVITÉS)
+                      SOUS-TOTAL ESPÈCES COLLECTÉES (ACTIVITÉS + RÈGLEMENTS BONS)
                     </td>
                     <td className="py-2.5 px-3 text-right font-mono text-sm font-black tabular text-emerald-400 bg-slate-900">
                       {F(totalEspecesCollectees)} F CFA
@@ -1045,7 +1247,7 @@ export default function BilanJournalierSite() {
               </div>
 
               {/* Détail montants */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs py-1">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs py-1">
                 <div className="p-2 bg-gray-50 rounded border">
                   <div className="text-[10px] text-gray-500">Espèces Carburant :</div>
                   <div className="font-bold font-mono text-gray-900">{F(especesCarburant)} F</div>
@@ -1061,6 +1263,10 @@ export default function BilanJournalierSite() {
                 <div className="p-2 bg-gray-50 rounded border">
                   <div className="text-[10px] text-gray-500">Espèces Entretien :</div>
                   <div className="font-bold font-mono text-gray-900">{F(especesEntretien)} F</div>
+                </div>
+                <div className="p-2 bg-emerald-50 rounded border border-emerald-300">
+                  <div className="text-[10px] text-emerald-800 font-bold">Espèces Bons Clients :</div>
+                  <div className="font-bold font-mono text-emerald-950">+{F(especesReglementsBons)} F</div>
                 </div>
               </div>
 
@@ -1415,6 +1621,138 @@ export default function BilanJournalierSite() {
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ────── MODAL ENCAISSEMENT DIRECT D'UN BON / RÈGLEMENT CLIENT ────── */}
+      {modalReglementOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 animate-in fade-in duration-150"
+          onClick={(e) => {
+            e.stopPropagation();
+            setModalReglementOpen(false);
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-emerald-300"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Entête */}
+            <div className="p-4 bg-emerald-800 text-white flex items-center justify-between">
+              <div>
+                <h3 className="font-black text-sm flex items-center gap-1.5">
+                  <span>💳</span>
+                  <span>Encaisser un Règlement de Bon / Crédit Client</span>
+                </h3>
+                <p className="text-[11px] text-emerald-200 mt-0.5">
+                  L'encaissement sera instantanément cumulé au bilan du {fmtDate(date)}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalReglementOpen(false)}
+                className="text-white hover:text-emerald-200 font-bold text-lg w-7 h-7 rounded flex items-center justify-center hover:bg-emerald-700/50"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Formulaire */}
+            <form onSubmit={handleEnregistrerReglement} className="p-4 space-y-3 text-xs">
+              <div>
+                <label className="block text-[11px] font-bold text-gray-700 uppercase mb-1">
+                  Client Débiteur *
+                </label>
+                <select
+                  value={reglementForm.client_code}
+                  onChange={(e) => setReglementForm({ ...reglementForm, client_code: e.target.value })}
+                  className="w-full border rounded-lg p-2 font-semibold bg-white text-gray-900 border-gray-300 focus:ring-2 focus:ring-emerald-500"
+                  required
+                >
+                  <option value="">-- Choisir un client --</option>
+                  {clientsList.map((c) => (
+                    <option key={c.code || c.id} value={c.code}>
+                      {c.nom_entreprise || c.nom} ({c.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-700 uppercase mb-1">
+                    Mode d'Encaissement *
+                  </label>
+                  <select
+                    value={reglementForm.mode}
+                    onChange={(e) => setReglementForm({ ...reglementForm, mode: e.target.value })}
+                    className="w-full border rounded-lg p-2 font-bold bg-white text-gray-900 border-gray-300"
+                  >
+                    <option value="ESPECES">💵 Espèces (Cash)</option>
+                    <option value="WAVE">📱 Wave</option>
+                    <option value="OM">📱 Orange Money</option>
+                    <option value="CHEQUE">🏦 Chèque</option>
+                    <option value="VIREMENT">💳 Virement</option>
+                    <option value="TICKETS">🎫 Tickets Valeur</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-emerald-900 uppercase mb-1">
+                    Montant Encaissé (FCFA) *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={reglementForm.montant}
+                    onChange={(e) => setReglementForm({ ...reglementForm, montant: e.target.value })}
+                    placeholder="0"
+                    className="w-full border-2 border-emerald-500 rounded-lg p-2 font-black text-emerald-950 bg-emerald-50/60 tabular"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-gray-700 uppercase mb-1">
+                  Référence / N° Chèque / N° Transaction
+                </label>
+                <input
+                  type="text"
+                  value={reglementForm.reference}
+                  onChange={(e) => setReglementForm({ ...reglementForm, reference: e.target.value })}
+                  placeholder="ex: CHQ-89012, Trf Wave, etc."
+                  className="w-full border rounded-lg p-2 bg-white text-gray-900 border-gray-300"
+                />
+              </div>
+
+              {reglementForm.mode === "ESPECES" && n(reglementForm.montant) > 0 && (
+                <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-300 text-emerald-900 text-[11px] flex items-center gap-2">
+                  <span className="text-base">💡</span>
+                  <span>
+                    Ce montant en <strong>Espèces (+{F(n(reglementForm.montant))} F)</strong> s'ajoutera automatiquement au <strong>Dépôt Banque</strong> du jour !
+                  </span>
+                </div>
+              )}
+
+              <div className="pt-2 flex items-center justify-end gap-2 border-t">
+                <button
+                  type="button"
+                  onClick={() => setModalReglementOpen(false)}
+                  className="px-3.5 py-2 rounded-lg border text-gray-700 font-bold hover:bg-gray-100 transition-colors"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingReglement}
+                  className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold shadow-xs transition-colors disabled:opacity-50"
+                >
+                  {savingReglement ? "Enregistrement..." : "✓ Valider l'Encaissement"}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

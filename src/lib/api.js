@@ -1605,6 +1605,34 @@ export async function reglerBonsClient({
   };
 }
 
+/** Détecte le mode de paiement utilisé lors d'un règlement client */
+export function detecterModeReglement(matricule) {
+  const m = String(matricule || "").toUpperCase();
+  if (m.includes("WAVE")) return "WAVE";
+  if (m.includes("ORANGE") || m.includes(" OM") || m.includes("OM ") || m.startsWith("OM")) return "OM";
+  if (m.includes("CHEQUE") || m.includes("CHQ")) return "CHEQUE";
+  if (m.includes("VIREMENT") || m.includes("VIR")) return "VIREMENT";
+  if (m.includes("TICKET")) return "TICKETS";
+  if (m.includes("TPE") || m.includes("CB") || m.includes("CARTE")) return "CB";
+  return "ESPECES";
+}
+
+/** Liste tous les règlements / encaissements de crédits et bons clients pour une station et une date */
+export async function listReglementsCreditJour(stationId, date) {
+  await ensureLocalSeed();
+  let rows = await db.operations_credit.toArray().catch(() => []);
+  const stations = await stationsDuReferentiel();
+  if (stationId) rows = rows.filter((r) => rowMatchesStation(r, stationId, stations));
+  if (date) rows = rows.filter((r) => (r.date_op || "").startsWith(date));
+  return rows
+    .filter((r) => n(r.depot) > 0)
+    .map((r) => ({
+      ...r,
+      mode_paiement: detecterModeReglement(r.matricule),
+    }))
+    .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+}
+
 // ── VAGUE 2 : CRUD Lavage (§2 & §37) ──
 export async function createPrestationLavage(p) {
   const res = await saveOpRow("prestations_lavage", p);
