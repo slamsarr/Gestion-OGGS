@@ -1164,7 +1164,10 @@ export default function ClientsPro() {
 
           {/* Modal Encaisser & Ventiler Règlement de Bons */}
           {reglementBonsModal && (
-            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3">
+            <div
+              className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3"
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in duration-200">
                 {/* Entête Modal */}
                 <div className="p-4 border-b bg-emerald-800 text-white flex items-center justify-between">
