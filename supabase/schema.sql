@@ -8,7 +8,7 @@ create extension if not exists "pgcrypto";
 -- Types
 -- ---------------------------------------------------------------------
 do $$ begin
-  create type role_utilisateur as enum ('admin','gerant','superviseur','directeur','comptable');
+  create type role_utilisateur as enum ('admin','gerant','superviseur','directeur','comptable','pompiste','lavage','boutique','stock','maintenance','commercial','client_pro');
 exception when duplicate_object then null; end $$;
 do $$ begin
   create type produit_carburant as enum ('GASOIL','SUPER');
@@ -573,6 +573,10 @@ language sql stable security definer set search_path = public as
 create or replace function est_reseau() returns boolean
 language sql stable security definer set search_path = public as
   $$ select mon_role() in ('admin','superviseur','directeur','comptable') $$;
+
+create or replace function station_code_usr() returns text
+language sql stable security definer set search_path = public as
+  $$ select s.code from stations s join profils p on p.station_id = s.id where p.id = auth.uid() $$;
 
 alter table stations enable row level security;
 alter table profils enable row level security;
