@@ -28,7 +28,10 @@ for (const file of files) {
     masterSql += `\n-- >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n`;
     masterSql += `-- FICHIER : ${file}\n`;
     masterSql += `-- >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n\n`;
-    masterSql += fs.readFileSync(filePath, 'utf-8');
+    let content = fs.readFileSync(filePath, 'utf-8');
+    // Remplacer les alter type role_utilisateur add value car enum déjà complet au début
+    content = content.replace(/^alter type role_utilisateur add value.*$/gm, (m) => `-- (Déjà présent dans l'enum initial) ${m}`);
+    masterSql += content;
     masterSql += `\n\n`;
   }
 }

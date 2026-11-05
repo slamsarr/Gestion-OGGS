@@ -4,7 +4,9 @@
 -- points, les paliers de statut et l'historique des gains / dépenses.
 -- =====================================================================
 
-create type statut_fidelite as enum ('BRONZE', 'SILVER', 'GOLD', 'PLATINE');
+do $$ begin
+  create type statut_fidelite as enum ('BRONZE', 'SILVER', 'GOLD', 'PLATINE');
+exception when duplicate_object then null; end $$;
 
 -- Table des membres adhérents
 create table if not exists membres_fidelite (
@@ -41,7 +43,9 @@ create table if not exists recompenses_fidelite (
 );
 
 -- Historique des transactions de points
-create type type_transaction_fidelite as enum ('GAIN', 'UTILISATION', 'AJUSTEMENT', 'BONUS');
+do $$ begin
+  create type type_transaction_fidelite as enum ('GAIN', 'UTILISATION', 'AJUSTEMENT', 'BONUS');
+exception when duplicate_object then null; end $$;
 
 create table if not exists transactions_fidelite (
   id                uuid primary key default gen_random_uuid(),
