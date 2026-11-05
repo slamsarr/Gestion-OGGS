@@ -579,7 +579,8 @@ export function isCloudConfigured() {
   return Boolean(
     url &&
     key &&
-    !String(url).includes("VOTRE-PROJET") &&
+    String(url).startsWith("https://") &&
+    !String(url).includes("example") &&
     (String(key).startsWith("ey") || String(key).startsWith("sb_") || String(key).length > 20)
   );
 }
