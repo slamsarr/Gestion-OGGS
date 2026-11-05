@@ -610,7 +610,7 @@ do $$ declare p record; begin
   end loop;
 end $$;
 
-create policy stations_read on stations for select to authenticated using (true);
+create policy stations_read on stations for select to anon, authenticated using (true);
 create policy stations_admin on stations for insert to authenticated with check (mon_role() in ('directeur','admin'));
 create policy stations_admin_u on stations for update to authenticated using (mon_role() in ('directeur','admin'));
 create policy stations_admin_d on stations for delete to authenticated using (mon_role() in ('directeur','admin'));
@@ -621,13 +621,13 @@ create policy profils_update_self on profils for update to authenticated using (
   with check (id = auth.uid() and role = mon_role() and station_id is not distinct from ma_station());
 create policy profils_admin on profils for update to authenticated using (mon_role() in ('directeur','admin'));
 
-create policy prix_read on prix_carburant for select to authenticated using (true);
+create policy prix_read on prix_carburant for select to anon, authenticated using (true);
 create policy prix_admin on prix_carburant for all to authenticated using (mon_role() in ('directeur','admin')) with check (mon_role() in ('directeur','admin'));
 
-create policy produits_read on produits for select to authenticated using (true);
+create policy produits_read on produits for select to anon, authenticated using (true);
 create policy produits_admin on produits for all to authenticated using (mon_role() in ('directeur','admin','superviseur')) with check (mon_role() in ('directeur','admin','superviseur'));
 
-create policy cat_read on categories_depense for select to authenticated using (true);
+create policy cat_read on categories_depense for select to anon, authenticated using (true);
 create policy cat_admin on categories_depense for all to authenticated using (mon_role() in ('directeur','admin')) with check (mon_role() in ('directeur','admin'));
 
 create policy pistolets_select on pistolets for select to authenticated using (est_reseau() or station_id = ma_station());

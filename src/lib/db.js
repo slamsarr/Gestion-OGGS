@@ -576,7 +576,12 @@ export async function setLocalRef(ref) {
 export function isCloudConfigured() {
   const url = import.meta.env.VITE_SUPABASE_URL;
   const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  return Boolean(url && key && !String(url).includes("VOTRE-PROJET") && String(key).startsWith("ey"));
+  return Boolean(
+    url &&
+    key &&
+    !String(url).includes("VOTRE-PROJET") &&
+    (String(key).startsWith("ey") || String(key).startsWith("sb_") || String(key).length > 20)
+  );
 }
 
 /** Mode démo : désactivé en production cloud sauf si VITE_DEMO_MODE=true */
