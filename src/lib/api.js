@@ -3063,6 +3063,84 @@ export async function resetCollaborateurPassword(userId, newPassword = null) {
   return { ok: true, password: pwd };
 }
 
+// ── Remboursements d'écarts opérateurs (Pompistes, Laveurs, Caissiers) ──
+export async function saveRemboursementEcart(r) {
+  const row = {
+    ...r,
+    id: r.id || uuid(),
+    montant: Number(r.montant) || 0,
+    created_at: r.created_at || new Date().toISOString(),
+    maj_le: new Date().toISOString(),
+  };
+
+  // 1. Sauvegarder localement dans Dexie
+  await db.remboursements_ecarts.put(row);
+
+  // 2. Sync cloud Supabase avec les bonnes colonnes
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      const cloudRow = {
+        id: row.id,
+        station_id: row.station_id,
+        date: row.date,
+        operateur_id: row.operateur_id || null,
+        operateur_nom: row.operateur_nom,
+        role_operateur: row.role_operateur || "pompiste",
+        activite: row.activite || "CARBURANT",
+        montant: row.montant,
+        mode_paiement: row.mode_paiement || "ESPECES",
+        motif: row.motif || null,
+        reference: row.reference || null,
+        payload: row,
+        created_at: row.created_at,
+        maj_le: row.maj_le,
+      };
+      const { error } = await sb.from("remboursements_ecarts").upsert(cloudRow);
+      if (error) throw new Error(error.message);
+    } catch (e) {
+      console.warn("Sync cloud remboursements_ecarts échoué, mis en queue:", e.message);
+      await db.queue.add({
+        op: "upsert_remboursements_ecarts",
+        payload: row,
+        created_at: Date.now(),
+        error: String(e.message || e),
+      });
+      return { ok: true, pending: true, row };
+    }
+  }
+
+  return { ok: true, remboursement: row };
+}
+
+export async function listRemboursementsEcarts(stationId = null, date = null, operateurId = null) {
+  await ensureLocalSeed();
+  let rows = [];
+  try {
+    rows = await db.remboursements_ecarts.toArray();
+  } catch (e) {
+    console.warn("Erreur lecture remboursements_ecarts:", e);
+    return [];
+  }
+  const stations = await stationsDuReferentiel();
+  if (stationId) rows = rows.filter((r) => rowMatchesStation(r, stationId, stations));
+  if (date) rows = rows.filter((r) => r.date === date);
+  if (operateurId) {
+    rows = rows.filter(
+      (r) =>
+        r.operateur_id === operateurId ||
+        r.operateur_nom === operateurId ||
+        (r.operateur_nom && r.operateur_nom.toLowerCase() === String(operateurId).toLowerCase())
+    );
+  }
+  return rows.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+}
+
+export async function deleteRemboursementEcart(id) {
+  return deleteMetierRow("remboursements_ecarts", id);
+}
+
+
 
 
 

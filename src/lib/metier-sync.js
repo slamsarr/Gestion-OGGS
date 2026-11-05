@@ -23,6 +23,7 @@ export const TABLES_OPS_CLOUD = {
   ventes_boutique: "ventes_boutique",
   jauges_cuves: "jauges_cuves_ops",
   produits_boutique: "produits_boutique",
+  remboursements_ecarts: "remboursements_ecarts",
 };
 
 export const TABLES_META_METIER = {
@@ -45,6 +46,7 @@ export const TABLES_META_METIER = {
   membres_fidelite: { champCle: "id", station: "station_id" },
   transactions_fidelite: { champCle: "id", station: "station_id" },
   recompenses_fidelite: { champCle: "id", station: null },
+  remboursements_ecarts: { champCle: "id", station: "station_id" },
 };
 
 /** Nom Dexie local (peut différer de la clé API) */

@@ -31,6 +31,7 @@ import PrixCarburant from "./pages/PrixCarburant";
 import JournalIndex from "./pages/JournalIndex";
 import LubrifiantsCEPSA from "./pages/LubrifiantsCEPSA";
 import ValidationCloture from "./pages/ValidationCloture";
+import SuiviEcarts from "./pages/SuiviEcarts";
 import { rolesRoute } from "./lib/permissions";
 
 function RequireAuth({ children }) {
@@ -95,6 +96,7 @@ export default function App() {
         <Route path="/bilan-site" element={<RequireRole path="/bilan-site"><BilanJournalierSite /></RequireRole>} />
         <Route path="/stocks" element={<RequireRole path="/stocks"><Stocks /></RequireRole>} />
         <Route path="/finance" element={<RequireRole path="/finance"><Finance /></RequireRole>} />
+        <Route path="/ecarts" element={<RequireRole path="/ecarts"><SuiviEcarts /></RequireRole>} />
         <Route path="/depenses" element={<RequireRole path="/depenses"><Depenses /></RequireRole>} />
         <Route path="/clients-pro" element={<RequireRole path="/clients-pro"><ClientsPro /></RequireRole>} />
         <Route path="/fournisseurs" element={<RequireRole path="/fournisseurs"><Fournisseurs /></RequireRole>} />

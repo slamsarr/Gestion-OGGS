@@ -44,6 +44,7 @@ const NAV_POLES = [
     items: [
       { to: "/clients-pro", label: "Clients Pro", icon: "📄" },
       { to: "/comptes-clients-b2b", label: "Comptes B2B", icon: "📊" },
+      { to: "/ecarts", label: "Suivi des Écarts", icon: "⚖️" },
       { to: "/depenses", label: "Dépenses", icon: "🧾" },
       { to: "/finance", label: "Caisse & Trésorerie", icon: "💰" },
       { to: "/fournisseurs", label: "Fournisseurs", icon: "🚚" },

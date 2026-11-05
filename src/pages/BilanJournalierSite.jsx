@@ -9,6 +9,8 @@ import {
   listReglementsCreditJour,
   saveOperationCredit,
   loadReferentiel,
+  saveRemboursementEcart,
+  listRemboursementsEcarts,
 } from "../lib/api";
 import { F, fmtDate, n, T, todayISO } from "../lib/calcul";
 import { nombreEnLettres } from "../lib/facturation";
@@ -51,16 +53,32 @@ export default function BilanJournalierSite() {
   });
   const [savingReglement, setSavingReglement] = useState(false);
 
+  // Remboursements d'écarts opérateurs
+  const [remboursementsEcarts, setRemboursementsEcarts] = useState([]);
+  const [modalRemboursementOpen, setModalRemboursementOpen] = useState(false);
+  const [remboursementForm, setRemboursementForm] = useState({
+    operateur_id: "",
+    operateur_nom: "",
+    role_operateur: "pompiste",
+    activite: "CARBURANT",
+    montant: "",
+    mode_paiement: "ESPECES",
+    motif: "",
+    reference: "",
+  });
+  const [savingRemboursement, setSavingRemboursement] = useState(false);
+
   const loadAll = async (d) => {
     setLoading(true);
     try {
-      const [des, lav, vb, dep, ent, regs, ref] = await Promise.all([
+      const [des, lav, vb, dep, ent, regs, rembEcarts, ref] = await Promise.all([
         listDescentes(stationId, d).catch(() => []),
         listPrestationsLavage(stationId, d).catch(() => []),
         listVentesBoutique(stationId, d).catch(() => []),
         listDepenses(stationId, d).catch(() => []),
         listPrestationsEntretien(stationId, d).catch(() => []),
         listReglementsCreditJour(stationId, d).catch(() => []),
+        listRemboursementsEcarts(stationId, d).catch(() => []),
         loadReferentiel().catch(() => null),
       ]);
       setDescentes((des || []).map(normalizeDescente).filter(Boolean));
@@ -69,9 +87,56 @@ export default function BilanJournalierSite() {
       setDepenses(dep || []);
       setEntretiens(ent || []);
       setReglementsBons(regs || []);
+      setRemboursementsEcarts(rembEcarts || []);
       if (ref) setClientsList(listeClientsCredit(ref) || []);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleEnregistrerRemboursement = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const mt = n(remboursementForm.montant);
+    if (!remboursementForm.operateur_nom) {
+      alert("Veuillez saisir le nom de l'opérateur.");
+      return;
+    }
+    if (mt <= 0) {
+      alert("Veuillez saisir un montant supérieur à 0.");
+      return;
+    }
+
+    setSavingRemboursement(true);
+    try {
+      await saveRemboursementEcart({
+        station_id: stationId,
+        date: date || todayISO(),
+        operateur_id: remboursementForm.operateur_id || remboursementForm.operateur_nom.toLowerCase().replace(/\s+/g, "_"),
+        operateur_nom: remboursementForm.operateur_nom,
+        role_operateur: remboursementForm.role_operateur,
+        activite: remboursementForm.activite,
+        montant: mt,
+        mode_paiement: remboursementForm.mode_paiement,
+        motif: remboursementForm.motif,
+        reference: remboursementForm.reference,
+      });
+
+      setModalRemboursementOpen(false);
+      setRemboursementForm({
+        operateur_id: "",
+        operateur_nom: "",
+        role_operateur: "pompiste",
+        activite: "CARBURANT",
+        montant: "",
+        mode_paiement: "ESPECES",
+        motif: "",
+        reference: "",
+      });
+      await loadAll(date);
+    } catch (err) {
+      alert("Erreur lors de l'enregistrement : " + err.message);
+    } finally {
+      setSavingRemboursement(false);
     }
   };
 
@@ -411,14 +476,50 @@ export default function BilanJournalierSite() {
     };
   }, [depenses]);
 
+  // ────────────────── 7b. CALCULS REMBOURSEMENTS D'ÉCARTS OPÉRATEURS ──────────────────
+  const totRemboursementsEcarts = useMemo(() => {
+    const total = remboursementsEcarts.reduce((s, r) => s + n(r.montant || 0), 0);
+    const especes = remboursementsEcarts
+      .filter((r) => (r.mode_paiement || "ESPECES") === "ESPECES")
+      .reduce((s, r) => s + n(r.montant || 0), 0);
+    const wave = remboursementsEcarts
+      .filter((r) => r.mode_paiement === "WAVE")
+      .reduce((s, r) => s + n(r.montant || 0), 0);
+    const om = remboursementsEcarts
+      .filter((r) => r.mode_paiement === "OM")
+      .reduce((s, r) => s + n(r.montant || 0), 0);
+    const cb = remboursementsEcarts
+      .filter((r) => ["CB", "CARTE", "TPE"].includes(r.mode_paiement))
+      .reduce((s, r) => s + n(r.montant || 0), 0);
+    const cheque = remboursementsEcarts
+      .filter((r) => r.mode_paiement === "CHEQUE")
+      .reduce((s, r) => s + n(r.montant || 0), 0);
+    const virement = remboursementsEcarts
+      .filter((r) => r.mode_paiement === "VIREMENT")
+      .reduce((s, r) => s + n(r.montant || 0), 0);
+
+    return {
+      nb: remboursementsEcarts.length,
+      total,
+      especes,
+      wave,
+      om,
+      cb,
+      cheque,
+      virement,
+      digitaux: wave + om + cb + cheque + virement,
+    };
+  }, [remboursementsEcarts]);
+
   // ────────────────── 8. SYNTHÈSE TOTALE DU CHIFFRE D'AFFAIRES & ESPÈCES BANQUE ──────────────────
   const caBrutCarburant = totPompes.caCarburant + totPompes.caLub;
   const caBrutLavage = totLavage.ca;
   const caBrutBoutique = totBoutique.ca;
   const caBrutEntretien = totEntretien.ca;
   const caReglementsBons = totReglementsBons.total;
+  const caRemboursementsEcarts = totRemboursementsEcarts.total;
   const caGlobalSite =
-    caBrutCarburant + caBrutLavage + caBrutBoutique + caBrutEntretien + caReglementsBons;
+    caBrutCarburant + caBrutLavage + caBrutBoutique + caBrutEntretien + caReglementsBons + caRemboursementsEcarts;
 
   // Espèces nettes encaissées par chaque activité
   const especesCarburant = totPompes.especes;
@@ -426,6 +527,7 @@ export default function BilanJournalierSite() {
   const especesBoutique = totBoutique.especes;
   const especesEntretien = totEntretien.especes;
   const especesReglementsBons = totReglementsBons.especes;
+  const especesRemboursementsEcarts = totRemboursementsEcarts.especes;
 
   // Cumul brut des espèces collectées avant dépenses de caisse centrale
   const totalEspecesCollectees =
@@ -433,7 +535,8 @@ export default function BilanJournalierSite() {
     especesLavage +
     especesBoutique +
     especesEntretien +
-    especesReglementsBons;
+    especesReglementsBons +
+    especesRemboursementsEcarts;
 
   // Dépenses de la station payées en espèces
   const depensesEspecesStation = totDepenses.especes;
@@ -829,17 +932,27 @@ export default function BilanJournalierSite() {
                   Lavage, Boutique / Gaz, Entretien Atelier &amp; Règlements des Bons Carburant
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={() => setModalReglementOpen(true)}
-                className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors shrink-0"
-              >
-                <span>➕</span>
-                <span>Encaisser un Bon Client</span>
-              </button>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setModalRemboursementOpen(true)}
+                  className="px-3 py-1.5 rounded-lg bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors shrink-0"
+                >
+                  <span>⚖️</span>
+                  <span>Rembourser un Écart</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModalReglementOpen(true)}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors shrink-0"
+                >
+                  <span>➕</span>
+                  <span>Encaisser un Bon Client</span>
+                </button>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
               {/* ACTIVITÉ A : LAVAGE AUTO */}
               <div className="bg-white rounded-xl border shadow-sm p-3.5 space-y-3" style={{ borderColor: T.line }}>
                 <div className="flex items-center justify-between pb-2 border-b" style={{ borderColor: T.line }}>
@@ -987,6 +1100,43 @@ export default function BilanJournalierSite() {
                   </div>
                 </div>
               </div>
+
+              {/* ACTIVITÉ E : REMBOURSEMENTS D'ÉCARTS OPÉRATEURS */}
+              <div className="bg-white rounded-xl border shadow-sm p-3.5 space-y-3 border-teal-300 ring-1 ring-teal-200">
+                <div className="flex items-center justify-between pb-2 border-b border-teal-100">
+                  <div className="flex items-center gap-1.5 font-bold text-xs text-teal-950">
+                    <span className="text-base">⚖️</span>
+                    <span>Remb. Écarts Opérateurs</span>
+                  </div>
+                  <span className="text-[10px] font-bold bg-teal-100 text-teal-900 px-2 py-0.5 rounded-full">
+                    {totRemboursementsEcarts.nb} remb.
+                  </span>
+                </div>
+
+                <div className="space-y-1.5 text-xs">
+                  <div className="flex justify-between text-gray-600">
+                    <span>Total remboursé :</span>
+                    <strong className="text-teal-900 font-mono tabular">{F(totRemboursementsEcarts.total)} F</strong>
+                  </div>
+                  <div className="flex justify-between text-gray-600">
+                    <span>Wave / OM / CB / Autre :</span>
+                    <strong className="text-blue-700 font-mono tabular">{F(totRemboursementsEcarts.digitaux)} F</strong>
+                  </div>
+                  <div className="flex justify-between text-gray-600">
+                    <span>Pompistes / Laveurs :</span>
+                    <strong className="text-gray-700 font-mono tabular">{totRemboursementsEcarts.nb} op.</strong>
+                  </div>
+                </div>
+
+                <div className="p-2 rounded-lg bg-teal-50 border border-teal-300 text-center">
+                  <div className="text-[10px] uppercase font-bold text-teal-900">
+                    Net Espèces (Remboursé)
+                  </div>
+                  <div className="text-base font-black font-mono text-teal-950 tabular">
+                    +{F(especesRemboursementsEcarts)} F CFA
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* DÉTAIL DES RÈGLEMENTS DE BONS ENREGISTRÉS DU JOUR */}
@@ -1015,6 +1165,47 @@ export default function BilanJournalierSite() {
                         </span>
                         <div className="font-mono font-black text-gray-900 tabular mt-0.5">
                           {F(r.depot)} F
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* DÉTAIL DES REMBOURSEMENTS D'ÉCARTS OPÉRATEURS DU JOUR */}
+            {remboursementsEcarts.length > 0 && (
+              <div className="bg-teal-50/50 border border-teal-200 rounded-xl p-3.5 space-y-2 text-xs">
+                <div className="font-bold text-teal-950 flex items-center justify-between pb-1 border-b border-teal-200">
+                  <span>Détail des Remboursements d'Écarts Opérateurs ({remboursementsEcarts.length}) :</span>
+                  <span className="font-extrabold text-teal-900">Total Remboursé : {F(totRemboursementsEcarts.total)} F</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pt-1">
+                  {remboursementsEcarts.map((remb, idx) => (
+                    <div key={remb.id || idx} className="p-2 rounded bg-white border border-teal-200 shadow-2xs flex items-center justify-between">
+                      <div>
+                        <div className="font-bold text-gray-900 flex items-center gap-1">
+                          <span>{remb.operateur_nom}</span>
+                          <span className="text-[10px] text-gray-500 font-normal">
+                            ({remb.role_operateur || "opérateur"})
+                          </span>
+                        </div>
+                        <div className="text-[10.5px] text-gray-500 truncate max-w-xs">
+                          {remb.activite} · {remb.motif || "Remboursement écart"}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className={`inline-block px-1.5 py-0.5 rounded text-[9.5px] font-bold ${
+                          remb.mode_paiement === "ESPECES" ? "bg-emerald-100 text-emerald-800" :
+                          remb.mode_paiement === "WAVE" ? "bg-blue-100 text-blue-800" :
+                          remb.mode_paiement === "OM" ? "bg-orange-100 text-orange-800" :
+                          remb.mode_paiement === "CHEQUE" ? "bg-purple-100 text-purple-800" :
+                          "bg-gray-100 text-gray-800"
+                        }`}>
+                          {remb.mode_paiement}
+                        </span>
+                        <div className="font-mono font-black text-gray-900 tabular mt-0.5">
+                          {F(remb.montant)} F
                         </div>
                       </div>
                     </div>
@@ -1211,12 +1402,33 @@ export default function BilanJournalierSite() {
                       +{F(especesReglementsBons)} F
                     </td>
                   </tr>
+
+                  <tr className="hover:bg-slate-800/30 bg-teal-950/20">
+                    <td className="py-2 px-3 font-bold text-teal-300 flex items-center gap-2">
+                      <span>⚖️</span> <span>Remboursements Écarts Opérateurs</span>
+                    </td>
+                    <td className="py-2 px-3 text-right font-mono tabular text-teal-200">
+                      {F(caRemboursementsEcarts)} F
+                    </td>
+                    <td className="py-2 px-3 text-right font-mono tabular text-blue-400">
+                      {F(totRemboursementsEcarts.digitaux)} F
+                    </td>
+                    <td className="py-2 px-3 text-right font-mono tabular text-gray-500">
+                      —
+                    </td>
+                    <td className="py-2 px-3 text-right font-mono tabular text-gray-500">
+                      —
+                    </td>
+                    <td className="py-2 px-3 text-right font-mono font-black tabular text-teal-300 bg-slate-900">
+                      +{F(especesRemboursementsEcarts)} F
+                    </td>
+                  </tr>
                 </tbody>
 
                 <tfoot className="border-t-2 border-slate-700 bg-slate-900/90 font-bold">
                   <tr>
                     <td colSpan={5} className="py-2.5 px-3 uppercase text-gray-300">
-                      SOUS-TOTAL ESPÈCES COLLECTÉES (ACTIVITÉS + RÈGLEMENTS BONS)
+                      SOUS-TOTAL ESPÈCES COLLECTÉES (ACTIVITÉS + BONS + REMB. ÉCARTS)
                     </td>
                     <td className="py-2.5 px-3 text-right font-mono text-sm font-black tabular text-emerald-400 bg-slate-900">
                       {F(totalEspecesCollectees)} F CFA
@@ -1260,7 +1472,7 @@ export default function BilanJournalierSite() {
               </div>
 
               {/* Détail montants */}
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs py-1">
+              <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-xs py-1">
                 <div className="p-2 bg-gray-50 rounded border">
                   <div className="text-[10px] text-gray-500">Espèces Carburant :</div>
                   <div className="font-bold font-mono text-gray-900">{F(especesCarburant)} F</div>
@@ -1280,6 +1492,10 @@ export default function BilanJournalierSite() {
                 <div className="p-2 bg-emerald-50 rounded border border-emerald-300">
                   <div className="text-[10px] text-emerald-800 font-bold">Espèces Bons Clients :</div>
                   <div className="font-bold font-mono text-emerald-950">+{F(especesReglementsBons)} F</div>
+                </div>
+                <div className="p-2 bg-teal-50 rounded border border-teal-300">
+                  <div className="text-[10px] text-teal-800 font-bold">Espèces Remb. Écarts :</div>
+                  <div className="font-bold font-mono text-teal-950">+{F(especesRemboursementsEcarts)} F</div>
                 </div>
               </div>
 
@@ -1763,6 +1979,184 @@ export default function BilanJournalierSite() {
                   className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold shadow-xs transition-colors disabled:opacity-50"
                 >
                   {savingReglement ? "Enregistrement..." : "✓ Valider l'Encaissement"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL ENREGISTRER UN REMBOURSEMENT D'ÉCART OPÉRATEUR */}
+      {modalRemboursementOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-3"
+          onClick={() => {
+            if (savingRemboursement) return;
+            setModalRemboursementOpen(false);
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-teal-300"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Entête */}
+            <div className="p-4 bg-teal-800 text-white flex items-center justify-between">
+              <div>
+                <h3 className="font-black text-sm flex items-center gap-1.5">
+                  <span>⚖️</span>
+                  <span>Rembourser un Écart Opérateur</span>
+                </h3>
+                <p className="text-[11px] text-teal-200 mt-0.5">
+                  Régularisation manquant · Bilan du {fmtDate(date)}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalRemboursementOpen(false)}
+                className="text-white hover:text-teal-200 font-bold text-lg w-7 h-7 rounded flex items-center justify-center hover:bg-teal-700/50"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Formulaire */}
+            <form onSubmit={handleEnregistrerRemboursement} className="p-4 space-y-3 text-xs">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-700 uppercase mb-1">
+                    Nom Opérateur *
+                  </label>
+                  <input
+                    type="text"
+                    value={remboursementForm.operateur_nom}
+                    onChange={(e) => setRemboursementForm({ ...remboursementForm, operateur_nom: e.target.value })}
+                    placeholder="ex: Mamadou Diallo"
+                    className="w-full border rounded-lg p-2 font-semibold bg-white text-gray-900 border-gray-300 focus:ring-2 focus:ring-teal-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-700 uppercase mb-1">
+                    Rôle de l'Opérateur
+                  </label>
+                  <select
+                    value={remboursementForm.role_operateur}
+                    onChange={(e) => setRemboursementForm({ ...remboursementForm, role_operateur: e.target.value })}
+                    className="w-full border rounded-lg p-2 font-bold bg-white text-gray-900 border-gray-300"
+                  >
+                    <option value="pompiste">⛽ Pompiste</option>
+                    <option value="laveur">🚿 Laveur</option>
+                    <option value="caissier">🏪 Caissier Boutique</option>
+                    <option value="technicien">🔧 Technicien / Atelier</option>
+                    <option value="autre">👤 Autre</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-700 uppercase mb-1">
+                    Activité Concernée
+                  </label>
+                  <select
+                    value={remboursementForm.activite}
+                    onChange={(e) => setRemboursementForm({ ...remboursementForm, activite: e.target.value })}
+                    className="w-full border rounded-lg p-2 font-bold bg-white text-gray-900 border-gray-300"
+                  >
+                    <option value="CARBURANT">⛽ Carburant</option>
+                    <option value="LAVAGE">🚿 Lavage</option>
+                    <option value="BOUTIQUE">🏪 Boutique & Gaz</option>
+                    <option value="ENTRETIEN">🔧 Entretien & Vidange</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-700 uppercase mb-1">
+                    Mode d'Encaissement *
+                  </label>
+                  <select
+                    value={remboursementForm.mode_paiement}
+                    onChange={(e) => setRemboursementForm({ ...remboursementForm, mode_paiement: e.target.value })}
+                    className="w-full border rounded-lg p-2 font-bold bg-white text-gray-900 border-gray-300"
+                  >
+                    <option value="ESPECES">💵 Espèces (Cash)</option>
+                    <option value="WAVE">📱 Wave</option>
+                    <option value="OM">📱 Orange Money</option>
+                    <option value="CB">💳 Carte Bancaire / TPE</option>
+                    <option value="CHEQUE">🏦 Chèque</option>
+                    <option value="VIREMENT">💳 Virement</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-bold text-teal-900 uppercase mb-1">
+                    Montant Remboursé (FCFA) *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={remboursementForm.montant}
+                    onChange={(e) => setRemboursementForm({ ...remboursementForm, montant: e.target.value })}
+                    placeholder="0"
+                    className="w-full border-2 border-teal-500 rounded-lg p-2 font-black text-teal-950 bg-teal-50/60 tabular"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-700 uppercase mb-1">
+                    N° Quittance / Réf.
+                  </label>
+                  <input
+                    type="text"
+                    value={remboursementForm.reference}
+                    onChange={(e) => setRemboursementForm({ ...remboursementForm, reference: e.target.value })}
+                    placeholder="ex: REC-0012"
+                    className="w-full border rounded-lg p-2 bg-white text-gray-900 border-gray-300"
+                  >
+                  </input>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-gray-700 uppercase mb-1">
+                  Motif / Observations
+                </label>
+                <input
+                  type="text"
+                  value={remboursementForm.motif}
+                  onChange={(e) => setRemboursementForm({ ...remboursementForm, motif: e.target.value })}
+                  placeholder="ex: Régularisation manquant quart nuit du 29/10"
+                  className="w-full border rounded-lg p-2 bg-white text-gray-900 border-gray-300"
+                />
+              </div>
+
+              {remboursementForm.mode_paiement === "ESPECES" && n(remboursementForm.montant) > 0 && (
+                <div className="p-2.5 rounded-lg bg-teal-50 border border-teal-300 text-teal-900 text-[11px] flex items-center gap-2">
+                  <span className="text-base">💡</span>
+                  <span>
+                    Ce remboursement en <strong>Espèces (+{F(n(remboursementForm.montant))} F)</strong> s'ajoutera automatiquement au <strong>Dépôt Banque</strong> du jour !
+                  </span>
+                </div>
+              )}
+
+              <div className="pt-2 flex items-center justify-end gap-2 border-t">
+                <button
+                  type="button"
+                  onClick={() => setModalRemboursementOpen(false)}
+                  className="px-3.5 py-2 rounded-lg border text-gray-700 font-bold hover:bg-gray-100 transition-colors"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingRemboursement}
+                  className="px-4 py-2 rounded-lg bg-teal-700 hover:bg-teal-800 text-white font-bold shadow-xs transition-colors disabled:opacity-50"
+                >
+                  {savingRemboursement ? "Enregistrement..." : "✓ Valider le Remboursement"}
                 </button>
               </div>
             </form>
