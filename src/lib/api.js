@@ -1,5 +1,6 @@
 import { db, ensureLocalSeed, getLocalRef, isCloudConfigured, setLocalRef } from "./db";
 import { getSupabase } from "./supabase";
+import { createClient } from "@supabase/supabase-js";
 import { calculer, n, todayISO, uuid, F } from "./calcul";
 import { codeClientCanonique, codesClientEquivalents, listeClientsCredit, referentielFromSeed, SEED_WASH_PACKS, SEED_WASH_SERVICES, SEED_WASH_PRICING, SEED_WASH_BAYS, SEED_SERVICES_ENTRETIEN, SEED_BAIES_ENTRETIEN } from "./seed";
 import {
@@ -2934,7 +2935,42 @@ export async function creerCollaborateur({ nom_complet, role = "pompiste", stati
 
   const generatedEmail = email && email.trim() ? email.trim().toLowerCase() : `${cleanNom}@starenergy.sn`;
   const generatedPassword = password && password.trim() ? password.trim() : "Star2026!";
-  const userId = `u-${role}-${Date.now().toString(36)}`;
+  let userId = `u-${role}-${Date.now().toString(36)}`;
+
+  // 1. Si Supabase Cloud est configuré, créer le compte réel dans Supabase Auth
+  if (isCloudConfigured()) {
+    try {
+      const anonClient = createClient(
+        import.meta.env.VITE_SUPABASE_URL,
+        import.meta.env.VITE_SUPABASE_ANON_KEY,
+        { auth: { persistSession: false, autoRefreshToken: false } }
+      );
+
+      const { data: authData, error: authErr } = await anonClient.auth.signUp({
+        email: generatedEmail,
+        password: generatedPassword,
+        options: {
+          data: {
+            nom_complet: nom_complet.trim(),
+            role: role || "pompiste",
+            station_id: station_id || null,
+            telephone: telephone ? telephone.trim() : "",
+          },
+        },
+      });
+
+      if (authErr) {
+        console.warn("Erreur signUp Supabase:", authErr.message);
+        if (authErr.message?.toLowerCase().includes("already registered")) {
+          return { ok: false, error: "Un compte avec cette adresse email existe déjà." };
+        }
+      } else if (authData?.user?.id) {
+        userId = authData.user.id;
+      }
+    } catch (err) {
+      console.warn("Exception auth.signUp:", err);
+    }
+  }
 
   const newUser = {
     id: userId,
@@ -2946,13 +2982,13 @@ export async function creerCollaborateur({ nom_complet, role = "pompiste", stati
     telephone: telephone ? telephone.trim() : "",
     actif: true,
     created_at: new Date().toISOString(),
-    quart_config: quart_config, // Save quart configuration
+    quart_config: quart_config,
   };
 
-  // 1. Sauvegarde dans Dexie users
+  // 2. Sauvegarde dans Dexie users
   await db.users.put(newUser);
 
-  // 2. Si le rôle est pompiste, l'ajouter également à la table pompistes pour les descentes
+  // 3. Si le rôle est pompiste, l'ajouter également à la table pompistes pour les descentes
   if (role === "pompiste") {
     try {
       const pompisteData = {
@@ -2969,9 +3005,9 @@ export async function creerCollaborateur({ nom_complet, role = "pompiste", stati
     } catch {}
   }
 
-  // 3. Si cloud est configuré, insérer dans Supabase profils
+  // 4. Mettre à jour Supabase profils et pompistes avec le vrai identifiant
   const sb = getSupabase();
-  if (sb) {
+  if (sb && userId) {
     try {
       await sb.from("profils").upsert({
         id: userId,
@@ -2980,10 +3016,8 @@ export async function creerCollaborateur({ nom_complet, role = "pompiste", stati
         station_id: station_id || null,
         telephone: telephone ? telephone.trim() : "",
         actif: true,
-        quart_config: quart_config,
       });
-      
-      // Si pompiste, aussi mettre à jour la table pompistes dans Supabase
+
       if (role === "pompiste") {
         await sb.from("pompistes").upsert({
           id: `pomp-${userId}`,
@@ -3013,6 +3047,32 @@ export async function creerCollaborateur({ nom_complet, role = "pompiste", stati
 
 export async function listCollaborateurs(stationId = null) {
   await ensureLocalSeed();
+
+  // Si cloud actif, rafraîchir depuis Supabase profils
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      const { data: cloudProfils } = await sb.from("profils").select("*, stations(code, nom)");
+      if (cloudProfils && cloudProfils.length > 0) {
+        for (const p of cloudProfils) {
+          await db.users.put({
+            id: p.id,
+            email: p.email || p.telephone || `${(p.nom_complet || "user").toLowerCase().replace(/[^a-z0-9]/g, ".")}@starenergy.sn`,
+            nom_complet: p.nom_complet || "Utilisateur",
+            role: p.role || "pompiste",
+            station_id: p.station_id || null,
+            station_nom: p.stations?.nom,
+            station_code: p.stations?.code,
+            telephone: p.telephone || "",
+            actif: p.actif !== false,
+          });
+        }
+      }
+    } catch (e) {
+      console.warn("Erreur lecture cloud profils:", e);
+    }
+  }
+
   let localUsers = await db.users.toArray().catch(() => []);
   if (localUsers.length === 0) {
     localUsers = [...DEMO_USERS];
@@ -3031,6 +3091,16 @@ export async function deleteCollaborateur(userId) {
     const toDel = p.find((x) => x.user_id === userId);
     if (toDel) await db.pompistes.delete(toDel.id);
   } catch {}
+
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      await sb.from("profils").delete().eq("id", userId);
+      await sb.from("pompistes").delete().eq("user_id", userId);
+    } catch (e) {
+      console.warn("Suppression cloud profil:", e);
+    }
+  }
   return { ok: true };
 }
 

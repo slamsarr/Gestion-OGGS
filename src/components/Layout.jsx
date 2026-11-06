@@ -52,16 +52,16 @@ const NAV_POLES = [
   },
   {
     id: "gestion",
-    label: "Équipe & Config",
-    icon: "⚙️",
+    label: "Équipe & Profils",
+    icon: "👥",
     items: [
-      { to: "/configuration", label: "Configuration", icon: "⚙️" },
+      { to: "/parametres", label: "Utilisateurs & Profils", icon: "👤" },
       { to: "/pompistes", label: "Équipe & Quarts", icon: "👥" },
       { to: "/gestion-quarts", label: "Planning Quarts", icon: "⏰" },
+      { to: "/configuration", label: "Configuration", icon: "⚙️" },
       { to: "/pistolets", label: "Pistolets & Pompes", icon: "🔫" },
       { to: "/prix-carburant", label: "Prix Carburant", icon: "⛽" },
       { to: "/lubrifiants-cepsa", label: "Lubrifiants CEPSA", icon: "🛢️" },
-      { to: "/parametres", label: "Paramètres Réseau", icon: "👥" },
     ],
   },
 ];
