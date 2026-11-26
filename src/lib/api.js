@@ -1455,6 +1455,42 @@ export async function updateDescente(id, patch) {
 
 export async function listDescentes(stationId, date, operateurId) {
   await ensureLocalSeed();
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      let query = sb
+        .from("descentes_pompistes")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(500);
+      if (date) query = query.eq("date", date);
+      const { data, error } = await query;
+      if (!error && Array.isArray(data)) {
+        for (const row of data) {
+          const payload = row.payload || {};
+          const fullRow = {
+            ...payload,
+            id: row.id,
+            station_id: row.station_id || payload.station_id,
+            date: row.date || payload.date,
+            statut: row.statut || payload.statut || "EN_COURS",
+            pompiste_id: row.pompiste_id || payload.pompiste_id,
+            created_at: row.created_at || payload.created_at,
+            maj_le: row.maj_le || payload.maj_le,
+          };
+          try {
+            await db.descentes.put(fullRow);
+            if (Array.isArray(fullRow.bons) && fullRow.bons.length > 0) {
+              await syncBonsFromDescente(fullRow);
+            }
+          } catch {}
+        }
+      }
+    } catch (e) {
+      console.warn("Notice: sync cloud descentes", e);
+    }
+  }
+
   let rows = await db.descentes.toArray();
   const stations = await stationsDuReferentiel();
   if (stationId) rows = rows.filter((d) => rowMatchesStation(d, stationId, stations));
@@ -1642,6 +1678,36 @@ export async function createPrestationLavage(p) {
 
 export async function listPrestationsLavage(stationId, date, operateurId) {
   await ensureLocalSeed();
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      let query = sb
+        .from("prestations_lavage")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(500);
+      if (date) query = query.eq("date", date);
+      const { data, error } = await query;
+      if (!error && Array.isArray(data)) {
+        for (const row of data) {
+          const payload = row.payload || row;
+          const fullRow = {
+            ...payload,
+            id: row.id,
+            station_id: row.station_id || payload.station_id,
+            date: row.date || payload.date,
+            statut: row.statut || payload.statut,
+            created_at: row.created_at || payload.created_at,
+            maj_le: row.maj_le || payload.maj_le,
+          };
+          try { await db.prestations_lavage.put(fullRow); } catch {}
+        }
+      }
+    } catch (e) {
+      console.warn("Notice: sync cloud lavage", e);
+    }
+  }
+
   let rows = await db.prestations_lavage.toArray();
   const stations = await stationsDuReferentiel();
   if (stationId) rows = rows.filter((p) => rowMatchesStation(p, stationId, stations));
@@ -2139,8 +2205,38 @@ export async function deleteBaieEntretien(id) {
 /** Prestations / Ordres de Réparation d'entretien */
 export async function listPrestationsEntretien(stationId, date, operateurId) {
   await ensureLocalSeed();
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      let query = sb
+        .from("prestations_entretien")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(500);
+      if (date) query = query.eq("date", date);
+      const { data, error } = await query;
+      if (!error && Array.isArray(data)) {
+        for (const row of data) {
+          const payload = row.payload || row;
+          const fullRow = {
+            ...payload,
+            id: row.id,
+            station_id: row.station_id || payload.station_id,
+            date: row.date || payload.date,
+            created_at: row.created_at || payload.created_at,
+            maj_le: row.maj_le || payload.maj_le,
+          };
+          try { await db.prestations_entretien.put(fullRow); } catch {}
+        }
+      }
+    } catch (e) {
+      console.warn("Notice: sync cloud entretien", e);
+    }
+  }
+
   let rows = await db.prestations_entretien.toArray().catch(() => []);
-  if (stationId) rows = rows.filter((p) => p.station_id === stationId);
+  const stations = await stationsDuReferentiel();
+  if (stationId) rows = rows.filter((p) => rowMatchesStation(p, stationId, stations));
   if (date) rows = rows.filter((p) => p.date === date);
   // Visibilité restreinte : un mécanicien ne voit que ses propres interventions
   if (operateurId) {
@@ -2341,6 +2437,35 @@ export async function createVenteBoutique(v) {
 
 export async function listVentesBoutique(stationId, date, operateurId) {
   await ensureLocalSeed();
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      let query = sb
+        .from("ventes_boutique")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(500);
+      if (date) query = query.eq("date", date);
+      const { data, error } = await query;
+      if (!error && Array.isArray(data)) {
+        for (const row of data) {
+          const payload = row.payload || row;
+          const fullRow = {
+            ...payload,
+            id: row.id,
+            station_id: row.station_id || payload.station_id,
+            date: row.date || payload.date,
+            created_at: row.created_at || payload.created_at,
+            maj_le: row.maj_le || payload.maj_le,
+          };
+          try { await db.ventes_boutique.put(fullRow); } catch {}
+        }
+      }
+    } catch (e) {
+      console.warn("Notice: sync cloud boutique", e);
+    }
+  }
+
   let rows = await db.ventes_boutique.toArray();
   const stations = await stationsDuReferentiel();
   if (stationId) rows = rows.filter((v) => rowMatchesStation(v, stationId, stations));
@@ -2379,6 +2504,35 @@ export async function deleteVenteBoutique(id) {
 // ── VAGUE 2 : Rapprochement Cuves & Jauges physiques (§2 & §37) ──
 export async function listJaugesCuves(stationId, date) {
   await ensureLocalSeed();
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      let query = sb
+        .from("jauges_cuves_ops")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(500);
+      if (date) query = query.eq("date", date);
+      const { data, error } = await query;
+      if (!error && Array.isArray(data)) {
+        for (const row of data) {
+          const payload = row.payload || row;
+          const fullRow = {
+            ...payload,
+            id: row.id,
+            station_id: row.station_id || payload.station_id,
+            date: row.date || payload.date,
+            created_at: row.created_at || payload.created_at,
+            maj_le: row.maj_le || payload.maj_le,
+          };
+          try { await db.jauges_cuves.put(fullRow); } catch {}
+        }
+      }
+    } catch (e) {
+      console.warn("Notice: sync cloud jauges", e);
+    }
+  }
+
   let rows = await db.jauges_cuves.toArray();
   const stations = await stationsDuReferentiel();
   if (stationId) rows = rows.filter((j) => rowMatchesStation(j, stationId, stations));
