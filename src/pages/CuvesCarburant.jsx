@@ -44,31 +44,51 @@ export default function CuvesCarburant() {
   const [newCuveForm, setNewCuveForm] = useState({ nom: "", produit: "GASOIL", capacite_l: 30000 });
   const [filtreHistoriqueCuve, setFiltreHistoriqueCuve] = useState("ALL");
 
-  // ── Formulaire Rapport de Dépotage Complet (En-tête Camion) ──
+  // ── Formulaire Rapport de Dépotage Complet (En-tête Camion & 5 Étapes) ──
+  const genererNumeroDepotage = () => {
+    const d = new Date();
+    const ymd = d.toISOString().slice(0, 10).replace(/-/g, "");
+    const rand = Math.floor(100 + Math.random() * 900);
+    return `DEP-${(stationId || "ST").toUpperCase().slice(0, 4)}-${ymd}-${rand}`;
+  };
+
   const [depotageForm, setDepotageForm] = useState({
+    numero_depotage: `DEP-${(stationId || "ST").toUpperCase().slice(0, 4)}-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.floor(100 + Math.random() * 900)}`,
     date: todayISO(),
+    heure_arrivee: "09:45",
     heure_debut: "10:00",
     heure_fin: "11:15",
     produit: "GASOIL / SUPER",
     cuve_id: "",
-    numero_bl: "",
     fournisseur: "TOTAL Energies Marketing",
     transporteur: "STT Carburants Sénégal",
-    immatriculation_camion: "",
+    numero_commande: "",
+    numero_bl: "",
+    immatriculation_camion: "", // Tracteur
+    immatriculation_remorque: "", // Citerne / Remorque
     nom_chauffeur: "",
     numero_permis: "",
-    volume_bl: "",
-    // Sécurité & Qualité
-    prise_de_terre_branchee: true,
-    extincteurs_en_place: true,
-    moteur_coupe_cales: true,
+    agent_controleur: profil?.nom_complet || "Agent Contrôleur",
+    responsable_reception: profil?.nom_complet || "Chef de Station",
+
+    // Checklist de Sécurité & Conformité en 10 points (procédure standard de dépotage)
+    check_documents_identite: true,
+    check_produit_cuve_conforme: true,
+    check_capacite_creux_validee: true,
+    check_raccords_flexibles_etanches: true,
+    check_balisage_extincteurs_prets: true,
+    check_prise_de_terre_branchee: true,
+    check_moteur_coupe_cales_posees: true,
+    check_pistolets_distribution_arretes: true,
+    check_absence_fuite_surveillance: true,
+    check_test_eau_fond_cuve_negatif: true, // true = absence d'eau (conforme)
+    check_test_eau_camion_negatif: true,    // true = absence d'eau (conforme)
+
     scelles_conformes: true,
     numeros_scelles: "",
-    test_eau_fond_cuve: false, // false = pas d'eau (conforme)
-    test_eau_camion: false, // false = absence d'eau
     densite_mesuree: "0.835",
     temperature_c: "28",
-    responsable_reception: profil?.nom_complet || "Chef de Station",
+    observations_chauffeur: "",
     observations: "",
   });
 
@@ -82,6 +102,7 @@ export default function CuvesCarburant() {
       cuve_nom: "Cuve 1 Gasoil",
       numero_bl: "",
       numero_scelle: "",
+      volume_commande: "15000",
       volume_bl: "15000",
       jauge_camion_avant: "Repère flèche conforme",
       reste_camion_litres: "0",
@@ -98,6 +119,7 @@ export default function CuvesCarburant() {
       cuve_nom: "Cuve 1 Super",
       numero_bl: "",
       numero_scelle: "",
+      volume_commande: "10000",
       volume_bl: "10000",
       jauge_camion_avant: "Repère flèche conforme",
       reste_camion_litres: "0",
@@ -231,10 +253,12 @@ export default function CuvesCarburant() {
   const compartimentsCalcules = useMemo(() => {
     return compartiments.map((c) => {
       const volBl = n(c.volume_bl);
+      const volCommande = n(c.volume_commande) || volBl;
       const jAv = n(c.jauge_cuve_avant_l);
       const jAp = n(c.jauge_cuve_apres_l);
+      const stockTheoriqueApres = jAv + volBl;
       const volRecu = jAp > 0 && jAp >= jAv ? Math.max(0, jAp - jAv) : 0;
-      const ecartL = volRecu > 0 ? volRecu - volBl : 0;
+      const ecartL = volRecu > 0 ? volRecu - volBl : 0; // = Stock final mesuré - Stock théorique après réception
       const ecartPct = volBl > 0 && volRecu > 0 ? (ecartL / volBl) * 100 : 0;
       const toleranceOk = Math.abs(ecartPct) <= 0.20;
       const manquantL = ecartL < 0 ? Math.abs(ecartL) : 0;
@@ -255,7 +279,9 @@ export default function CuvesCarburant() {
         target_cuve: targetCuve,
         creux_cuve: creuxCuve,
         risque_trop_plein: risqueTropPlein,
+        volume_commande_num: volCommande,
         volume_bl_num: volBl,
+        stock_theorique_apres: stockTheoriqueApres,
         volume_decharge_cuve: volRecu,
         ecart_litres: ecartL,
         ecart_pourcentage: Number(ecartPct.toFixed(2)),
@@ -270,6 +296,7 @@ export default function CuvesCarburant() {
   }, [compartiments, cuvesWithLatestJauge]);
 
   // Totaux globaux camion citerne
+  const totalVolumeCommandeCamion = compartimentsCalcules.reduce((s, c) => s + c.volume_commande_num, 0);
   const totalVolumeBlCamion = compartimentsCalcules.reduce((s, c) => s + c.volume_bl_num, 0);
   const totalVolumeRecuCamion = compartimentsCalcules.reduce((s, c) => s + c.volume_decharge_cuve, 0);
   const totalEcartCamionL = totalVolumeRecuCamion > 0 ? totalVolumeRecuCamion - totalVolumeBlCamion : 0;
@@ -440,8 +467,11 @@ export default function CuvesCarburant() {
     const payload = {
       ...depotageForm,
       station_id: stationId,
+      station_nom: profil?.station_nom || "Station Hann Maristes",
+      numero_depotage: depotageForm.numero_depotage || genererNumeroDepotage(),
       produit: Array.from(new Set(compartimentsCalcules.map((c) => c.produit))).join(" / "),
       numero_bl: depotageForm.numero_bl.trim(),
+      volume_commande: totalVolumeCommandeCamion,
       volume_bl: totalVolumeBlCamion,
       volume_decharge_reel: totalVolumeRecuCamion,
       ecart_litres: totalEcartCamionL,
@@ -458,28 +488,40 @@ export default function CuvesCarburant() {
       flash(`✅ Rapport de dépotage convoi validé avec succès !`, "ok");
       setPvModal(res.rapport);
       setDepotageForm({
+        numero_depotage: genererNumeroDepotage(),
         date: todayISO(),
-        heure_debut: "",
-        heure_fin: "",
+        heure_arrivee: "09:45",
+        heure_debut: "10:00",
+        heure_fin: "11:15",
         produit: "GASOIL / SUPER",
         cuve_id: "",
+        fournisseur: "TOTAL Energies Marketing",
+        transporteur: "STT Carburants Sénégal",
+        numero_commande: "",
         numero_bl: "",
-        fournisseur: "",
-        transporteur: "",
         immatriculation_camion: "",
+        immatriculation_remorque: "",
         nom_chauffeur: "",
         numero_permis: "",
-        volume_bl: "",
-        prise_de_terre_branchee: true,
-        extincteurs_en_place: true,
-        moteur_coupe_cales: true,
+        agent_controleur: profil?.nom_complet || "Agent Contrôleur",
+        responsable_reception: profil?.nom_complet || "Chef de Station",
+
+        check_documents_identite: true,
+        check_produit_cuve_conforme: true,
+        check_capacite_creux_validee: true,
+        check_raccords_flexibles_etanches: true,
+        check_balisage_extincteurs_prets: true,
+        check_prise_de_terre_branchee: true,
+        check_moteur_coupe_cales_posees: true,
+        check_pistolets_distribution_arretes: true,
+        check_absence_fuite_surveillance: true,
+        check_test_eau_negatif: true,
+
         scelles_conformes: true,
         numeros_scelles: "",
-        test_eau_fond_cuve: false,
-        test_eau_camion: false,
-        densite_mesuree: "",
-        temperature_c: "",
-        responsable_reception: profil?.nom_complet || "Chef de Station",
+        densite_mesuree: "0.835",
+        temperature_c: "28",
+        observations_chauffeur: "",
         observations: "",
       });
       setCompartiments([
@@ -488,10 +530,12 @@ export default function CuvesCarburant() {
           numero_compartiment: "C1",
           produit: "GASOIL",
           cuve_station_id: "cuve-gasoil-1",
+          cuve_nom: "Cuve 1 Gasoil",
           numero_bl: "",
           numero_scelle: "",
-          volume_bl: "",
-          jauge_camion_avant: "",
+          volume_commande: "15000",
+          volume_bl: "15000",
+          jauge_camion_avant: "Repère flèche conforme",
           reste_camion_litres: "0",
           jauge_cuve_avant_cm: "",
           jauge_cuve_avant_l: "",
@@ -1031,54 +1075,126 @@ export default function CuvesCarburant() {
         </div>
       )}
 
-      {/* ────────────────── ONGLET 2 : NOUVEAU DÉPOTAGE (PV COMPLET MULTI-COMPARTIMENTS) ────────────────── */}
+      {/* ────────────────── ONGLET 2 : NOUVEAU DÉPOTAGE (PROCESSUS PÉTROLIER EN 5 ÉTAPES) ────────────────── */}
       {tab === "depotage" && (
         <form onSubmit={handleValiderDepotage} className="space-y-4">
-          {/* Bloc 1 : Identification du convoi & transporteur */}
+          {/* Bannière d'introduction au processus pétrolier */}
+          <div className="bg-gradient-to-r from-blue-900 via-slate-900 to-amber-950 text-white rounded-2xl p-4 shadow-md border border-blue-950">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">⛽</span>
+                  <h2 className="text-sm sm:text-base font-black tracking-tight uppercase">
+                    Procédure Officielle de Dépotage Citerne
+                  </h2>
+                  <span className="text-[10px] font-extrabold bg-amber-400 text-slate-950 px-2 py-0.5 rounded-full uppercase">
+                    5 Étapes Contrôlées
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 mt-1 max-w-2xl">
+                  Contrôle de conformité de livraison, sécurité incendie, vérification anti-débordement des cuves, jaugeages comparatifs et calcul automatique des écarts.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="text-right">
+                  <span className="text-[10px] text-amber-300 uppercase font-bold block">Identifiant Unique</span>
+                  <span className="text-xs font-mono font-black text-white bg-white/10 px-2 py-1 rounded border border-white/20">
+                    {depotageForm.numero_depotage}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── ÉTAPE 1 : PRÉPARATION & IDENTIFICATION DE LA LIVRAISON ── */}
           <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: T.line }}>
             <div className="flex items-center justify-between pb-2 border-b mb-3" style={{ borderColor: T.line }}>
               <div className="flex items-center gap-2">
-                <span className="text-lg">🚚</span>
-                <h2 className="text-xs font-bold uppercase tracking-wider text-gray-800">
-                  1. Identification du Convoi & Transporteur
+                <span className="w-6 h-6 rounded-full bg-blue-900 text-white flex items-center justify-center text-xs font-black">1</span>
+                <h2 className="text-xs font-black uppercase tracking-wider text-gray-900">
+                  Préparation &amp; Informations Générales de Livraison
                 </h2>
               </div>
-              <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
-                Camion Multi-Compartiments ({compartiments.length} cuves citerne)
+              <span className="text-[11px] font-bold text-blue-800 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
+                Convoi Citerne ({compartiments.length} compartiment{compartiments.length > 1 ? "s" : ""})
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
               <div>
-                <label className="block text-xs font-bold text-blue-900 mb-1">
-                  N° BL Camion Citerne *
-                </label>
+                <label className="block text-xs font-bold text-blue-950 mb-1">Numéro de Dépotage *</label>
+                <div className="flex gap-1">
+                  <input
+                    type="text"
+                    value={depotageForm.numero_depotage}
+                    onChange={(e) => setDepotageForm({ ...depotageForm, numero_depotage: e.target.value })}
+                    className="w-full text-xs border rounded p-2 uppercase font-mono font-bold bg-gray-50 text-gray-900"
+                    style={{ borderColor: T.line }}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setDepotageForm({ ...depotageForm, numero_depotage: genererNumeroDepotage() })}
+                    className="px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded border text-xs font-bold"
+                    title="Régénérer le N°"
+                  >
+                    🔄
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-blue-950 mb-1">N° Bon de Livraison (BL) *</label>
                 <input
                   type="text"
-                  placeholder="ex: BL-TOT-99201"
+                  placeholder="ex: BL-TOT-2026-9921"
                   value={depotageForm.numero_bl}
                   onChange={(e) => handleUpdateTruckBl(e.target.value)}
                   className="w-full text-xs border rounded p-2 uppercase font-mono font-bold text-blue-950 bg-blue-50/50"
                   style={{ borderColor: "#2563EB" }}
                   required
                 />
-                <span className="text-[10px] text-blue-700 block mt-0.5">
-                  Hérité par toutes les cuves du camion
-                </span>
               </div>
+
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Date de dépotage *</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">N° Commande / Référence</label>
+                <input
+                  type="text"
+                  placeholder="ex: CMD-2026-084"
+                  value={depotageForm.numero_commande}
+                  onChange={(e) => setDepotageForm({ ...depotageForm, numero_commande: e.target.value })}
+                  className="w-full text-xs border rounded p-2 uppercase font-mono"
+                  style={{ borderColor: T.line }}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Date de l'Opération *</label>
                 <input
                   type="date"
                   value={depotageForm.date}
                   onChange={(e) => setDepotageForm({ ...depotageForm, date: e.target.value })}
-                  className="w-full text-xs border rounded p-2"
+                  className="w-full text-xs border rounded p-2 font-medium"
                   style={{ borderColor: T.line }}
                   required
                 />
               </div>
+            </div>
+
+            {/* Horaires d'arrivée et d'opération */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3 pt-3 border-t" style={{ borderColor: T.line }}>
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Heure Début</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Heure Arrivée Camion</label>
+                <input
+                  type="time"
+                  value={depotageForm.heure_arrivee}
+                  onChange={(e) => setDepotageForm({ ...depotageForm, heure_arrivee: e.target.value })}
+                  className="w-full text-xs border rounded p-2"
+                  style={{ borderColor: T.line }}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Heure Début Dépotage</label>
                 <input
                   type="time"
                   value={depotageForm.heure_debut}
@@ -1088,7 +1204,7 @@ export default function CuvesCarburant() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Heure Fin</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Heure Fin Dépotage</label>
                 <input
                   type="time"
                   value={depotageForm.heure_fin}
@@ -1099,17 +1215,19 @@ export default function CuvesCarburant() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mt-3">
+            {/* Convoi et Chauffeur */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mt-3 pt-3 border-t" style={{ borderColor: T.line }}>
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Fournisseur</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Fournisseur / Société Pétrolière *</label>
                 <input
                   type="text"
                   list="fournisseurs-list"
-                  placeholder="ex: TOTAL, VIVO, SAR..."
+                  placeholder="ex: TOTAL, VIVO, OLA, SAR..."
                   value={depotageForm.fournisseur}
                   onChange={(e) => setDepotageForm({ ...depotageForm, fournisseur: e.target.value })}
-                  className="w-full text-xs border rounded p-2"
+                  className="w-full text-xs border rounded p-2 font-semibold"
                   style={{ borderColor: T.line }}
+                  required
                 />
                 <datalist id="fournisseurs-list">
                   {(ref?.fournisseurs || []).map((f) => (
@@ -1119,19 +1237,21 @@ export default function CuvesCarburant() {
                   ))}
                 </datalist>
               </div>
+
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Société Transporteur</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Société de Transport</label>
                 <input
                   type="text"
-                  placeholder="ex: STT Sénégal"
+                  placeholder="ex: STT Sénégal, Transport Diallo"
                   value={depotageForm.transporteur}
                   onChange={(e) => setDepotageForm({ ...depotageForm, transporteur: e.target.value })}
                   className="w-full text-xs border rounded p-2"
                   style={{ borderColor: T.line }}
                 />
               </div>
+
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Immatriculation Camion Citerne *</label>
+                <label className="block text-xs font-bold text-gray-900 mb-1">Camion Tracteur (Immat.) *</label>
                 <input
                   type="text"
                   placeholder="ex: DK-4402-A"
@@ -1142,128 +1262,282 @@ export default function CuvesCarburant() {
                   required
                 />
               </div>
+
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Nom Chauffeur (Permis)</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Remorque / Citerne (Immat.)</label>
+                <input
+                  type="text"
+                  placeholder="ex: RM-8821-C"
+                  value={depotageForm.immatriculation_remorque}
+                  onChange={(e) => setDepotageForm({ ...depotageForm, immatriculation_remorque: e.target.value })}
+                  className="w-full text-xs border rounded p-2 uppercase font-mono"
+                  style={{ borderColor: T.line }}
+                />
+              </div>
+            </div>
+
+            {/* Intervenants : Chauffeur, Agent Contrôleur et Responsable Réception */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3 pt-3 border-t bg-slate-50 p-3 rounded-lg border" style={{ borderColor: T.line }}>
+              <div>
+                <label className="block text-xs font-semibold text-gray-800 mb-1">Chauffeur Livreur (Nom &amp; Permis)</label>
                 <div className="flex gap-1.5">
                   <input
                     type="text"
-                    placeholder="Chauffeur"
+                    placeholder="Nom du Chauffeur"
                     value={depotageForm.nom_chauffeur}
                     onChange={(e) => setDepotageForm({ ...depotageForm, nom_chauffeur: e.target.value })}
-                    className="w-2/3 text-xs border rounded p-2"
+                    className="w-2/3 text-xs border rounded p-2 bg-white"
                     style={{ borderColor: T.line }}
                   />
                   <input
                     type="text"
-                    placeholder="Permis"
+                    placeholder="N° Permis"
                     value={depotageForm.numero_permis}
                     onChange={(e) => setDepotageForm({ ...depotageForm, numero_permis: e.target.value })}
-                    className="w-1/3 text-xs border rounded p-2 text-gray-600"
+                    className="w-1/3 text-xs border rounded p-2 bg-white font-mono text-gray-700"
                     style={{ borderColor: T.line }}
                   />
                 </div>
               </div>
+
+              <div>
+                <label className="block text-xs font-bold text-blue-950 mb-1">Agent Contrôleur (Jaugeur / Mesures) *</label>
+                <input
+                  type="text"
+                  placeholder="Nom de l'agent qui effectue les contrôles"
+                  value={depotageForm.agent_controleur}
+                  onChange={(e) => setDepotageForm({ ...depotageForm, agent_controleur: e.target.value })}
+                  className="w-full text-xs border rounded p-2 font-bold bg-white text-blue-900"
+                  style={{ borderColor: T.line }}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-amber-950 mb-1">Responsable Réception (Gérant / Validation) *</label>
+                <input
+                  type="text"
+                  placeholder="Gérant ou Chef de Station validateur"
+                  value={depotageForm.responsable_reception}
+                  onChange={(e) => setDepotageForm({ ...depotageForm, responsable_reception: e.target.value })}
+                  className="w-full text-xs border rounded p-2 font-bold bg-white text-amber-950"
+                  style={{ borderColor: T.line }}
+                  required
+                />
+              </div>
             </div>
           </div>
 
-          {/* Bloc 2 : Sécurité, Conformité Scellés & Contrôle Qualité */}
+          {/* ── ÉTAPE 2 : CONTRÔLES PRÉALABLES DE SÉCURITÉ & QUALITÉ ── */}
           <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: T.line }}>
-            <div className="flex items-center justify-between pb-2 border-b mb-3" style={{ borderColor: T.line }}>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b mb-3 gap-2" style={{ borderColor: T.line }}>
               <div className="flex items-center gap-2">
-                <span className="text-lg">🛡️</span>
-                <h2 className="text-xs font-bold uppercase tracking-wider text-gray-800">
-                  2. Contrôles de Sécurité & Test Anti-Pollution
+                <span className="w-6 h-6 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center text-xs font-black">2</span>
+                <h2 className="text-xs font-black uppercase tracking-wider text-gray-900">
+                  Contrôles Préalables de Sécurité, Conformité &amp; Qualité
                 </h2>
               </div>
-              <span className="text-[11px] font-semibold text-amber-700">Checklist Préalable Obligatoire</span>
+              <div className="flex items-center gap-2">
+                {(() => {
+                  const checkListKeys = [
+                    depotageForm.check_documents_identite,
+                    depotageForm.check_produit_cuve_conforme,
+                    depotageForm.check_capacite_creux_validee,
+                    depotageForm.check_raccords_flexibles_etanches,
+                    depotageForm.check_balisage_extincteurs_prets,
+                    depotageForm.check_prise_de_terre_branchee,
+                    depotageForm.check_moteur_coupe_cales_posees,
+                    depotageForm.check_pistolets_distribution_arretes,
+                    depotageForm.check_absence_fuite_surveillance,
+                    depotageForm.check_test_eau_negatif,
+                  ];
+                  const nbOk = checkListKeys.filter(Boolean).length;
+                  const allOk = nbOk === 10;
+                  return (
+                    <span
+                      className={`text-[11px] font-black px-2.5 py-0.5 rounded-full border ${
+                        allOk ? "bg-emerald-50 text-emerald-800 border-emerald-300" : "bg-amber-50 text-amber-900 border-amber-300"
+                      }`}
+                    >
+                      {allOk ? "✓ 10/10 Sécurité Validée" : `⚠️ ${nbOk}/10 Points de sécurité`}
+                    </span>
+                  );
+                })()}
+              </div>
             </div>
 
-            {/* Checklist Sécurité */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs bg-gray-50/70 p-3 rounded-lg border" style={{ borderColor: T.line }}>
-              <label className="flex items-center gap-2 cursor-pointer font-medium">
+            {/* Checklist Sécurité en 10 points officiels */}
+            <div className="text-[11px] font-bold text-gray-700 uppercase mb-2 flex items-center justify-between">
+              <span>Checklist de Contrôle Avant Dépotage (10 Points Réglementaires)</span>
+              <button
+                type="button"
+                onClick={() =>
+                  setDepotageForm((prev) => ({
+                    ...prev,
+                    check_documents_identite: true,
+                    check_produit_cuve_conforme: true,
+                    check_capacite_creux_validee: true,
+                    check_raccords_flexibles_etanches: true,
+                    check_balisage_extincteurs_prets: true,
+                    check_prise_de_terre_branchee: true,
+                    check_moteur_coupe_cales_posees: true,
+                    check_pistolets_distribution_arretes: true,
+                    check_absence_fuite_surveillance: true,
+                    check_test_eau_negatif: true,
+                  }))
+                }
+                className="text-[10px] text-blue-700 font-bold hover:underline"
+              >
+                Tout cocher conforme
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs bg-slate-50 p-3 rounded-lg border" style={{ borderColor: T.line }}>
+              <label className="flex items-center gap-2 cursor-pointer font-medium p-1 hover:bg-white rounded transition">
                 <input
                   type="checkbox"
-                  checked={depotageForm.prise_de_terre_branchee}
-                  onChange={(e) => setDepotageForm({ ...depotageForm, prise_de_terre_branchee: e.target.checked })}
+                  checked={depotageForm.check_documents_identite}
+                  onChange={(e) => setDepotageForm({ ...depotageForm, check_documents_identite: e.target.checked })}
                   className="rounded text-amber-500 focus:ring-amber-400"
                 />
-                <span>Prise de terre reliée au camion</span>
+                <span>1. Identité du camion et documents de livraison vérifiés (BL / Ordre)</span>
               </label>
 
-              <label className="flex items-center gap-2 cursor-pointer font-medium">
+              <label className="flex items-center gap-2 cursor-pointer font-medium p-1 hover:bg-white rounded transition">
                 <input
                   type="checkbox"
-                  checked={depotageForm.extincteurs_en_place}
-                  onChange={(e) => setDepotageForm({ ...depotageForm, extincteurs_en_place: e.target.checked })}
+                  checked={depotageForm.check_produit_cuve_conforme}
+                  onChange={(e) => setDepotageForm({ ...depotageForm, check_produit_cuve_conforme: e.target.checked })}
                   className="rounded text-amber-500 focus:ring-amber-400"
                 />
-                <span>Extincteurs à poudre (9kg/50kg) prêts</span>
+                <span>2. Concordance produit livré et cuve de destination (détrompage)</span>
               </label>
 
-              <label className="flex items-center gap-2 cursor-pointer font-medium">
+              <label className="flex items-center gap-2 cursor-pointer font-medium p-1 hover:bg-white rounded transition">
                 <input
                   type="checkbox"
-                  checked={depotageForm.moteur_coupe_cales}
-                  onChange={(e) => setDepotageForm({ ...depotageForm, moteur_coupe_cales: e.target.checked })}
+                  checked={depotageForm.check_capacite_creux_validee}
+                  onChange={(e) => setDepotageForm({ ...depotageForm, check_capacite_creux_validee: e.target.checked })}
                   className="rounded text-amber-500 focus:ring-amber-400"
                 />
-                <span>Moteur coupé & Cales de roue posées</span>
+                <span>3. Capacité disponible de la cuve contrôlée (creux suffisant)</span>
               </label>
 
-              <label className="flex items-center gap-2 cursor-pointer font-medium">
+              <label className="flex items-center gap-2 cursor-pointer font-medium p-1 hover:bg-white rounded transition">
                 <input
                   type="checkbox"
-                  checked={depotageForm.scelles_conformes}
-                  onChange={(e) => setDepotageForm({ ...depotageForm, scelles_conformes: e.target.checked })}
+                  checked={depotageForm.check_raccords_flexibles_etanches}
+                  onChange={(e) => setDepotageForm({ ...depotageForm, check_raccords_flexibles_etanches: e.target.checked })}
                   className="rounded text-amber-500 focus:ring-amber-400"
                 />
-                <span>Plombs & Scellés intacts / conformes</span>
+                <span>4. État des raccords, flexibles et équipements (étanchéité vérifiée)</span>
               </label>
 
-              <label className="flex items-center gap-2 cursor-pointer font-medium">
+              <label className="flex items-center gap-2 cursor-pointer font-medium p-1 hover:bg-white rounded transition">
                 <input
                   type="checkbox"
-                  checked={!depotageForm.test_eau_camion}
-                  onChange={(e) => setDepotageForm({ ...depotageForm, test_eau_camion: !e.target.checked })}
+                  checked={depotageForm.check_balisage_extincteurs_prets}
+                  onChange={(e) => setDepotageForm({ ...depotageForm, check_balisage_extincteurs_prets: e.target.checked })}
                   className="rounded text-amber-500 focus:ring-amber-400"
                 />
-                <span>Test pâte à eau citerne négatif (sans eau)</span>
+                <span>5. Balisage en place et extincteurs à poudre (9kg / 50kg) prêts</span>
               </label>
 
-              <label className="flex items-center gap-2 cursor-pointer font-medium">
+              <label className="flex items-center gap-2 cursor-pointer font-medium p-1 hover:bg-white rounded transition">
                 <input
                   type="checkbox"
-                  checked={!depotageForm.test_eau_fond_cuve}
-                  onChange={(e) => setDepotageForm({ ...depotageForm, test_eau_fond_cuve: !e.target.checked })}
+                  checked={depotageForm.check_prise_de_terre_branchee}
+                  onChange={(e) => setDepotageForm({ ...depotageForm, check_prise_de_terre_branchee: e.target.checked })}
                   className="rounded text-amber-500 focus:ring-amber-400"
                 />
-                <span>Fond de cuve vérifié (sans eau)</span>
+                <span>6. Dispositif de mise à la terre branché au châssis camion</span>
+              </label>
+
+              <label className="flex items-center gap-2 cursor-pointer font-medium p-1 hover:bg-white rounded transition">
+                <input
+                  type="checkbox"
+                  checked={depotageForm.check_moteur_coupe_cales_posees}
+                  onChange={(e) => setDepotageForm({ ...depotageForm, check_moteur_coupe_cales_posees: e.target.checked })}
+                  className="rounded text-amber-500 focus:ring-amber-400"
+                />
+                <span>7. Moteur coupé, coupe-batterie actionné et cales de roue posées</span>
+              </label>
+
+              <label className="flex items-center gap-2 cursor-pointer font-medium p-1 hover:bg-white rounded transition">
+                <input
+                  type="checkbox"
+                  checked={depotageForm.check_pistolets_distribution_arretes}
+                  onChange={(e) => setDepotageForm({ ...depotageForm, check_pistolets_distribution_arretes: e.target.checked })}
+                  className="rounded text-amber-500 focus:ring-amber-400"
+                />
+                <span>8. Équipements de distribution / pistolets de la cuve arrêtés</span>
+              </label>
+
+              <label className="flex items-center gap-2 cursor-pointer font-medium p-1 hover:bg-white rounded transition">
+                <input
+                  type="checkbox"
+                  checked={depotageForm.check_absence_fuite_surveillance}
+                  onChange={(e) => setDepotageForm({ ...depotageForm, check_absence_fuite_surveillance: e.target.checked })}
+                  className="rounded text-amber-500 focus:ring-amber-400"
+                />
+                <span>9. Surveillance continue et vérification de l'absence totale de fuite</span>
+              </label>
+
+              <label className="flex items-center gap-2 cursor-pointer font-medium p-1 hover:bg-white rounded transition">
+                <input
+                  type="checkbox"
+                  checked={depotageForm.check_test_eau_negatif}
+                  onChange={(e) => setDepotageForm({ ...depotageForm, check_test_eau_negatif: e.target.checked })}
+                  className="rounded text-amber-500 focus:ring-amber-400"
+                />
+                <span>10. Test à la pâte à eau négatif (absence d'eau en citerne et cuve)</span>
               </label>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+            {/* Qualité et Scellés */}
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mt-3 pt-3 border-t" style={{ borderColor: T.line }}>
               <div>
-                <label className="block text-[11px] text-gray-600 mb-1">N° des Scellés / Plombs notés sur BL</label>
+                <label className="block text-[11px] text-gray-700 font-bold mb-1">
+                  Plombs / Scellés Dômes &amp; Vannes
+                </label>
+                <div className="flex items-center gap-2 mt-1">
+                  <input
+                    type="checkbox"
+                    id="scelles-conforme-chk"
+                    checked={depotageForm.scelles_conformes}
+                    onChange={(e) => setDepotageForm({ ...depotageForm, scelles_conformes: e.target.checked })}
+                    className="rounded text-amber-500 focus:ring-amber-400"
+                  />
+                  <label htmlFor="scelles-conforme-chk" className="text-xs font-semibold cursor-pointer">
+                    {depotageForm.scelles_conformes ? "✓ Scellés intacts" : "⚠️ Scellés brisés"}
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] text-gray-600 mb-1">N° Scellés notés sur BL</label>
                 <input
                   type="text"
                   placeholder="ex: SC-99182, SC-99183"
                   value={depotageForm.numeros_scelles}
                   onChange={(e) => setDepotageForm({ ...depotageForm, numeros_scelles: e.target.value })}
-                  className="w-full text-xs border rounded p-2"
+                  className="w-full text-xs border rounded p-2 font-mono"
                   style={{ borderColor: T.line }}
                 />
               </div>
+
               <div>
                 <label className="block text-[11px] text-gray-600 mb-1">Densité mesurée à l'hydromètre</label>
                 <input
                   type="text"
-                  placeholder="ex: 0.835"
+                  placeholder="ex: 0.835 (Gasoil) ou 0.745 (Super)"
                   value={depotageForm.densite_mesuree}
                   onChange={(e) => setDepotageForm({ ...depotageForm, densite_mesuree: e.target.value })}
-                  className="w-full text-xs border rounded p-2"
+                  className="w-full text-xs border rounded p-2 font-semibold"
                   style={{ borderColor: T.line }}
                 />
               </div>
+
               <div>
                 <label className="block text-[11px] text-gray-600 mb-1">Température du produit (°C)</label>
                 <input
@@ -1271,38 +1545,39 @@ export default function CuvesCarburant() {
                   placeholder="ex: 28"
                   value={depotageForm.temperature_c}
                   onChange={(e) => setDepotageForm({ ...depotageForm, temperature_c: e.target.value })}
-                  className="w-full text-xs border rounded p-2"
+                  className="w-full text-xs border rounded p-2 font-semibold"
                   style={{ borderColor: T.line }}
                 />
               </div>
             </div>
           </div>
 
-          {/* Bloc 3 : Multi-compartiments Camion Citerne & Jaugeages */}
+          {/* ── ÉTAPE 3 : CONTRÔLE DES CUVES & ANTI-DÉBORDEMENT (AVANT DÉPOTAGE) ── */}
           <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: T.line }}>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b mb-4 gap-2" style={{ borderColor: T.line }}>
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xl">🚛</span>
-                  <h2 className="text-sm font-bold uppercase tracking-wider text-gray-900">
-                    3. Compartiments Camion Citerne & Jaugeages (Multi-BL)
+                  <span className="w-6 h-6 rounded-full bg-blue-700 text-white flex items-center justify-center text-xs font-black">3</span>
+                  <h2 className="text-xs font-black uppercase tracking-wider text-gray-900">
+                    Contrôle des Cuves Réceptrices &amp; Sécurité Anti-Débordement
                   </h2>
                 </div>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  Chaque compartiment étanche du camion dispose de son volume BL, de son jaugeage citerne et de sa cuve réceptrice.
+                  Vérifier impérativement que la capacité disponible (creux) de chaque cuve permet de recevoir le volume annoncé sur le BL sans risque de débordement.
                 </p>
               </div>
+
               <button
                 type="button"
                 onClick={handleAddCompartiment}
                 className="self-start sm:self-auto text-xs px-3 py-1.5 rounded-lg font-bold text-gray-900 shadow-sm transition-all hover:opacity-90 flex items-center gap-1.5"
                 style={{ background: T.gold }}
               >
-                <span>➕ Ajouter un Compartiment</span>
+                <span>➕ Ajouter un Compartiment Citerne</span>
               </button>
             </div>
 
-            {/* Liste des Cartes Compartiments */}
+            {/* Cartes des Compartiments Camion */}
             <div className="space-y-4">
               {compartimentsCalcules.map((c, idx) => {
                 const targetCuve = c.target_cuve;
@@ -1314,8 +1589,8 @@ export default function CuvesCarburant() {
                     key={c.id}
                     className="p-3.5 rounded-xl border transition-all"
                     style={{
-                      borderColor: c.statut === "LITIGE" ? "#fca5a5" : c.statut === "CONFORME" ? "#86efac" : T.line,
-                      background: c.statut === "LITIGE" ? "#fef2f2" : "#fafafa",
+                      borderColor: risqueTropPlein ? "#f87171" : c.statut === "LITIGE" ? "#fca5a5" : c.statut === "CONFORME" ? "#86efac" : T.line,
+                      background: risqueTropPlein ? "#fff1f2" : c.statut === "LITIGE" ? "#fef2f2" : "#fafafa",
                     }}
                   >
                     {/* Header Compartiment */}
@@ -1332,36 +1607,23 @@ export default function CuvesCarburant() {
                           {c.produit}
                         </span>
                         <span className="text-[11px] font-bold text-gray-800 bg-gray-200/80 px-2 py-0.5 rounded">
-                          Dest. : {targetCuve?.nom || c.cuve_nom || "Cuve"}
+                          Cuve Cible : {targetCuve?.nom || c.cuve_nom || "Cuve"}
                         </span>
                         <span className="text-[11px] font-mono text-blue-900 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
                           BL: {c.numero_bl || depotageForm.numero_bl || "--"}
                         </span>
-                        {c.numero_scelle && (
-                          <span className="text-[11px] font-mono text-amber-900 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                            Scellé: {c.numero_scelle}
-                          </span>
-                        )}
                       </div>
 
                       <div className="flex items-center gap-2">
-                        {/* Statut Badge */}
-                        <span
-                          className={`text-[11px] font-extrabold px-2.5 py-0.5 rounded ${
-                            c.statut === "CONFORME"
-                              ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
-                              : c.statut === "LITIGE"
-                              ? "bg-rose-100 text-rose-800 border border-rose-300 animate-pulse"
-                              : c.statut === "BONI"
-                              ? "bg-blue-100 text-blue-800 border border-blue-300"
-                              : "bg-gray-200 text-gray-700"
-                          }`}
-                        >
-                          {c.statut === "CONFORME" && "✓ Conforme (±0.20%)"}
-                          {c.statut === "LITIGE" && `⚠️ Litige Manquant: -${F(c.manquant_litres)} L (-${F(c.valeur_manquant_fcfa)} F)`}
-                          {c.statut === "BONI" && `ℹ️ Boni constaté: +${F(c.ecart_litres)} L`}
-                          {c.statut === "EN_ATTENTE" && "En attente jauge après"}
-                        </span>
+                        {risqueTropPlein ? (
+                          <span className="text-[11px] font-black px-2.5 py-0.5 rounded bg-rose-600 text-white animate-pulse">
+                            🚨 RISQUE DÉBORDEMENT CUVE
+                          </span>
+                        ) : (
+                          <span className="text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded border border-emerald-200">
+                            ✓ Creux Cuve Suffisant ({F(creuxCuve)} L dispo)
+                          </span>
+                        )}
 
                         {compartiments.length > 1 && (
                           <button
@@ -1376,16 +1638,17 @@ export default function CuvesCarburant() {
                       </div>
                     </div>
 
-                    {/* Formulaire interne du compartiment */}
+                    {/* Grille interne du compartiment : 3 volets (1. Affectation, 2. Contrôle Cuve Avant, 3. Mesures Citerne & Après) */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      {/* Sous-bloc 1 : Document BL (Hérité) & Scellé Compartiment */}
+                      {/* Volet 1 : Produit, Cuve Cible & Quantités */}
                       <div className="bg-white p-3 rounded-lg border space-y-2 shadow-xs" style={{ borderColor: T.line }}>
                         <div className="text-[11px] font-bold text-gray-700 uppercase flex items-center justify-between">
-                          <span className="flex items-center gap-1">📋 Bon de Livraison & Scellé</span>
-                          <span className="text-[10px] text-blue-700 font-semibold bg-blue-50 px-1.5 py-0.2 rounded">BL Hérité</span>
+                          <span>📦 Carburant &amp; Destination</span>
+                          <span className="text-[10px] text-blue-700 font-semibold bg-blue-50 px-1.5 py-0.2 rounded">Étape 3.1</span>
                         </div>
+
                         <div>
-                          <label className="block text-[11px] text-gray-600 mb-0.5">Produit du compartiment *</label>
+                          <label className="block text-[11px] text-gray-600 mb-0.5">Produit Réceptionné *</label>
                           <select
                             value={c.produit}
                             onChange={(e) => handleUpdateCompartiment(c.id, "produit", e.target.value)}
@@ -1396,9 +1659,10 @@ export default function CuvesCarburant() {
                             <option value="SUPER">SUPER CARBURANT</option>
                           </select>
                         </div>
+
                         <div>
                           <label className="block text-[11px] text-blue-900 font-bold mb-0.5">
-                            Cuve station réceptrice *
+                            Cuve Station Réceptrice *
                           </label>
                           <select
                             value={c.cuve_station_id}
@@ -1409,109 +1673,77 @@ export default function CuvesCarburant() {
                               .filter((x) => x.produit === c.produit)
                               .map((x) => (
                                 <option key={x.id} value={x.id}>
-                                  {x.nom} — Cap: {F(x.capacite_l)} L (Creux dispo: {F(x.creux_disponible)} L)
+                                  {x.nom} — Cap: {F(x.capacite_l)} L (Creux: {F(x.creux_disponible)} L)
                                 </option>
                               ))}
                           </select>
                         </div>
-                        <div className="p-2 rounded bg-blue-50/50 border border-blue-200">
-                          <div className="text-[10px] text-blue-800 font-bold uppercase">N° BL Camion (Hérité)</div>
-                          <div className="text-xs font-mono font-black text-blue-950">
-                            {c.numero_bl || depotageForm.numero_bl || "(Saisir le BL camion ci-dessus)"}
+
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <div>
+                            <label className="block text-[10px] text-gray-600 mb-0.5">Quantité Commandée (L)</label>
+                            <input
+                              type="number"
+                              placeholder="ex: 15000"
+                              value={c.volume_commande || ""}
+                              onChange={(e) => handleUpdateCompartiment(c.id, "volume_commande", e.target.value)}
+                              className="w-full text-xs border rounded p-1.5 font-semibold"
+                              style={{ borderColor: T.line }}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[10px] text-blue-900 font-bold mb-0.5">Quantité BL (L) *</label>
+                            <input
+                              type="number"
+                              placeholder="ex: 15000"
+                              value={c.volume_bl}
+                              onChange={(e) => handleUpdateCompartiment(c.id, "volume_bl", e.target.value)}
+                              className="w-full text-xs border rounded p-1.5 font-black text-blue-950 bg-blue-50/50"
+                              style={{ borderColor: "#2563EB" }}
+                              required
+                            />
                           </div>
                         </div>
+
                         <div>
-                          <label className="block text-[11px] font-bold text-amber-950 mb-0.5">
-                            🔐 N° Scellé(s) / Plombs du Compartiment *
+                          <label className="block text-[10px] font-bold text-amber-950 mb-0.5">
+                            N° Scellé(s) Compartiment (Dôme / Vanne) *
                           </label>
                           <input
                             type="text"
                             placeholder="ex: SC-10291 (Dôme) / SC-10292 (Vanne)"
                             value={c.numero_scelle || ""}
                             onChange={(e) => handleUpdateCompartiment(c.id, "numero_scelle", e.target.value)}
-                            className="w-full text-xs border rounded p-1.5 uppercase font-mono font-bold text-amber-950 bg-amber-50/40 focus:ring-1 focus:ring-amber-500"
+                            className="w-full text-xs border rounded p-1.5 uppercase font-mono font-bold text-amber-950 bg-amber-50/40"
                             style={{ borderColor: "#D97706" }}
                             required
                           />
-                          <span className="text-[10px] text-gray-500 mt-0.5 block">
-                            Scellé(s) unique(s) à ce compartiment citerne
-                          </span>
-                        </div>
-                        <div>
-                          <label className="block text-[11px] text-gray-600 mb-0.5">Volume déclaré BL (Litres) *</label>
-                          <input
-                            type="number"
-                            placeholder="ex: 5000"
-                            value={c.volume_bl}
-                            onChange={(e) => handleUpdateCompartiment(c.id, "volume_bl", e.target.value)}
-                            className="w-full text-xs border rounded p-1.5 font-black text-blue-900 bg-blue-50/50"
-                            style={{ borderColor: T.line }}
-                            required
-                          />
                         </div>
                       </div>
 
-                      {/* Sous-bloc 2 : Jaugeage Camion Citerne */}
-                      <div className="bg-white p-3 rounded-lg border space-y-2 shadow-xs" style={{ borderColor: T.line }}>
-                        <div className="text-[11px] font-bold text-gray-700 uppercase flex items-center gap-1">
-                          <span>📏</span>
-                          <span>Jaugeage Camion Citerne</span>
-                        </div>
-                        <div>
-                          <label className="block text-[11px] text-gray-600 mb-0.5">
-                            Niveau / Flèche avant dépotage *
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="ex: Repère flèche conforme (plein)"
-                            value={c.jauge_camion_avant}
-                            onChange={(e) => handleUpdateCompartiment(c.id, "jauge_camion_avant", e.target.value)}
-                            className="w-full text-xs border rounded p-1.5"
-                            style={{ borderColor: T.line }}
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[11px] text-gray-600 mb-0.5">
-                            Reste en compartiment après vidange (L)
-                          </label>
-                          <input
-                            type="number"
-                            placeholder="0 si vidange intégrale"
-                            value={c.reste_camion_litres}
-                            onChange={(e) => handleUpdateCompartiment(c.id, "reste_camion_litres", e.target.value)}
-                            className="w-full text-xs border rounded p-1.5 font-bold text-gray-800"
-                            style={{ borderColor: T.line }}
-                          />
-                          <p className="text-[10px] text-gray-400 mt-0.5">0 L = Vidange totale du compartiment</p>
-                        </div>
-                        <div className="p-2 rounded bg-amber-50/70 border border-amber-200 text-[11px] text-amber-900">
-                          <span className="font-semibold">Vérification Citerne :</span> Contrôler l'alignement du liquide avec l'index de jauge du compartiment avant raccordement.
-                        </div>
-                      </div>
-
-                      {/* Sous-bloc 3 : Jaugeage Cuve Réceptrice Station */}
+                      {/* Volet 2 : Mesure Cuve Avant Dépotage (Jauge Latte Initiale) */}
                       <div className="bg-white p-3 rounded-lg border space-y-2 shadow-xs" style={{ borderColor: T.line }}>
                         <div className="flex items-center justify-between">
                           <div className="text-[11px] font-bold text-gray-700 uppercase flex items-center gap-1">
-                            <span>🛢️</span>
-                            <span>{targetCuve?.nom || c.cuve_nom || `Cuve ${c.produit}`}</span>
+                            <span>📏</span>
+                            <span>Jauge Avant Dépotage</span>
                           </div>
                           <button
                             type="button"
                             onClick={() => handlePreRemplirJaugeAvantComp(c.id, c.cuve_station_id)}
                             className="text-[10px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 hover:bg-blue-100"
                           >
-                            Pré-remplir jauge avant
+                            Dernière jauge
                           </button>
                         </div>
 
-                        {/* Jauge Avant */}
                         <div>
-                          <label className="block text-[11px] text-gray-600 mb-0.5">Jauge Avant Dépotage (Litres) *</label>
+                          <label className="block text-[11px] text-gray-600 mb-0.5">Hauteur &amp; Volume Initial *</label>
                           <div className="flex gap-1.5">
                             <input
                               type="number"
-                              placeholder="cm"
+                              placeholder="cm latte"
                               value={c.jauge_cuve_avant_cm}
                               onChange={(e) => handleUpdateCompartiment(c.id, "jauge_cuve_avant_cm", e.target.value)}
                               className="w-1/3 text-xs border rounded p-1.5"
@@ -1519,7 +1751,7 @@ export default function CuvesCarburant() {
                             />
                             <input
                               type="number"
-                              placeholder="Litres"
+                              placeholder="Litres initiaux"
                               value={c.jauge_cuve_avant_l}
                               onChange={(e) => handleUpdateCompartiment(c.id, "jauge_cuve_avant_l", e.target.value)}
                               className="w-2/3 text-xs border rounded p-1.5 font-bold"
@@ -1529,9 +1761,55 @@ export default function CuvesCarburant() {
                           </div>
                         </div>
 
-                        {/* Jauge Après */}
+                        {/* Rapprochement Capacité / Creux Disponible */}
+                        <div className="p-2 rounded bg-slate-50 border text-[11px] space-y-1" style={{ borderColor: T.line }}>
+                          <div className="flex justify-between">
+                            <span className="text-gray-500">Capacité Cuve :</span>
+                            <strong>{F(targetCuve?.capacite_l || 0)} L</strong>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-500">Stock Initial Cuve :</span>
+                            <span className="font-semibold">{F(c.jauge_cuve_avant_l || 0)} L</span>
+                          </div>
+                          <div className="flex justify-between font-bold pt-1 border-t" style={{ borderColor: T.line }}>
+                            <span className="text-gray-700">Capacité Disponible (Creux) :</span>
+                            <span className={creuxCuve < c.volume_bl_num ? "text-rose-700 font-black" : "text-emerald-700 font-black"}>
+                              {F(creuxCuve)} L
+                            </span>
+                          </div>
+                        </div>
+
+                        {risqueTropPlein && (
+                          <div className="text-[10px] text-red-700 font-black bg-red-50 p-2 rounded border border-red-300">
+                            ⛔ ATTENTION DÉBORDEMENT : Le volume BL ({F(c.volume_bl_num)} L) excède la capacité restante ({F(creuxCuve)} L) ! L'opération doit être interrompue.
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Volet 3 : Dépotage Citerne & Mesure Cuve Après Dépotage */}
+                      <div className="bg-white p-3 rounded-lg border space-y-2 shadow-xs" style={{ borderColor: T.line }}>
+                        <div className="text-[11px] font-bold text-gray-700 uppercase flex items-center justify-between">
+                          <span>🏁 Mesures Après Dépotage</span>
+                          <span className="text-[10px] text-blue-700 font-semibold bg-blue-50 px-1.5 py-0.2 rounded">Étape 4</span>
+                        </div>
+
                         <div>
-                          <label className="block text-[11px] text-gray-600 mb-0.5">Jauge Après Dépotage (Litres) *</label>
+                          <label className="block text-[11px] text-gray-600 mb-0.5">Reste citerne après vidange (L)</label>
+                          <input
+                            type="number"
+                            placeholder="0 si vidange complète"
+                            value={c.reste_camion_litres}
+                            onChange={(e) => handleUpdateCompartiment(c.id, "reste_camion_litres", e.target.value)}
+                            className="w-full text-xs border rounded p-1.5 font-bold text-gray-800"
+                            style={{ borderColor: T.line }}
+                          />
+                          <p className="text-[10px] text-gray-400 mt-0.5">0 L = Vidange totale du compartiment</p>
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-blue-950 mb-0.5">
+                            Jauge Cuve Après Dépotage (Litres) *
+                          </label>
                           <div className="flex gap-1.5">
                             <input
                               type="number"
@@ -1543,55 +1821,71 @@ export default function CuvesCarburant() {
                             />
                             <input
                               type="number"
-                              placeholder="Litres"
+                              placeholder="Litres mesurés"
                               value={c.jauge_cuve_apres_l}
                               onChange={(e) => handleUpdateCompartiment(c.id, "jauge_cuve_apres_l", e.target.value)}
-                              className="w-2/3 text-xs border rounded p-1.5 font-bold text-blue-900 bg-blue-50/30"
-                              style={{ borderColor: T.line }}
+                              className="w-2/3 text-xs border rounded p-1.5 font-black text-blue-900 bg-blue-50/40"
+                              style={{ borderColor: "#2563EB" }}
                               required
                             />
                           </div>
                         </div>
 
-                        {risqueTropPlein && (
-                          <div className="text-[10px] text-red-700 font-bold bg-red-50 p-1.5 rounded border border-red-200">
-                            ⚠️ Risque de débordement : Le volume BL ({F(c.volume_bl_num)} L) dépasse le creux disponible ({F(creuxCuve)} L) de {targetCuve?.nom} !
+                        <div className="p-2 rounded bg-blue-50/70 border border-blue-200 text-[11px] text-blue-950">
+                          <div className="flex justify-between">
+                            <span>Stock Théorique après réception :</span>
+                            <strong>{F(c.stock_theorique_apres)} L</strong>
                           </div>
-                        )}
+                          <div className="text-[10px] text-blue-700 mt-0.5">
+                            (Formule : Stock initial {F(c.jauge_cuve_avant_l || 0)} L + Volume BL {F(c.volume_bl_num)} L)
+                          </div>
+                        </div>
                       </div>
                     </div>
 
-                    {/* Résumé de Calcul du Compartiment */}
-                    <div className="mt-3 pt-2.5 border-t grid grid-cols-2 sm:grid-cols-6 gap-2 text-center text-xs" style={{ borderColor: T.line }}>
-                      <div className="bg-white p-1.5 rounded border" style={{ borderColor: T.line }}>
-                        <span className="text-[10px] text-gray-500 uppercase block">Facturé BL</span>
-                        <strong className="text-gray-900 tabular">{F(c.volume_bl_num)} L</strong>
+                    {/* ── ÉTAPE 4 : BILAN DES 4 QUANTITÉS & CALCUL AUTOMATIQUE DES ÉCARTS ── */}
+                    <div className="mt-3 pt-3 border-t" style={{ borderColor: T.line }}>
+                      <div className="text-[10px] uppercase font-black text-gray-500 mb-2 tracking-wider flex items-center justify-between">
+                        <span>Étape 4 : Rapprochement Volumétrique &amp; Tolérances Légales (±0.20%)</span>
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded ${c.tolerance_ok ? "bg-emerald-100 text-emerald-900" : "bg-rose-100 text-rose-900"}`}>
+                          {c.tolerance_ok ? "✓ Écart Admissible" : "🚨 Litige Hors Tolérance"}
+                        </span>
                       </div>
-                      <div className="bg-white p-1.5 rounded border" style={{ borderColor: T.line }}>
-                        <span className="text-[10px] text-gray-500 uppercase block">Déchargé Réel</span>
-                        <strong className="text-blue-900 tabular">{F(c.volume_decharge_cuve)} L</strong>
-                      </div>
-                      <div className="bg-white p-1.5 rounded border" style={{ borderColor: T.line }}>
-                        <span className="text-[10px] text-gray-500 uppercase block">Écart Net</span>
-                        <strong className={`tabular ${c.ecart_litres >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
-                          {c.ecart_litres > 0 ? "+" : ""}{F(c.ecart_litres)} L ({c.ecart_pourcentage}%)
-                        </strong>
-                      </div>
-                      <div className="bg-white p-1.5 rounded border" style={{ borderColor: T.line }}>
-                        <span className="text-[10px] text-gray-500 uppercase block">Tolérance (±0.20%)</span>
-                        <strong className="text-gray-700 tabular">± {F(c.manquant_admissible_l)} L</strong>
-                      </div>
-                      <div className="bg-white p-1.5 rounded border" style={{ borderColor: T.line }}>
-                        <span className="text-[10px] text-gray-500 uppercase block">Manquant Litige</span>
-                        <strong className={`tabular ${c.manquant_litige_l > 0 ? "text-rose-700 font-extrabold" : "text-gray-700"}`}>
-                          {F(c.manquant_litige_l)} L
-                        </strong>
-                      </div>
-                      <div className="bg-white p-1.5 rounded border" style={{ borderColor: T.line }}>
-                        <span className="text-[10px] text-gray-500 uppercase block">Valeur Manquant</span>
-                        <strong className={`tabular ${c.valeur_manquant_fcfa > 0 ? "text-rose-700 font-extrabold" : "text-gray-700"}`}>
-                          {F(c.valeur_manquant_fcfa)} FCFA
-                        </strong>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-center text-xs">
+                        <div className="bg-white p-2 rounded-lg border shadow-2xs" style={{ borderColor: T.line }}>
+                          <span className="text-[10px] text-gray-500 uppercase block font-semibold">1. Volume BL</span>
+                          <strong className="text-gray-900 tabular text-sm">{F(c.volume_bl_num)} L</strong>
+                        </div>
+
+                        <div className="bg-white p-2 rounded-lg border shadow-2xs" style={{ borderColor: T.line }}>
+                          <span className="text-[10px] text-gray-500 uppercase block font-semibold">2. Stock Théorique</span>
+                          <strong className="text-blue-950 tabular text-sm">{F(c.stock_theorique_apres)} L</strong>
+                        </div>
+
+                        <div className="bg-white p-2 rounded-lg border shadow-2xs" style={{ borderColor: T.line }}>
+                          <span className="text-[10px] text-gray-500 uppercase block font-semibold">3. Stock Final Mesuré</span>
+                          <strong className="text-blue-900 tabular text-sm">{F(c.jauge_cuve_apres_l || 0)} L</strong>
+                        </div>
+
+                        <div className="bg-white p-2 rounded-lg border shadow-2xs" style={{ borderColor: T.line }}>
+                          <span className="text-[10px] text-gray-500 uppercase block font-semibold">4. Volume Dépoté Réel</span>
+                          <strong className="text-indigo-900 tabular text-sm">{F(c.volume_decharge_cuve)} L</strong>
+                        </div>
+
+                        <div className="bg-white p-2 rounded-lg border shadow-2xs" style={{ borderColor: T.line }}>
+                          <span className="text-[10px] text-gray-500 uppercase block font-semibold">Écart de Réception</span>
+                          <strong className={`tabular text-sm ${c.ecart_litres >= 0 ? "text-emerald-700" : "text-rose-700 font-black"}`}>
+                            {c.ecart_litres > 0 ? "+" : ""}{F(c.ecart_litres)} L ({c.ecart_pourcentage > 0 ? "+" : ""}{c.ecart_pourcentage}%)
+                          </strong>
+                        </div>
+
+                        <div className="bg-white p-2 rounded-lg border shadow-2xs" style={{ borderColor: T.line }}>
+                          <span className="text-[10px] text-gray-500 uppercase block font-semibold">Valorisation Manquant</span>
+                          <strong className={`tabular text-sm ${c.valeur_manquant_fcfa > 0 ? "text-rose-700 font-black" : "text-gray-600"}`}>
+                            {F(c.valeur_manquant_fcfa)} FCFA
+                          </strong>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1599,7 +1893,7 @@ export default function CuvesCarburant() {
               })}
             </div>
 
-            {/* Bouton d'ajout supplémentaire */}
+            {/* Bouton pour ajouter un compartiment supplémentaire */}
             <div className="mt-3 pt-3 border-t flex justify-center" style={{ borderColor: T.line }}>
               <button
                 type="button"
@@ -1610,13 +1904,28 @@ export default function CuvesCarburant() {
                 <span>➕ Ajouter un autre compartiment au camion citerne</span>
               </button>
             </div>
+          </div>
+
+          {/* ── ÉTAPE 5 : CLÔTURE & DOUBLE VALIDATION DU DÉPOTAGE ── */}
+          <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: T.line }}>
+            <div className="flex items-center justify-between pb-2 border-b mb-3" style={{ borderColor: T.line }}>
+              <div className="flex items-center gap-2">
+                <span className="w-6 h-6 rounded-full bg-emerald-700 text-white flex items-center justify-center text-xs font-black">5</span>
+                <h2 className="text-xs font-black uppercase tracking-wider text-gray-900">
+                  Validation, Clôture &amp; Génération du Procès-Verbal Officiel
+                </h2>
+              </div>
+              <span className="text-[11px] font-black text-slate-700">
+                Double Visa Réglementaire (Contrôleur + Gérant)
+              </span>
+            </div>
 
             {/* Synthèse Totale Camion Citerne */}
-            <div className="mt-4 p-4 rounded-xl border bg-slate-900 text-white shadow-inner">
+            <div className="p-4 rounded-xl border bg-slate-900 text-white shadow-inner">
               <div className="flex items-center justify-between pb-2 mb-3 border-b border-slate-700/80">
                 <div className="flex items-center gap-2">
-                  <span className="text-amber-400 font-black">BILAN GLOBAL CONVOI CITERNE</span>
-                  <span className="text-xs text-gray-400">({compartiments.length} compartiments cumulés)</span>
+                  <span className="text-amber-400 font-black tracking-wide">BILAN CONSOLIDÉ CONVOI CITERNE</span>
+                  <span className="text-xs text-gray-400">({compartiments.length} compartiment{compartiments.length > 1 ? "s" : ""})</span>
                 </div>
                 <div
                   className={`text-xs font-black px-2.5 py-0.5 rounded ${
@@ -1625,17 +1934,21 @@ export default function CuvesCarburant() {
                       : "bg-rose-950 text-rose-300 border border-rose-700 animate-pulse"
                   }`}
                 >
-                  {camionConformeGlobal ? "✓ CONVOI CONFORME" : "🚨 LITIGE MANQUANT CONVOI"}
+                  {camionConformeGlobal ? "✓ CONVOI CONFORME (TOLÉRANCE RESPECTÉE)" : "🚨 LITIGE MANQUANT CONSTATÉ"}
                 </div>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-center">
                 <div>
-                  <div className="text-[10px] text-gray-400 uppercase">Total BL Camion</div>
+                  <div className="text-[10px] text-gray-400 uppercase">Volume Commandé</div>
+                  <div className="text-base font-bold text-gray-200 tabular">{F(totalVolumeCommandeCamion)} L</div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-gray-400 uppercase">Total Facturé BL</div>
                   <div className="text-lg font-black text-amber-400 tabular">{F(totalVolumeBlCamion)} L</div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-gray-400 uppercase">Total Déchargé Cuves</div>
+                  <div className="text-[10px] text-gray-400 uppercase">Total Réceptionné Cuves</div>
                   <div className="text-lg font-black text-emerald-400 tabular">{F(totalVolumeRecuCamion)} L</div>
                 </div>
                 <div>
@@ -1645,13 +1958,7 @@ export default function CuvesCarburant() {
                   </div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-gray-400 uppercase">Total Manquant Litres</div>
-                  <div className={`text-lg font-black tabular ${totalManquantCamionL > 0 ? "text-rose-400" : "text-gray-300"}`}>
-                    {F(totalManquantCamionL)} L
-                  </div>
-                </div>
-                <div>
-                  <div className="text-[10px] text-gray-400 uppercase">Valeur Financière Manquant</div>
+                  <div className="text-[10px] text-gray-400 uppercase">Valeur Litige Manquant</div>
                   <div className={`text-lg font-black tabular ${totalManquantCamionFcfa > 0 ? "text-rose-400" : "text-gray-300"}`}>
                     {F(totalManquantCamionFcfa)} FCFA
                   </div>
@@ -1659,23 +1966,25 @@ export default function CuvesCarburant() {
               </div>
             </div>
 
-            {/* Observations & Signataires */}
+            {/* Observations Chauffeur & Réceptionnaire */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Responsable Réception (Visa Gérant)</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Observations du Chauffeur Livreur</label>
                 <input
                   type="text"
-                  value={depotageForm.responsable_reception}
-                  onChange={(e) => setDepotageForm({ ...depotageForm, responsable_reception: e.target.value })}
+                  placeholder="ex: Citerne vidée intégralement, temps d'attente 15 min..."
+                  value={depotageForm.observations_chauffeur}
+                  onChange={(e) => setDepotageForm({ ...depotageForm, observations_chauffeur: e.target.value })}
                   className="w-full text-xs border rounded p-2"
                   style={{ borderColor: T.line }}
                 />
               </div>
+
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Observations / Réserves éventuelles</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Observations / Réserves du Réceptionnaire</label>
                 <input
                   type="text"
-                  placeholder="ex: Scellés intacts, dépotage compartiment par compartiment effectué."
+                  placeholder="ex: Scellés conformes, test eau négatif, dépotage terminé à 11h15 sans incident."
                   value={depotageForm.observations}
                   onChange={(e) => setDepotageForm({ ...depotageForm, observations: e.target.value })}
                   className="w-full text-xs border rounded p-2"
@@ -1684,24 +1993,25 @@ export default function CuvesCarburant() {
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-2 mt-4">
+            {/* Action de Validation Finale */}
+            <div className="flex flex-col sm:flex-row gap-2 mt-4 pt-3 border-t" style={{ borderColor: T.line }}>
               {!peutValiderDepotage && (
                 <div className="flex-1 text-xs text-center p-3 rounded-xl border-2 border-dashed border-amber-300 bg-amber-50 text-amber-900 font-semibold flex items-center justify-center gap-2">
                   <span>🔒</span>
-                  <span>Validation réservée au Gérant / Direction. Enregistrement en brouillon demandé.</span>
+                  <span>Validation réservée au Gérant / Direction. Enregistrement en brouillon possible pour les agents.</span>
                 </div>
               )}
               <button
                 type="submit"
                 disabled={!peutValiderDepotage && !peutDepotage}
-                className={`w-full py-3 rounded-xl text-xs font-bold shadow-md transition-all mt-4 sm:mt-0 flex items-center justify-center gap-2 ${
+                className={`w-full py-3.5 rounded-xl text-xs font-black shadow-md transition-all flex items-center justify-center gap-2 ${
                   !peutValiderDepotage && !peutDepotage ? "opacity-50 cursor-not-allowed" : "hover:opacity-95"
                 }`}
                 style={{ background: !peutValiderDepotage ? "#94a3b8" : T.gold, color: !peutValiderDepotage ? "white" : "#111827" }}
                 title={!peutValiderDepotage ? "Réservé au Gérant / Direction" : "Valider le dépotage"}
               >
                 {peutValiderDepotage ? (
-                  <span>📄 Valider le Dépotage Convoi & Générer le Procès-Verbal Officiel</span>
+                  <span>📄 Valider la Clôture du Dépotage &amp; Générer le Procès-Verbal Officiel (A4)</span>
                 ) : peutDepotage ? (
                   <span>💾 Enregistrer comme Brouillon (en attente de validation Gérant)</span>
                 ) : (
@@ -1950,7 +2260,7 @@ export default function CuvesCarburant() {
               </div>
             </div>
 
-            {/* Document Imprimable */}
+            {/* Document Imprimable Officiel A4 */}
             <div className="border p-5 rounded-xl space-y-4 print:border-none print:p-0">
               {/* En-tête officiel DAMEL ENERGY / STAR ENERGY */}
               <div className="flex justify-between items-start border-b pb-4" style={{ borderColor: T.line }}>
@@ -1970,56 +2280,70 @@ export default function CuvesCarburant() {
                       PROCÈS-VERBAL DE RÉCEPTION &amp; DÉPOTAGE CITERNE
                     </h2>
                     <div className="text-xs text-gray-600">
-                      Station : <strong>{profil?.station_nom || "Station Hann Maristes"}</strong> (Code: {stationId})
+                      Station : <strong>{profil?.station_nom || pvModal.station_nom || "Station Hann Maristes"}</strong> (Code: {stationId})
                     </div>
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-xs font-mono font-bold text-amber-800 bg-amber-50 px-2.5 py-1 rounded border border-amber-300">
-                    N° BL : {pvModal.numero_bl}
+                  <div className="text-xs font-mono font-black text-blue-950 bg-blue-50 px-2.5 py-1 rounded border border-blue-300">
+                    N° Dépotage : {pvModal.numero_depotage || "DEP-ST-001"}
                   </div>
-                  <div className="text-[11px] text-gray-500 mt-1">Date : {fmtDate(pvModal.date)}</div>
-                  <div className="text-[10px] text-gray-400">Heure : {pvModal.heure_debut} - {pvModal.heure_fin}</div>
+                  <div className="text-xs font-mono font-bold text-amber-900 mt-1">
+                    N° BL : {pvModal.numero_bl} {pvModal.numero_commande ? `| Cmd: ${pvModal.numero_commande}` : ""}
+                  </div>
+                  <div className="text-[11px] text-gray-500 mt-0.5">Date : {fmtDate(pvModal.date)}</div>
+                  <div className="text-[10px] text-gray-400">
+                    Arrivée: {pvModal.heure_arrivee || "--"} | Début: {pvModal.heure_debut || "--"} → Fin: {pvModal.heure_fin || "--"}
+                  </div>
                 </div>
               </div>
 
-              {/* Tableau Véhicule & Fournisseur */}
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <span className="text-[10px] text-gray-500 uppercase font-bold block mb-1">CONVOI & TRANSPORTEUR</span>
-                  <div>Fournisseur : <strong>{pvModal.fournisseur}</strong></div>
+              {/* Informations du convoi & Intervenants */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                <div className="p-3 bg-gray-50 rounded-lg border" style={{ borderColor: T.line }}>
+                  <span className="text-[10px] text-gray-500 uppercase font-black block mb-1">1. CONVOI &amp; FOURNISSEUR</span>
+                  <div>Fournisseur : <strong>{pvModal.fournisseur || "--"}</strong></div>
                   <div>Transporteur : <strong>{pvModal.transporteur || "--"}</strong></div>
-                  <div>Camion Citerne : <strong className="font-mono">{pvModal.immatriculation_camion || "--"}</strong></div>
-                  <div>Chauffeur : <strong>{pvModal.nom_chauffeur || "--"}</strong> (Permis: {pvModal.numero_permis || "--"})</div>
+                  <div>Camion Tracteur : <strong className="font-mono">{pvModal.immatriculation_camion || "--"}</strong></div>
+                  <div>Citerne / Remorque : <strong className="font-mono">{pvModal.immatriculation_remorque || "--"}</strong></div>
                 </div>
 
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <span className="text-[10px] text-gray-500 uppercase font-bold block mb-1">SÉCURITÉ & CONTRÔLE QUALITÉ</span>
-                  <div>Mise à la terre : <strong>{pvModal.prise_de_terre_branchee ? "✓ Conforme" : "Non"}</strong></div>
-                  <div>Extincteurs : <strong>{pvModal.extincteurs_en_place ? "✓ En position" : "Non"}</strong></div>
-                  <div>Test eau citerne : <strong>{pvModal.test_eau_camion ? "Présence eau" : "✓ Négatif (Pur)"}</strong></div>
-                  <div>Scellés / Plombs : <strong>{pvModal.scelles_conformes ? "✓ Intacts" : "Rompue"}</strong> ({pvModal.numeros_scelles || "Vérifiés"})</div>
+                <div className="p-3 bg-gray-50 rounded-lg border" style={{ borderColor: T.line }}>
+                  <span className="text-[10px] text-gray-500 uppercase font-black block mb-1">2. SÉCURITÉ &amp; QUALITÉ</span>
+                  <div>Contrôle Sécurité : <strong>✓ 10/10 Points Conformes</strong></div>
+                  <div>Mise à la terre &amp; Extincteurs : <strong>✓ En place</strong></div>
+                  <div>Scellés Dômes / Vannes : <strong>{pvModal.scelles_conformes ? "✓ Intacts" : "⚠️ Brisé"}</strong> ({pvModal.numeros_scelles || "Vérifiés"})</div>
+                  <div>Densité : <strong>{pvModal.densite_mesuree || "--"}</strong> | Temp : <strong>{pvModal.temperature_c ? `${pvModal.temperature_c}°C` : "--"}</strong></div>
+                </div>
+
+                <div className="p-3 bg-gray-50 rounded-lg border" style={{ borderColor: T.line }}>
+                  <span className="text-[10px] text-gray-500 uppercase font-black block mb-1">3. INTERVENANTS DÉPOTAGE</span>
+                  <div>Chauffeur : <strong>{pvModal.nom_chauffeur || "--"}</strong></div>
+                  <div>N° Permis : <strong className="font-mono">{pvModal.numero_permis || "--"}</strong></div>
+                  <div>Agent Contrôleur : <strong>{pvModal.agent_controleur || "--"}</strong></div>
+                  <div>Responsable Réception : <strong>{pvModal.responsable_reception || "--"}</strong></div>
                 </div>
               </div>
 
-              {/* Tableau Multi-Compartiments si disponible */}
+              {/* Tableau Multi-Compartiments avec les 4 grandeurs */}
               {Array.isArray(pvModal.compartiments) && pvModal.compartiments.length > 0 ? (
                 <div>
                   <span className="text-[11px] font-bold text-gray-800 uppercase tracking-wider block mb-1.5">
-                    Détail par Compartiment Camion — ({pvModal.compartiments.length} compartiments)
+                    Détail par Compartiment Camion — ({pvModal.compartiments.length} compartiment{pvModal.compartiments.length > 1 ? "s" : ""})
                   </span>
                   <table className="w-full text-xs border" style={{ borderColor: T.line }}>
                     <thead className="bg-gray-100 text-gray-700">
                       <tr>
                         <th className="p-1.5 text-left">Comp.</th>
                         <th className="p-1.5 text-left">Produit</th>
-                        <th className="p-1.5 text-left">N° BL</th>
-                        <th className="p-1.5 text-left">N° Scellé(s)</th>
-                        <th className="p-1.5 text-right">Volume BL (L)</th>
-                        <th className="p-1.5 text-right">Reçu (L)</th>
-                        <th className="p-1.5 text-right">Écart (L / %)</th>
+                        <th className="p-1.5 text-left">Cuve Dest.</th>
+                        <th className="p-1.5 text-left">N° Scellé</th>
+                        <th className="p-1.5 text-right">Vol. BL (L)</th>
+                        <th className="p-1.5 text-right">Stock Théorique (L)</th>
+                        <th className="p-1.5 text-right">Stock Final (L)</th>
+                        <th className="p-1.5 text-right">Dépoté Réel (L)</th>
+                        <th className="p-1.5 text-right">Écart Net (L / %)</th>
                         <th className="p-1.5 text-right">Manquant (L)</th>
-                        <th className="p-1.5 text-right">Valeur (FCFA)</th>
                         <th className="p-1.5 text-center">Statut</th>
                       </tr>
                     </thead>
@@ -2027,10 +2351,11 @@ export default function CuvesCarburant() {
                       {pvModal.compartiments.map((c) => {
                         const volBl = c.volume_bl_num ?? c.volume_bl ?? 0;
                         const volRecu = c.volume_decharge_cuve ?? 0;
+                        const stockTheo = c.stock_theorique_apres ?? (n(c.jauge_cuve_avant_l) + volBl);
+                        const stockFin = n(c.jauge_cuve_apres_l) || 0;
                         const ecartL = c.ecart_litres ?? 0;
                         const ecartPct = c.ecart_pourcentage ?? 0;
                         const manqL = c.manquant_litres ?? 0;
-                        const manqFcfa = c.valeur_manquant_fcfa ?? 0;
                         const statut = c.statut ?? (Math.abs(ecartPct) <= 0.20 ? "CONFORME" : ecartL < 0 ? "LITIGE" : "BONI");
                         return (
                           <tr key={c.id || c.numero_compartiment} className={statut === "LITIGE" ? "bg-rose-50/70" : "hover:bg-gray-50"}>
@@ -2040,18 +2365,17 @@ export default function CuvesCarburant() {
                                 {c.produit}
                               </span>
                             </td>
-                            <td className="p-1.5 font-mono text-gray-700">{c.numero_bl || pvModal.numero_bl || "--"}</td>
+                            <td className="p-1.5 text-gray-800 font-medium">{c.cuve_nom || "Cuve"}</td>
                             <td className="p-1.5 font-mono text-amber-900 font-semibold">{c.numero_scelle || "--"}</td>
                             <td className="p-1.5 text-right tabular font-semibold">{F(volBl)}</td>
+                            <td className="p-1.5 text-right tabular text-blue-950 font-medium">{F(stockTheo)}</td>
+                            <td className="p-1.5 text-right tabular text-gray-900 font-medium">{F(stockFin)}</td>
                             <td className="p-1.5 text-right tabular font-bold text-blue-900">{F(volRecu)}</td>
                             <td className={`p-1.5 text-right tabular font-bold ${ecartL >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
                               {ecartL > 0 ? "+" : ""}{F(ecartL)} / {ecartPct > 0 ? "+" : ""}{ecartPct}%
                             </td>
                             <td className={`p-1.5 text-right tabular font-black ${manqL > 0 ? "text-rose-700" : "text-gray-500"}`}>
                               {F(manqL)}
-                            </td>
-                            <td className={`p-1.5 text-right tabular font-black ${manqFcfa > 0 ? "text-rose-700" : "text-gray-500"}`}>
-                              {F(manqFcfa)}
                             </td>
                             <td className="p-1.5 text-center">
                               <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
@@ -2070,15 +2394,13 @@ export default function CuvesCarburant() {
                       <tr>
                         <td colSpan={4} className="p-2 font-black text-gray-900 text-xs uppercase">TOTAL CONVOI CITERNE</td>
                         <td className="p-2 text-right font-black tabular text-sm">{F(pvModal.volume_bl)}</td>
+                        <td colSpan={2} className="p-2 text-center text-gray-500 text-[10px]">Tolérance légale : ±0.20%</td>
                         <td className="p-2 text-right font-black tabular text-sm text-blue-900">{F(pvModal.volume_decharge_reel)}</td>
                         <td className={`p-2 text-right font-black tabular text-sm ${pvModal.ecart_litres >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
                           {pvModal.ecart_litres > 0 ? "+" : ""}{F(pvModal.ecart_litres)} / {pvModal.ecart_pourcentage > 0 ? "+" : ""}{pvModal.ecart_pourcentage}%
                         </td>
                         <td className={`p-2 text-right font-black tabular text-sm ${pvModal.manquant_litres > 0 ? "text-rose-700" : "text-gray-500"}`}>
                           {F(pvModal.manquant_litres ?? 0)}
-                        </td>
-                        <td className={`p-2 text-right font-black tabular text-sm ${pvModal.manquant_fcfa > 0 ? "text-rose-700" : "text-gray-500"}`}>
-                          {F(pvModal.manquant_fcfa ?? 0)}
                         </td>
                         <td className="p-2 text-center">
                           <span className={`px-2 py-0.5 rounded font-black text-[11px] ${
@@ -2094,10 +2416,10 @@ export default function CuvesCarburant() {
                   </table>
                 </div>
               ) : (
-                /* Ancien format mono-produit - rétrocompatibilité */
+                /* Rétrocompatibilité mono-produit */
                 <div>
                   <span className="text-[11px] font-bold text-gray-800 uppercase tracking-wider block mb-1.5">
-                    Bilan Quantitatif & Tolérances Pétrolières ({pvModal.produit})
+                    Bilan Quantitatif &amp; Tolérances Pétrolières ({pvModal.produit})
                   </span>
                   <table className="w-full text-xs border" style={{ borderColor: T.line }}>
                     <thead className="bg-gray-100 text-gray-700">
@@ -2142,30 +2464,41 @@ export default function CuvesCarburant() {
                 </div>
               )}
 
-              {/* Réserves & Signatures */}
+              {/* Réserves & Triple Signature Officielle */}
               <div className="pt-2 text-xs">
-                <div className="text-[11px] text-gray-600 mb-4">
-                  <strong>Réserves / Observations :</strong> {pvModal.observations || "Dépotage réalisé conformément aux procédures de sécurité. Aucune fuite constatée."}
+                <div className="text-[11px] text-gray-600 mb-3 bg-slate-50 p-2.5 rounded border" style={{ borderColor: T.line }}>
+                  <div><strong>Observations Chauffeur :</strong> {pvModal.observations_chauffeur || "Aucune observation particulière émise par le chauffeur."}</div>
+                  <div className="mt-1"><strong>Observations &amp; Réserves Réceptionnaire :</strong> {pvModal.observations || "Dépotage réalisé conformément aux procédures de sécurité. Aucune fuite constatée."}</div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-8 pt-4 border-t" style={{ borderColor: T.line }}>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-3 border-t" style={{ borderColor: T.line }}>
                   <div className="text-center p-3 border rounded-lg bg-gray-50/50">
                     <span className="text-[10px] uppercase font-bold text-gray-500 block mb-1">
-                      VISA CHAUFFEUR LIVREUR
+                      1. VISA CHAUFFEUR LIVREUR
                     </span>
-                    <div className="text-xs font-bold text-gray-800 mt-2">{pvModal.nom_chauffeur || "Le Chauffeur"}</div>
-                    <div className="h-12 flex items-center justify-center text-gray-300 italic text-[11px]">
-                      (Signature précédée de la mention "Lu et approuvé")
+                    <div className="text-xs font-bold text-gray-800 mt-1">{pvModal.nom_chauffeur || "Le Chauffeur"}</div>
+                    <div className="h-10 flex items-center justify-center text-gray-400 italic text-[10px]">
+                      (Signature "Lu et approuvé")
                     </div>
                   </div>
 
                   <div className="text-center p-3 border rounded-lg bg-gray-50/50">
                     <span className="text-[10px] uppercase font-bold text-gray-500 block mb-1">
-                      VISA GÉRANT / CHEF DE STATION
+                      2. VISA AGENT CONTRÔLEUR
                     </span>
-                    <div className="text-xs font-bold text-gray-800 mt-2">{pvModal.responsable_reception || "Le Gérant"}</div>
-                    <div className="h-12 flex items-center justify-center text-gray-300 italic text-[11px]">
-                      (Cachet station et visa de réception)
+                    <div className="text-xs font-bold text-blue-900 mt-1">{pvModal.agent_controleur || "Agent Jaugeur"}</div>
+                    <div className="h-10 flex items-center justify-center text-gray-400 italic text-[10px]">
+                      (Certifie l'exactitude des jauges)
+                    </div>
+                  </div>
+
+                  <div className="text-center p-3 border rounded-lg bg-gray-50/50">
+                    <span className="text-[10px] uppercase font-bold text-gray-500 block mb-1">
+                      3. VISA &amp; CACHET GÉRANT
+                    </span>
+                    <div className="text-xs font-bold text-amber-950 mt-1">{pvModal.responsable_reception || "Chef de Station"}</div>
+                    <div className="h-10 flex items-center justify-center text-gray-400 italic text-[10px]">
+                      (Cachet station &amp; clôture)
                     </div>
                   </div>
                 </div>

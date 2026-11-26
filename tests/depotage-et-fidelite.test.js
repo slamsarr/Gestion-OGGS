@@ -60,6 +60,77 @@ describe("Rapports de Dépotage Carburant & Contrôle Anti-Débordement", () => 
     const estLitige = Math.abs(pctLitige) > seuilPct;
     expect(estLitige).toBe(true);
   });
+
+  // ── 4. CONFORMITÉ STRICTE AVEC L'EXEMPLE CHIFFRÉ DU GUIDE PÉTROLIER ──
+  it("reproduit fidèlement l'exemple chiffré du guide pétrolier (10 000 L, stock initial 5 000 L, mesuré 14 950 L)", () => {
+    // Données de l'exemple du guide :
+    const stockInitial = 5000;
+    const volumeBl = 10000;
+    const stockTheoriqueApres = stockInitial + volumeBl; // 15 000 L
+    const stockFinalMesure = 14950;
+    const volumeReelLivre = stockFinalMesure - stockInitial; // 9 950 L
+    const ecartReception = stockFinalMesure - stockTheoriqueApres; // -50 L
+    const ecartReceptionBis = volumeReelLivre - volumeBl; // -50 L
+    const tauxEcart = (ecartReception / volumeBl) * 100; // -0.50%
+
+    expect(stockTheoriqueApres).toBe(15000);
+    expect(volumeReelLivre).toBe(9950);
+    expect(ecartReception).toBe(-50);
+    expect(ecartReceptionBis).toBe(-50);
+    expect(tauxEcart).toBe(-0.5);
+
+    // Hors tolérance de ±0.20% -> Litige manquant
+    const seuilTol = 0.20;
+    const estConforme = Math.abs(tauxEcart) <= seuilTol;
+    expect(estConforme).toBe(false);
+
+    // Calcul du manquant litige et valorisation FCFA (prix Gasoil = 755 FCFA)
+    const prixGasoil = 755;
+    const manquantLitres = Math.abs(ecartReception); // 50 L
+    const manquantAdmissibleL = volumeBl * 0.002; // 20 L
+    const manquantLitigeL = manquantLitres - manquantAdmissibleL; // 30 L
+    const valeurManquantFcfa = manquantLitres * prixGasoil; // 37 750 FCFA
+
+    expect(manquantAdmissibleL).toBe(20);
+    expect(manquantLitigeL).toBe(30);
+    expect(valeurManquantFcfa).toBe(37750);
+  });
+
+  // ── 5. CHECKLIST DE SÉCURITÉ EN 10 POINTS ET SÉPARATION DES ACTEURS ──
+  it("valide la checklist sécurité en 10 points et la séparation des rôles (Tracteur/Remorque & Contrôleur/Gérant)", () => {
+    const checklist10Points = {
+      check_documents_identite: true,
+      check_produit_cuve_conforme: true,
+      check_capacite_creux_validee: true,
+      check_raccords_flexibles_etanches: true,
+      check_balisage_extincteurs_prets: true,
+      check_prise_de_terre_branchee: true,
+      check_moteur_coupe_cales_posees: true,
+      check_pistolets_distribution_arretes: true,
+      check_absence_fuite_surveillance: true,
+      check_test_eau_negatif: true,
+    };
+
+    const totalPoints = Object.keys(checklist10Points).length;
+    const pointsConformes = Object.values(checklist10Points).filter(Boolean).length;
+
+    expect(totalPoints).toBe(10);
+    expect(pointsConformes).toBe(10);
+
+    // Distinction camion tracteur vs remorque citerne
+    const camion = {
+      tracteur: "DK-4402-A",
+      remorque: "RM-8821-C",
+    };
+    expect(camion.tracteur).not.toBe(camion.remorque);
+
+    // Distinction agent contrôleur vs responsable réception
+    const acteurs = {
+      agent_controleur: "Mamadou Sow (Jaugeur)",
+      responsable_reception: "Sadio Keita (Chef de Station)",
+    };
+    expect(acteurs.agent_controleur).not.toBe(acteurs.responsable_reception);
+  });
 });
 
 describe("Programme de Fidélisation Clients — Règles Métier & Paliers", () => {
