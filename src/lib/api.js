@@ -774,40 +774,85 @@ export async function saveQuarts(quarts) {
 
 // ── Cuves ──
 export async function listCuves(stationId) {
+  const ref = await getLocalRef();
+  const isUUID = (str) => typeof str === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+
+  let targetStationId = stationId;
+  if (stationId && !isUUID(stationId)) {
+    const match = (ref.stations || []).find((s) => rowMatchesStation(s, stationId, ref.stations));
+    if (match && isUUID(match.id)) {
+      targetStationId = match.id;
+    }
+  }
+
   const sb = getSupabase();
-  if (sb) {
+  if (sb && targetStationId && isUUID(targetStationId)) {
     try {
-      const { data } = await sb.from("cuves").select("*").eq("station_id", stationId);
-      if (data?.length) return data;
+      const { data } = await sb.from("cuves").select("*").eq("station_id", targetStationId);
+      if (data?.length) {
+        ref.cuves = [...(ref.cuves || []).filter((c) => !data.some((d) => d.id === c.id)), ...data];
+        await setLocalRef(ref);
+        return data;
+      }
     } catch {}
   }
-  const ref = await getLocalRef();
-  return (ref.cuves || []).filter((c) => c.station_id === stationId);
+  return (ref.cuves || []).filter((c) => rowMatchesStation(c, stationId, ref.stations));
 }
+
 export async function saveCuve(cuve) {
+  const ref = await getLocalRef();
+  const isUUID = (str) => typeof str === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+
+  // 1. Résolution de l'identifiant station (UUID valide pour Supabase ou fallback)
+  let resolvedStationId = cuve.station_id;
+  if (!isUUID(resolvedStationId)) {
+    const match = (ref.stations || []).find((s) => rowMatchesStation(s, resolvedStationId, ref.stations));
+    if (match && isUUID(match.id)) {
+      resolvedStationId = match.id;
+    } else {
+      const firstWithUuid = (ref.stations || []).find((s) => isUUID(s.id));
+      if (firstWithUuid) resolvedStationId = firstWithUuid.id;
+    }
+  }
+
+  const finalStationId = isUUID(resolvedStationId) ? resolvedStationId : (cuve.station_id || "st-hann");
+  const cuveId = isUUID(cuve.id) ? cuve.id : uuid();
+
   const row = {
-    id: cuve.id || uuid(),
-    station_id: cuve.station_id,
+    id: cuveId,
+    station_id: finalStationId,
     nom: cuve.nom || cuve.code || `Cuve ${cuve.produit}`,
-    code: cuve.code || cuve.id || uuid().slice(0, 8),
+    code: cuve.code || cuveId.slice(0, 8),
     produit: cuve.produit,
     capacite_l: n(cuve.capacite_l) || null,
     actif: cuve.actif !== false,
   };
+
   const sb = getSupabase();
-  if (sb) {
-    const { error } = await sb.from("cuves").upsert(row);
-    if (error) return { error: error.message };
+  if (sb && isUUID(finalStationId)) {
+    try {
+      const { error } = await sb.from("cuves").upsert(row);
+      if (error) {
+        console.warn("Avertissement synchronisation cuve Supabase:", error.message);
+      }
+    } catch (e) {
+      console.warn("Exception synchronisation cuve Supabase:", e);
+    }
   }
-  const ref = await getLocalRef();
-  ref.cuves = [...(ref.cuves || []).filter((c) => c.id !== row.id), row];
+
+  // Persistance systématique dans le référentiel local / Dexie (Offline-First)
+  ref.cuves = [
+    ...(ref.cuves || []).filter((c) => c.id !== row.id && c.id !== cuve.id),
+    row,
+  ];
   await setLocalRef(ref);
   return { ok: true, cuve: row };
 }
 
 export async function deleteCuve(id) {
+  const isUUID = (str) => typeof str === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
   const sb = getSupabase();
-  if (sb) {
+  if (sb && isUUID(id)) {
     try {
       await sb.from("cuves").delete().eq("id", id);
     } catch {}

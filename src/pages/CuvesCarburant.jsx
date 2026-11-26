@@ -11,6 +11,7 @@ import {
   listRapportsDepotage,
   saveCuve,
   deleteCuve,
+  rowMatchesStation,
 } from "../lib/api";
 import { F, fmtDate, n, T, todayISO } from "../lib/calcul";
 import { Loading } from "../components/ui";
@@ -161,15 +162,24 @@ export default function CuvesCarburant() {
     loadData();
   }, [stationId]);
 
+  // Station active (résolution du vrai UUID et code station)
+  const activeStation = useMemo(() => {
+    return (ref?.stations || []).find((s) => rowMatchesStation(s, stationId, ref?.stations)) || {
+      id: stationId,
+      code: "HANN",
+      nom: profil?.station_nom || "Star Energy Hann Mariste",
+    };
+  }, [ref, stationId, profil]);
+
   // Cuves référentiel pour la station active
   const stationCuves = useMemo(() => {
-    const list = (ref?.cuves || []).filter((c) => !stationId || c.station_id === stationId);
+    const list = (ref?.cuves || []).filter((c) => rowMatchesStation(c, stationId, ref?.stations));
     if (list.length > 0) return list;
     return [
-      { id: "cuve-gasoil-1", station_id: stationId, nom: "Cuve 1 Gasoil", code: "C-GO-1", produit: "GASOIL", capacite_l: 30000 },
-      { id: "cuve-super-1", station_id: stationId, nom: "Cuve 1 Super", code: "C-SP-1", produit: "SUPER", capacite_l: 20000 },
+      { id: "cuve-gasoil-1", station_id: activeStation?.id || stationId, nom: "Cuve 1 Gasoil", code: "C-GO-1", produit: "GASOIL", capacite_l: 30000 },
+      { id: "cuve-super-1", station_id: activeStation?.id || stationId, nom: "Cuve 1 Super", code: "C-SP-1", produit: "SUPER", capacite_l: 20000 },
     ];
-  }, [ref, stationId]);
+  }, [ref, stationId, activeStation]);
 
   // Cartographie complète de chaque cuve avec son dernier jaugeage et ses jauges
   const cuvesWithLatestJauge = useMemo(() => {
@@ -417,8 +427,10 @@ export default function CuvesCarburant() {
     if (!newCuveForm.nom.trim()) return flash("Veuillez donner un nom à la cuve", "err");
     if (!newCuveForm.capacite_l || n(newCuveForm.capacite_l) <= 0) return flash("Capacité invalide", "err");
 
+    const targetStationId = activeStation?.id || stationId;
+
     const res = await saveCuve({
-      station_id: stationId,
+      station_id: targetStationId,
       nom: newCuveForm.nom.trim(),
       produit: newCuveForm.produit,
       capacite_l: n(newCuveForm.capacite_l),

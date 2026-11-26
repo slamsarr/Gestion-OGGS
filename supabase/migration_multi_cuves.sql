@@ -24,3 +24,10 @@ where nom is null or trim(nom) = '';
 alter table if exists jauges_cuves_ops add column if not exists cuve_id uuid;
 alter table if exists jauges_cuves_ops add column if not exists cuve_nom text;
 alter table if exists jauges_cuves_ops add column if not exists eau_fond_cm numeric default 0;
+
+-- 5. Politique RLS pour permettre aux gérants, directeurs et admins d'administrer les cuves
+drop policy if exists cuves_admin on cuves;
+drop policy if exists cuves_gerant on cuves;
+create policy cuves_admin on cuves for all to authenticated
+using (mon_role() in ('directeur','admin','gerant'))
+with check (mon_role() in ('directeur','admin','gerant'));

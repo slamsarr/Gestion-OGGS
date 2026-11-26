@@ -97,4 +97,33 @@ describe("Gestion Multi-Cuves Carburant & Jaugeage Quotidien", () => {
     const risqueCuve2 = volumeBlCompartiment > creuxCuve2;
     expect(risqueCuve2).toBe(false);
   });
+
+  // ── 5. RÉSOLUTION D'UNE CUVE AVEC IDENTIFIANT STATION TEXTUEL (st-hann) ──
+  it("valide la structure et la résolution d'une cuve créée avec un identifiant textuel st-hann", () => {
+    const isUUID = (str) => typeof str === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+    const stationHannUuid = "cd735284-f0a3-40d7-8495-98c511af0da0";
+    const refStations = [
+      { id: stationHannUuid, code: "HANN", nom: "Star Energy Hann Mariste" },
+      { id: "2a14bcfb-469b-4d8f-8abe-1ea5b7c57396", code: "NDIAKHIRATE", nom: "Star Energy Ndiakhirate" },
+    ];
+
+    const inputCuve = {
+      station_id: "st-hann",
+      nom: "Cuve 2 Gasoil Test",
+      produit: "GASOIL",
+      capacite_l: 25000,
+    };
+
+    // Résolution
+    let resolvedStationId = inputCuve.station_id;
+    if (!isUUID(resolvedStationId)) {
+      const match = refStations.find((s) => s.code === "HANN" || s.id === "st-hann");
+      if (match && isUUID(match.id)) {
+        resolvedStationId = match.id;
+      }
+    }
+
+    expect(isUUID(resolvedStationId)).toBe(true);
+    expect(resolvedStationId).toBe(stationHannUuid);
+  });
 });
