@@ -49,12 +49,8 @@ jobs:
 
       - name: Deploiement FTP Hostinger (si secrets configures)
         if: "${{ env.FTP_SERVER != '' }}"
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.HOSTINGER_FTP_SERVER }}
-          username: ${{ secrets.HOSTINGER_FTP_USER }}
-          password: ${{ secrets.HOSTINGER_FTP_PASSWORD }}
-          port: 21
-          protocol: ftps
-          local-dir: ./dist/
-          server-dir: public_html/
+        run: node scripts/deploy-ftp.js
+        env:
+          HOSTINGER_FTP_SERVER: ${{ secrets.HOSTINGER_FTP_SERVER }}
+          HOSTINGER_FTP_USER: ${{ secrets.HOSTINGER_FTP_USER }}
+          HOSTINGER_FTP_PASSWORD: ${{ secrets.HOSTINGER_FTP_PASSWORD }}
