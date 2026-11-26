@@ -9,6 +9,8 @@ import {
   listDescentes,
   saveRapportDepotage,
   listRapportsDepotage,
+  saveCuve,
+  deleteCuve,
 } from "../lib/api";
 import { F, fmtDate, n, T, todayISO } from "../lib/calcul";
 import { Loading } from "../components/ui";
@@ -26,15 +28,21 @@ export default function CuvesCarburant() {
   const [tab, setTab] = useState("jauge"); // jauge | depotage | rapports | ecarts
   const [msg, setMsg] = useState({ text: "", type: "ok" });
 
-  // Jauge physique & Rapprochement quotidien
+  // Jauge physique & Rapprochement quotidien multi-cuves
   const [date, setDate] = useState(todayISO());
-  const [produitCuve, setProduitCuve] = useState("GASOIL");
+  const [selectedCuveId, setSelectedCuveId] = useState("");
   const [stockPhysique, setStockPhysique] = useState("");
   const [hauteurCm, setHauteurCm] = useState("");
+  const [eauFondCm, setEauFondCm] = useState("");
   const [jauges, setJauges] = useState([]);
   const [descentes, setDescentes] = useState([]);
   const [livraisons, setLivraisons] = useState([]);
   const [rapportsDepotage, setRapportsDepotage] = useState([]);
+
+  // Modal Ajout rapide de Cuve & Filtre historique
+  const [showAddCuveModal, setShowAddCuveModal] = useState(false);
+  const [newCuveForm, setNewCuveForm] = useState({ nom: "", produit: "GASOIL", capacite_l: 30000 });
+  const [filtreHistoriqueCuve, setFiltreHistoriqueCuve] = useState("ALL");
 
   // ── Formulaire Rapport de Dépotage Complet (En-tête Camion) ──
   const [depotageForm, setDepotageForm] = useState({
@@ -71,6 +79,7 @@ export default function CuvesCarburant() {
       numero_compartiment: "C1",
       produit: "GASOIL",
       cuve_station_id: "cuve-gasoil-1",
+      cuve_nom: "Cuve 1 Gasoil",
       numero_bl: "",
       numero_scelle: "",
       volume_bl: "15000",
@@ -86,6 +95,7 @@ export default function CuvesCarburant() {
       numero_compartiment: "C2",
       produit: "SUPER",
       cuve_station_id: "cuve-super-1",
+      cuve_nom: "Cuve 1 Super",
       numero_bl: "",
       numero_scelle: "",
       volume_bl: "10000",
@@ -129,14 +139,69 @@ export default function CuvesCarburant() {
     loadData();
   }, [stationId]);
 
-  // Cuves référentiel
-  const cuves = (ref?.cuves || []).filter((c) => !stationId || c.station_id === stationId);
-  const cuveGasoil = cuves.find((c) => c.produit === "GASOIL") || { id: "cuve-gasoil-1", produit: "GASOIL", capacite_l: 30000 };
-  const cuveSuper = cuves.find((c) => c.produit === "SUPER") || { id: "cuve-super-1", produit: "SUPER", capacite_l: 20000 };
+  // Cuves référentiel pour la station active
+  const stationCuves = useMemo(() => {
+    const list = (ref?.cuves || []).filter((c) => !stationId || c.station_id === stationId);
+    if (list.length > 0) return list;
+    return [
+      { id: "cuve-gasoil-1", station_id: stationId, nom: "Cuve 1 Gasoil", code: "C-GO-1", produit: "GASOIL", capacite_l: 30000 },
+      { id: "cuve-super-1", station_id: stationId, nom: "Cuve 1 Super", code: "C-SP-1", produit: "SUPER", capacite_l: 20000 },
+    ];
+  }, [ref, stationId]);
 
-  // Dernières jauges
-  const lastJaugeGasoil = jauges.find((j) => j.produit === "GASOIL") || { volume_physique: 0, date: todayISO() };
-  const lastJaugeSuper = jauges.find((j) => j.produit === "SUPER") || { volume_physique: 0, date: todayISO() };
+  // Cartographie complète de chaque cuve avec son dernier jaugeage et ses jauges
+  const cuvesWithLatestJauge = useMemo(() => {
+    return stationCuves.map((c) => {
+      const lastJ = jauges.find((j) => (j.cuve_id && j.cuve_id === c.id)) ||
+                    jauges.find((j) => (!j.cuve_id && j.produit === c.produit)) ||
+                    { volume_physique: 0, date: todayISO(), hauteur_cm: "", eau_fond_cm: 0 };
+      const vol = n(lastJ.volume_physique) || 0;
+      const cap = n(c.capacite_l) || 30000;
+      const pct = cap > 0 ? Math.min(100, Math.round((vol / cap) * 100)) : 0;
+      const creux = Math.max(0, cap - vol);
+      return {
+        ...c,
+        nom: c.nom || `Cuve ${c.produit}`,
+        latestJauge: lastJ,
+        volume_physique: vol,
+        capacite_l: cap,
+        pourcentage: pct,
+        creux_disponible: creux,
+      };
+    });
+  }, [stationCuves, jauges]);
+
+  // Synchronisation cuve sélectionnée par défaut
+  useEffect(() => {
+    if (!selectedCuveId && cuvesWithLatestJauge.length > 0) {
+      setSelectedCuveId(cuvesWithLatestJauge[0].id);
+    }
+  }, [cuvesWithLatestJauge, selectedCuveId]);
+
+  const activeCuve = cuvesWithLatestJauge.find((c) => c.id === selectedCuveId) || cuvesWithLatestJauge[0] || {
+    id: "cuve-gasoil-1",
+    nom: "Cuve 1 Gasoil",
+    produit: "GASOIL",
+    capacite_l: 30000,
+    volume_physique: 0,
+    creux_disponible: 30000,
+    pourcentage: 0,
+    latestJauge: { volume_physique: 0, hauteur_cm: "", eau_fond_cm: 0 },
+  };
+
+  // Totaux consolidés par carburant (plusieurs cuves de Gasoil, plusieurs cuves de Super)
+  const gasoilCuves = cuvesWithLatestJauge.filter((c) => c.produit === "GASOIL");
+  const superCuves = cuvesWithLatestJauge.filter((c) => c.produit === "SUPER");
+
+  const stockTotalGasoil = gasoilCuves.reduce((s, c) => s + c.volume_physique, 0);
+  const capaciteTotaleGasoil = gasoilCuves.reduce((s, c) => s + c.capacite_l, 0);
+  const creuxTotalGasoil = Math.max(0, capaciteTotaleGasoil - stockTotalGasoil);
+  const pctTotalGasoil = capaciteTotaleGasoil > 0 ? Math.min(100, Math.round((stockTotalGasoil / capaciteTotaleGasoil) * 100)) : 0;
+
+  const stockTotalSuper = superCuves.reduce((s, c) => s + c.volume_physique, 0);
+  const capaciteTotaleSuper = superCuves.reduce((s, c) => s + c.capacite_l, 0);
+  const creuxTotalSuper = Math.max(0, capaciteTotaleSuper - stockTotalSuper);
+  const pctTotalSuper = capaciteTotaleSuper > 0 ? Math.min(100, Math.round((stockTotalSuper / capaciteTotaleSuper) * 100)) : 0;
 
   // Consommation estimée
   const computeConsoJour = (prod) => {
@@ -149,11 +214,11 @@ export default function CuvesCarburant() {
 
   const consoJourGasoil = computeConsoJour("GASOIL");
   const consoJourSuper = computeConsoJour("SUPER");
-  const autonomieGasoil = lastJaugeGasoil.volume_physique > 0 ? (lastJaugeGasoil.volume_physique / consoJourGasoil).toFixed(1) : 0;
-  const autonomieSuper = lastJaugeSuper.volume_physique > 0 ? (lastJaugeSuper.volume_physique / consoJourSuper).toFixed(1) : 0;
+  const autonomieGasoil = consoJourGasoil > 0 && stockTotalGasoil > 0 ? (stockTotalGasoil / consoJourGasoil).toFixed(1) : 0;
+  const autonomieSuper = consoJourSuper > 0 && stockTotalSuper > 0 ? (stockTotalSuper / consoJourSuper).toFixed(1) : 0;
 
-  const capaciteActive = produitCuve === "GASOIL" ? cuveGasoil.capacite_l : cuveSuper.capacite_l;
-  const stockTheoriqueEstime = produitCuve === "GASOIL" ? lastJaugeGasoil.volume_physique : lastJaugeSuper.volume_physique;
+  const capaciteActive = activeCuve.capacite_l;
+  const stockTheoriqueEstime = activeCuve.volume_physique;
   const ecartCuve = stockPhysique !== "" ? n(stockPhysique) - stockTheoriqueEstime : 0;
   const tauxCoulagePct = stockPhysique !== "" && stockTheoriqueEstime > 0 ? (ecartCuve / stockTheoriqueEstime) * 100 : 0;
   const toleranceRespectee = Math.abs(tauxCoulagePct) <= 0.3;
@@ -178,8 +243,18 @@ export default function CuvesCarburant() {
       const prix = c.produit === "GASOIL" ? prixGasoil : prixSuper;
       const manquantFcfa = manquantL * prix;
 
+      const targetCuve = cuvesWithLatestJauge.find((x) => x.id === c.cuve_station_id) ||
+                         cuvesWithLatestJauge.find((x) => x.produit === c.produit) ||
+                         { capacite_l: c.produit === "GASOIL" ? 30000 : 20000, nom: `Cuve ${c.produit}` };
+
+      const creuxCuve = Math.max(0, targetCuve.capacite_l - jAv);
+      const risqueTropPlein = volBl > creuxCuve && jAv > 0;
+
       return {
         ...c,
+        target_cuve: targetCuve,
+        creux_cuve: creuxCuve,
+        risque_trop_plein: risqueTropPlein,
         volume_bl_num: volBl,
         volume_decharge_cuve: volRecu,
         ecart_litres: ecartL,
@@ -192,7 +267,7 @@ export default function CuvesCarburant() {
         statut: volRecu === 0 ? "EN_ATTENTE" : toleranceOk ? "CONFORME" : ecartL < 0 ? "LITIGE" : "BONI",
       };
     });
-  }, [compartiments]);
+  }, [compartiments, cuvesWithLatestJauge]);
 
   // Totaux globaux camion citerne
   const totalVolumeBlCamion = compartimentsCalcules.reduce((s, c) => s + c.volume_bl_num, 0);
@@ -215,13 +290,17 @@ export default function CuvesCarburant() {
   const handleAddCompartiment = () => {
     const nextNum = compartiments.length + 1;
     const isOdd = nextNum % 2 === 1;
+    const prod = isOdd ? "GASOIL" : "SUPER";
+    const defaultCuve = cuvesWithLatestJauge.find((c) => c.produit === prod) || cuvesWithLatestJauge[0];
+
     setCompartiments((prev) => [
       ...prev,
       {
         id: `comp-${Date.now()}-${nextNum}`,
         numero_compartiment: `C${nextNum}`,
-        produit: isOdd ? "GASOIL" : "SUPER",
-        cuve_station_id: isOdd ? "cuve-gasoil-1" : "cuve-super-1",
+        produit: prod,
+        cuve_station_id: defaultCuve?.id || (isOdd ? "cuve-gasoil-1" : "cuve-super-1"),
+        cuve_nom: defaultCuve?.nom || `Cuve ${prod}`,
         numero_bl: depotageForm.numero_bl || "",
         numero_scelle: "",
         volume_bl: "5000",
@@ -250,18 +329,29 @@ export default function CuvesCarburant() {
         if (c.id !== id) return c;
         const updated = { ...c, [field]: val };
         if (field === "produit") {
-          updated.cuve_station_id = val === "GASOIL" ? "cuve-gasoil-1" : "cuve-super-1";
+          const matchingCuve = cuvesWithLatestJauge.find((x) => x.produit === val);
+          if (matchingCuve) {
+            updated.cuve_station_id = matchingCuve.id;
+            updated.cuve_nom = matchingCuve.nom;
+          }
+        }
+        if (field === "cuve_station_id") {
+          const matchingCuve = cuvesWithLatestJauge.find((x) => x.id === val);
+          if (matchingCuve) {
+            updated.cuve_nom = matchingCuve.nom;
+          }
         }
         return updated;
       })
     );
   };
 
-  const handlePreRemplirJaugeAvantComp = (id, produit) => {
-    const last = produit === "GASOIL" ? lastJaugeGasoil : lastJaugeSuper;
+  const handlePreRemplirJaugeAvantComp = (id, cuveId) => {
+    const target = cuvesWithLatestJauge.find((c) => c.id === cuveId) || cuvesWithLatestJauge[0];
+    const last = target?.latestJauge || { volume_physique: 0, hauteur_cm: "" };
     handleUpdateCompartiment(id, "jauge_cuve_avant_l", last.volume_physique != null ? last.volume_physique.toString() : "0");
     handleUpdateCompartiment(id, "jauge_cuve_avant_cm", last.hauteur_cm != null ? last.hauteur_cm.toString() : "");
-    flash(`Jauge avant pré-remplie pour le compartiment (${last.volume_physique || 0} L)`);
+    flash(`Jauge avant pré-remplie pour ${target?.nom || "la cuve"} (${last.volume_physique || 0} L)`);
   };
 
   const handleEnregistrerJauge = async (e) => {
@@ -271,9 +361,12 @@ export default function CuvesCarburant() {
 
     const payload = {
       station_id: stationId,
+      cuve_id: activeCuve.id,
+      cuve_nom: activeCuve.nom,
       date,
-      produit: produitCuve,
+      produit: activeCuve.produit,
       hauteur_cm: n(hauteurCm),
+      eau_fond_cm: n(eauFondCm) || 0,
       volume_physique: n(stockPhysique),
       stock_theorique: stockTheoriqueEstime,
       ecart_litres: ecartCuve,
@@ -282,12 +375,44 @@ export default function CuvesCarburant() {
 
     const res = await saveJaugeCuve(payload);
     if (res.ok) {
-      flash("Jauge physique enregistrée et rapprochement effectué !", "ok");
+      flash(`✓ Jauge ${activeCuve.nom} (${activeCuve.produit}) enregistrée avec succès !`, "ok");
       setStockPhysique("");
       setHauteurCm("");
+      setEauFondCm("");
       loadData();
     } else {
       flash("Erreur lors de l'enregistrement de la jauge", "err");
+    }
+  };
+
+  const handleCreerNouvelleCuve = async (e) => {
+    e.preventDefault();
+    if (!newCuveForm.nom.trim()) return flash("Veuillez donner un nom à la cuve", "err");
+    if (!newCuveForm.capacite_l || n(newCuveForm.capacite_l) <= 0) return flash("Capacité invalide", "err");
+
+    const res = await saveCuve({
+      station_id: stationId,
+      nom: newCuveForm.nom.trim(),
+      produit: newCuveForm.produit,
+      capacite_l: n(newCuveForm.capacite_l),
+    });
+
+    if (res.ok) {
+      flash(`✓ Cuve ${newCuveForm.nom} (${newCuveForm.produit}) ajoutée avec succès !`, "ok");
+      setShowAddCuveModal(false);
+      setNewCuveForm({ nom: "", produit: "GASOIL", capacite_l: 30000 });
+      await loadData();
+    } else {
+      flash("Erreur lors de la création de la cuve : " + (res.error || ""), "err");
+    }
+  };
+
+  const handleSelectCuveForJauge = (cuveId) => {
+    setSelectedCuveId(cuveId);
+    setTab("jauge");
+    if (typeof window !== "undefined") {
+      const el = document.getElementById("form-jauge-section");
+      if (el) el.scrollIntoView({ behavior: "smooth" });
     }
   };
 
@@ -381,9 +506,6 @@ export default function CuvesCarburant() {
     }
   };
 
-  const pctGasoil = Math.min(100, Math.round((lastJaugeGasoil.volume_physique / cuveGasoil.capacite_l) * 100));
-  const pctSuper = Math.min(100, Math.round((lastJaugeSuper.volume_physique / cuveSuper.capacite_l) * 100));
-
   if (loading) return <Loading label="Chargement des Cuves & Dépotages..." />;
 
   return (
@@ -398,13 +520,22 @@ export default function CuvesCarburant() {
                 Cuves & Dépotages Carburant
               </h1>
               <span className="text-[11px] px-2.5 py-0.5 rounded-full font-bold bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs">
-                Rapprochement Pétrolier
+                Rapprochement Pétrolier Multi-Cuves
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-1 font-medium">
-              Jauges physiques quotidiennes, contrôle anti-débordement, PV de dépotage citerne et tolérances transport
+              Jauges physiques quotidiennes par cuve (Gasoil &amp; Super), contrôle anti-débordement, PV de dépotage citerne et tolérances transport
             </p>
           </div>
+          <button
+            type="button"
+            onClick={() => setShowAddCuveModal(true)}
+            className="self-start md:self-auto text-xs px-3.5 py-2 rounded-xl font-bold text-gray-900 shadow-sm transition-all hover:opacity-90 flex items-center gap-1.5"
+            style={{ background: T.gold }}
+          >
+            <span>➕</span>
+            <span>Ajouter une Cuve</span>
+          </button>
         </div>
 
         {/* Barre d'onglets de navigation épurée */}
@@ -479,102 +610,229 @@ export default function CuvesCarburant() {
         </div>
       )}
 
-      {/* Visualisation graphique des Cuves */}
+      {/* ────────────────── 1. SYNTHÈSE GLOBALE CONSOLIDÉE PAR CARBURANT ────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-        {/* Cuve Gasoil */}
-        <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: T.line }}>
+        {/* Total Consolidé Gasoil */}
+        <div className="bg-gradient-to-br from-blue-900 to-slate-900 rounded-2xl p-4 text-white shadow-md border border-blue-800/60">
           <div className="flex items-center justify-between mb-2">
-            <span className="font-bold text-sm text-gray-800">🛢️ Cuve 1 : GASOIL</span>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-800">
-              Capacité : {F(cuveGasoil.capacite_l)} L
+            <div className="flex items-center gap-2">
+              <span className="text-xl">🛢️</span>
+              <div>
+                <span className="font-black text-sm tracking-wide text-blue-200">STOCK CONSOLIDÉ GASOIL</span>
+                <div className="text-[10px] text-blue-300 font-medium">{gasoilCuves.length} cuve(s) physique(s)</div>
+              </div>
+            </div>
+            <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-200 border border-blue-400/30">
+              Capacité : {F(capaciteTotaleGasoil)} L
             </span>
           </div>
-          <div className="w-full bg-gray-100 rounded-full h-5 overflow-hidden my-2 border">
+
+          <div className="w-full bg-slate-800 rounded-full h-4 overflow-hidden my-2 border border-slate-700">
             <div
               className="h-full rounded-full transition-all flex items-center justify-end px-2"
               style={{
-                width: `${Math.max(pctGasoil, 5)}%`,
-                background: pctGasoil < 15 ? "#EF4444" : pctGasoil < 30 ? "#F59E0B" : "#3B82F6",
+                width: `${Math.max(pctTotalGasoil, 5)}%`,
+                background: pctTotalGasoil < 15 ? "#EF4444" : pctTotalGasoil < 30 ? "#F59E0B" : "#3B82F6",
               }}
             >
-              <span className="text-[10px] font-bold text-white tabular">{pctGasoil}%</span>
+              <span className="text-[9px] font-black text-white tabular">{pctTotalGasoil}%</span>
             </div>
           </div>
-          <div className="flex justify-between items-center text-xs text-gray-600 mt-2">
-            <span>Stock actuel : <strong>{F(lastJaugeGasoil.volume_physique)} L</strong></span>
-            <span>Creux disponible : <strong className="text-emerald-700">{F(cuveGasoil.capacite_l - lastJaugeGasoil.volume_physique)} L</strong></span>
+
+          <div className="flex justify-between items-center text-xs mt-2 text-slate-200">
+            <span>Stock total : <strong className="text-white text-sm font-black">{F(stockTotalGasoil)} L</strong></span>
+            <span>Creux dispo : <strong className="text-emerald-400 font-black">{F(creuxTotalGasoil)} L</strong></span>
           </div>
-          <div className="text-[11px] text-gray-400 mt-1 flex justify-between">
-            <span>Conso moy : ~{F(consoJourGasoil)} L/j</span>
-            <span>Autonomie : <strong>~{autonomieGasoil} j</strong></span>
+          <div className="text-[11px] text-slate-400 mt-1 flex justify-between border-t border-slate-700/60 pt-1.5">
+            <span>Conso estimée : ~{F(consoJourGasoil)} L/j</span>
+            <span>Autonomie totale : <strong className="text-blue-300">~{autonomieGasoil} jours</strong></span>
           </div>
         </div>
 
-        {/* Cuve Super */}
-        <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: T.line }}>
+        {/* Total Consolidé Super */}
+        <div className="bg-gradient-to-br from-emerald-950 to-slate-900 rounded-2xl p-4 text-white shadow-md border border-emerald-800/60">
           <div className="flex items-center justify-between mb-2">
-            <span className="font-bold text-sm text-gray-800">🛢️ Cuve 2 : SUPER CARBURANT</span>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-50 text-emerald-800">
-              Capacité : {F(cuveSuper.capacite_l)} L
+            <div className="flex items-center gap-2">
+              <span className="text-xl">🛢️</span>
+              <div>
+                <span className="font-black text-sm tracking-wide text-emerald-200">STOCK CONSOLIDÉ SUPER</span>
+                <div className="text-[10px] text-emerald-300 font-medium">{superCuves.length} cuve(s) physique(s)</div>
+              </div>
+            </div>
+            <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/30">
+              Capacité : {F(capaciteTotaleSuper)} L
             </span>
           </div>
-          <div className="w-full bg-gray-100 rounded-full h-5 overflow-hidden my-2 border">
+
+          <div className="w-full bg-slate-800 rounded-full h-4 overflow-hidden my-2 border border-slate-700">
             <div
               className="h-full rounded-full transition-all flex items-center justify-end px-2"
               style={{
-                width: `${Math.max(pctSuper, 5)}%`,
-                background: pctSuper < 15 ? "#EF4444" : pctSuper < 30 ? "#F59E0B" : "#10B981",
+                width: `${Math.max(pctTotalSuper, 5)}%`,
+                background: pctTotalSuper < 15 ? "#EF4444" : pctTotalSuper < 30 ? "#F59E0B" : "#10B981",
               }}
             >
-              <span className="text-[10px] font-bold text-white tabular">{pctSuper}%</span>
+              <span className="text-[9px] font-black text-white tabular">{pctTotalSuper}%</span>
             </div>
           </div>
-          <div className="flex justify-between items-center text-xs text-gray-600 mt-2">
-            <span>Stock actuel : <strong>{F(lastJaugeSuper.volume_physique)} L</strong></span>
-            <span>Creux disponible : <strong className="text-emerald-700">{F(cuveSuper.capacite_l - lastJaugeSuper.volume_physique)} L</strong></span>
+
+          <div className="flex justify-between items-center text-xs mt-2 text-slate-200">
+            <span>Stock total : <strong className="text-white text-sm font-black">{F(stockTotalSuper)} L</strong></span>
+            <span>Creux dispo : <strong className="text-emerald-400 font-black">{F(creuxTotalSuper)} L</strong></span>
           </div>
-          <div className="text-[11px] text-gray-400 mt-1 flex justify-between">
-            <span>Conso moy : ~{F(consoJourSuper)} L/j</span>
-            <span>Autonomie : <strong>~{autonomieSuper} j</strong></span>
+          <div className="text-[11px] text-slate-400 mt-1 flex justify-between border-t border-slate-700/60 pt-1.5">
+            <span>Conso estimée : ~{F(consoJourSuper)} L/j</span>
+            <span>Autonomie totale : <strong className="text-emerald-300">~{autonomieSuper} jours</strong></span>
           </div>
+        </div>
+      </div>
+
+      {/* ────────────────── 2. GRILLE DÉTAILLÉE PAR CUVE PHYSIQUE ────────────────── */}
+      <div className="bg-white rounded-2xl border p-4 mb-5 shadow-xs" style={{ borderColor: T.line }}>
+        <div className="flex items-center justify-between pb-3 mb-3 border-b" style={{ borderColor: T.line }}>
+          <div>
+            <h2 className="text-xs font-bold uppercase tracking-wider text-gray-800 flex items-center gap-1.5">
+              <span>🛢️</span>
+              <span>Détail des Cuves Physiques de la Station ({cuvesWithLatestJauge.length} cuves configurées)</span>
+            </h2>
+            <p className="text-[11px] text-gray-500 mt-0.5">
+              Chaque cuve dispose de sa propre jauge au barème, de son creux anti-débordement et de sa mesure d'eau au fond
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+          {cuvesWithLatestJauge.map((c) => {
+            const isGasoil = c.produit === "GASOIL";
+            const isSelected = c.id === activeCuve.id;
+            const eau = n(c.latestJauge?.eau_fond_cm) || 0;
+
+            return (
+              <div
+                key={c.id}
+                className={`p-3.5 rounded-xl border transition-all ${
+                  isSelected ? "ring-2 ring-blue-600 bg-blue-50/20" : "bg-white hover:border-slate-300"
+                }`}
+                style={{ borderColor: isSelected ? "#2563eb" : T.line }}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-base">🛢️</span>
+                    <span className="font-extrabold text-xs text-gray-900">{c.nom}</span>
+                  </div>
+                  <span
+                    className={`text-[10px] px-2 py-0.5 rounded font-black ${
+                      isGasoil ? "bg-blue-100 text-blue-900" : "bg-emerald-100 text-emerald-900"
+                    }`}
+                  >
+                    {c.produit}
+                  </span>
+                </div>
+
+                <div className="text-[11px] text-gray-500 flex justify-between mb-1">
+                  <span>Capacité nominale</span>
+                  <strong className="text-gray-800 tabular">{F(c.capacite_l)} L</strong>
+                </div>
+
+                {/* Progress bar */}
+                <div className="w-full bg-gray-100 rounded-full h-3.5 overflow-hidden my-1.5 border border-gray-200">
+                  <div
+                    className="h-full rounded-full transition-all flex items-center justify-end px-1.5"
+                    style={{
+                      width: `${Math.max(c.pourcentage, 6)}%`,
+                      background: c.pourcentage < 15 ? "#EF4444" : c.pourcentage < 30 ? "#F59E0B" : isGasoil ? "#3B82F6" : "#10B981",
+                    }}
+                  >
+                    <span className="text-[9px] font-bold text-white tabular">{c.pourcentage}%</span>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center text-xs mt-2">
+                  <span>Stock : <strong className="text-gray-900 font-bold">{F(c.volume_physique)} L</strong></span>
+                  <span>Creux : <strong className="text-emerald-700 font-bold">{F(c.creux_disponible)} L</strong></span>
+                </div>
+
+                {/* Données dernière jauge & Eau de fond */}
+                <div className="text-[10px] text-gray-500 mt-2 pt-2 border-t flex items-center justify-between" style={{ borderColor: T.line }}>
+                  <div>
+                    {c.latestJauge?.hauteur_cm ? (
+                      <span>Latte : <strong>{c.latestJauge.hauteur_cm} cm</strong></span>
+                    ) : (
+                      <span>Dernière : {fmtDate(c.latestJauge?.date)}</span>
+                    )}
+                  </div>
+                  <div>
+                    {eau > 0 ? (
+                      <span className="text-red-600 font-bold">⚠️ Eau : {eau} cm</span>
+                    ) : (
+                      <span className="text-emerald-700 font-semibold">✓ Sans eau</span>
+                    )}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleSelectCuveForJauge(c.id)}
+                  className={`w-full mt-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${
+                    isSelected
+                      ? "bg-[#0B2545] text-white shadow-xs"
+                      : "bg-slate-100 hover:bg-slate-200 text-slate-800"
+                  }`}
+                >
+                  <span>📏</span>
+                  <span>{isSelected ? "Cuve sélectionnée pour jauge" : "Jauger cette cuve"}</span>
+                </button>
+              </div>
+            );
+          })}
         </div>
       </div>
 
       {/* ────────────────── ONGLET 1 : JAUGE QUOTIDIENNE ────────────────── */}
       {tab === "jauge" && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div id="form-jauge-section" className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="md:col-span-2">
             <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: T.line }}>
-              <h2 className="text-sm font-bold mb-3" style={{ color: T.petrol }}>
-                Enregistrement de la Jauge Physique Quotidienne
-              </h2>
+              <div className="flex items-center justify-between pb-2 mb-3 border-b" style={{ borderColor: T.line }}>
+                <h2 className="text-sm font-bold" style={{ color: T.petrol }}>
+                  Enregistrement de la Jauge Physique Quotidienne
+                </h2>
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-900 border border-blue-200">
+                  Cuve active : {activeCuve.nom} ({activeCuve.produit})
+                </span>
+              </div>
+
               <form onSubmit={handleEnregistrerJauge} className="space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Date de la mesure</label>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Sélectionner la cuve à jauger *</label>
+                    <select
+                      value={activeCuve.id}
+                      onChange={(e) => setSelectedCuveId(e.target.value)}
+                      className="w-full text-xs border rounded p-2 bg-white font-bold text-gray-900"
+                      style={{ borderColor: T.line }}
+                    >
+                      {cuvesWithLatestJauge.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.nom} — {c.produit} (Capacité : {F(c.capacite_l)} L | Stock actuel : {F(c.volume_physique)} L)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Date de la mesure *</label>
                     <input
                       type="date"
                       value={date}
                       onChange={(e) => setDate(e.target.value)}
                       className="w-full text-xs border rounded p-2"
                       style={{ borderColor: T.line }}
+                      required
                     />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Produit de la cuve</label>
-                    <select
-                      value={produitCuve}
-                      onChange={(e) => setProduitCuve(e.target.value)}
-                      className="w-full text-xs border rounded p-2 bg-white"
-                      style={{ borderColor: T.line }}
-                    >
-                      <option value="GASOIL">Cuve 1 — GASOIL</option>
-                      <option value="SUPER">Cuve 2 — SUPER</option>
-                    </select>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">Hauteur à la latte (cm)</label>
                     <input
@@ -587,25 +845,46 @@ export default function CuvesCarburant() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Volume physique lu au barème (Litres) *</label>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Volume barème (Litres) *</label>
                     <input
                       type="number"
                       placeholder="ex: 18500"
                       value={stockPhysique}
                       onChange={(e) => setStockPhysique(e.target.value)}
-                      className="w-full text-xs border rounded p-2 font-bold"
+                      className="w-full text-xs border rounded p-2 font-bold text-blue-950 bg-blue-50/30"
                       style={{ borderColor: T.line }}
                       required
                     />
                   </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Pâte à eau / Trace d'eau (cm)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      placeholder="0 si sans eau"
+                      value={eauFondCm}
+                      onChange={(e) => setEauFondCm(e.target.value)}
+                      className={`w-full text-xs border rounded p-2 font-semibold ${
+                        n(eauFondCm) > 0 ? "border-red-400 bg-red-50 text-red-900" : ""
+                      }`}
+                      style={{ borderColor: n(eauFondCm) > 0 ? "#f87171" : T.line }}
+                    />
+                  </div>
                 </div>
+
+                {n(eauFondCm) > 0 && (
+                  <div className="p-2 rounded-lg bg-red-50 border border-red-200 text-xs text-red-800 font-semibold flex items-center gap-2">
+                    <span>⚠️</span>
+                    <span>Présence d'eau détectée au fond de {activeCuve.nom} ({eauFondCm} cm). Purge recommandée avant toute distribution.</span>
+                  </div>
+                )}
 
                 <button
                   type="submit"
                   className="w-full py-2.5 rounded-lg text-xs font-bold text-gray-900 shadow-sm transition-opacity hover:opacity-90 mt-2"
                   style={{ background: T.gold }}
                 >
-                  ✓ Enregistrer la Jauge & Valider le Rapprochement
+                  ✓ Enregistrer la Jauge de « {activeCuve.nom} » & Valider le Rapprochement
                 </button>
               </form>
             </div>
@@ -614,14 +893,20 @@ export default function CuvesCarburant() {
           {/* Rapprochement & Coulage */}
           <div className="md:col-span-1">
             <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: T.line }}>
-              <h3 className="text-sm font-bold mb-3" style={{ color: T.petrol }}>Bilan de Coulage & Écart</h3>
+              <div className="flex items-center justify-between pb-2 mb-3 border-b" style={{ borderColor: T.line }}>
+                <h3 className="text-sm font-bold" style={{ color: T.petrol }}>Bilan Coulage : {activeCuve.nom}</h3>
+                <span className={`text-[10px] font-black px-2 py-0.5 rounded ${activeCuve.produit === "GASOIL" ? "bg-blue-100 text-blue-900" : "bg-emerald-100 text-emerald-900"}`}>
+                  {activeCuve.produit}
+                </span>
+              </div>
+
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between py-1 border-b" style={{ borderColor: T.line }}>
-                  <span className="text-gray-500">Capacité cuve :</span>
+                  <span className="text-gray-500">Capacité de la cuve :</span>
                   <span className="font-bold tabular">{F(capaciteActive)} L</span>
                 </div>
                 <div className="flex justify-between py-1 border-b" style={{ borderColor: T.line }}>
-                  <span className="text-gray-500">Stock théorique :</span>
+                  <span className="text-gray-500">Dernier stock théorique :</span>
                   <span className="font-bold tabular">{F(stockTheoriqueEstime)} L</span>
                 </div>
                 <div className="flex justify-between py-1 border-b" style={{ borderColor: T.line }}>
@@ -663,6 +948,85 @@ export default function CuvesCarburant() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ────────────────── MODAL AJOUT RAPIDE DE CUVE ────────────────── */}
+      {showAddCuveModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 animate-fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border text-gray-900" style={{ borderColor: T.line }}>
+            <div className="flex justify-between items-center pb-3 border-b mb-3" style={{ borderColor: T.line }}>
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🛢️</span>
+                <h3 className="font-black text-sm text-gray-900">Ajouter une Cuve de Stockage</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddCuveModal(false)}
+                className="text-gray-400 hover:text-gray-600 font-bold text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleCreerNouvelleCuve} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Nom / Numéro de la cuve *</label>
+                <input
+                  type="text"
+                  placeholder="ex: Cuve 2 Gasoil, Cuve 2 Super"
+                  value={newCuveForm.nom}
+                  onChange={(e) => setNewCuveForm({ ...newCuveForm, nom: e.target.value })}
+                  className="w-full text-xs border rounded p-2 font-semibold"
+                  style={{ borderColor: T.line }}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Carburant contenu *</label>
+                <select
+                  value={newCuveForm.produit}
+                  onChange={(e) => setNewCuveForm({ ...newCuveForm, produit: e.target.value })}
+                  className="w-full text-xs border rounded p-2 bg-white font-bold"
+                  style={{ borderColor: T.line }}
+                >
+                  <option value="GASOIL">GASOIL</option>
+                  <option value="SUPER">SUPER CARBURANT</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Capacité nominale (Litres) *</label>
+                <input
+                  type="number"
+                  placeholder="ex: 20000"
+                  value={newCuveForm.capacite_l}
+                  onChange={(e) => setNewCuveForm({ ...newCuveForm, capacite_l: e.target.value })}
+                  className="w-full text-xs border rounded p-2 font-bold"
+                  style={{ borderColor: T.line }}
+                  required
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddCuveModal(false)}
+                  className="w-1/3 py-2 rounded-lg text-xs font-bold text-gray-600 bg-gray-100 hover:bg-gray-200"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  className="w-2/3 py-2 rounded-lg text-xs font-bold text-gray-900 shadow-sm hover:opacity-90"
+                  style={{ background: T.gold }}
+                >
+                  ✓ Enregistrer la Cuve
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -941,9 +1305,9 @@ export default function CuvesCarburant() {
             {/* Liste des Cartes Compartiments */}
             <div className="space-y-4">
               {compartimentsCalcules.map((c, idx) => {
-                const targetCuve = c.produit === "GASOIL" ? cuveGasoil : cuveSuper;
-                const creuxCuve = Math.max(0, targetCuve.capacite_l - n(c.jauge_cuve_avant_l));
-                const risqueTropPlein = n(c.volume_bl) > creuxCuve && n(c.jauge_cuve_avant_l) > 0;
+                const targetCuve = c.target_cuve;
+                const creuxCuve = c.creux_cuve;
+                const risqueTropPlein = c.risque_trop_plein;
 
                 return (
                   <div
@@ -966,6 +1330,9 @@ export default function CuvesCarburant() {
                           }`}
                         >
                           {c.produit}
+                        </span>
+                        <span className="text-[11px] font-bold text-gray-800 bg-gray-200/80 px-2 py-0.5 rounded">
+                          Dest. : {targetCuve?.nom || c.cuve_nom || "Cuve"}
                         </span>
                         <span className="text-[11px] font-mono text-blue-900 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
                           BL: {c.numero_bl || depotageForm.numero_bl || "--"}
@@ -1018,15 +1385,33 @@ export default function CuvesCarburant() {
                           <span className="text-[10px] text-blue-700 font-semibold bg-blue-50 px-1.5 py-0.2 rounded">BL Hérité</span>
                         </div>
                         <div>
-                          <label className="block text-[11px] text-gray-600 mb-0.5">Produit *</label>
+                          <label className="block text-[11px] text-gray-600 mb-0.5">Produit du compartiment *</label>
                           <select
                             value={c.produit}
                             onChange={(e) => handleUpdateCompartiment(c.id, "produit", e.target.value)}
                             className="w-full text-xs border rounded p-1.5 font-bold bg-gray-50"
                             style={{ borderColor: T.line }}
                           >
-                            <option value="GASOIL">GASOIL (Cuve 1 - 30 000 L)</option>
-                            <option value="SUPER">SUPER (Cuve 2 - 20 000 L)</option>
+                            <option value="GASOIL">GASOIL</option>
+                            <option value="SUPER">SUPER CARBURANT</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[11px] text-blue-900 font-bold mb-0.5">
+                            Cuve station réceptrice *
+                          </label>
+                          <select
+                            value={c.cuve_station_id}
+                            onChange={(e) => handleUpdateCompartiment(c.id, "cuve_station_id", e.target.value)}
+                            className="w-full text-xs border rounded p-1.5 font-bold bg-white text-gray-900 border-blue-400 focus:ring-1 focus:ring-blue-500"
+                          >
+                            {cuvesWithLatestJauge
+                              .filter((x) => x.produit === c.produit)
+                              .map((x) => (
+                                <option key={x.id} value={x.id}>
+                                  {x.nom} — Cap: {F(x.capacite_l)} L (Creux dispo: {F(x.creux_disponible)} L)
+                                </option>
+                              ))}
                           </select>
                         </div>
                         <div className="p-2 rounded bg-blue-50/50 border border-blue-200">
@@ -1109,11 +1494,11 @@ export default function CuvesCarburant() {
                         <div className="flex items-center justify-between">
                           <div className="text-[11px] font-bold text-gray-700 uppercase flex items-center gap-1">
                             <span>🛢️</span>
-                            <span>Cuve Station ({c.produit})</span>
+                            <span>{targetCuve?.nom || c.cuve_nom || `Cuve ${c.produit}`}</span>
                           </div>
                           <button
                             type="button"
-                            onClick={() => handlePreRemplirJaugeAvantComp(c.id, c.produit)}
+                            onClick={() => handlePreRemplirJaugeAvantComp(c.id, c.cuve_station_id)}
                             className="text-[10px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 hover:bg-blue-100"
                           >
                             Pré-remplir jauge avant
@@ -1170,7 +1555,7 @@ export default function CuvesCarburant() {
 
                         {risqueTropPlein && (
                           <div className="text-[10px] text-red-700 font-bold bg-red-50 p-1.5 rounded border border-red-200">
-                            ⚠️ Attention creux cuve réduit ({F(creuxCuve)} L) !
+                            ⚠️ Risque de débordement : Le volume BL ({F(c.volume_bl_num)} L) dépasse le creux disponible ({F(creuxCuve)} L) de {targetCuve?.nom} !
                           </div>
                         )}
                       </div>
@@ -1430,9 +1815,33 @@ export default function CuvesCarburant() {
       {/* ────────────────── ONGLET 4 : HISTORIQUE DES JAUGES ────────────────── */}
       {tab === "ecarts" && (
         <div className="bg-white rounded-xl border shadow-sm p-4" style={{ borderColor: T.line }}>
-          <h3 className="text-sm font-bold mb-3" style={{ color: T.petrol }}>
-            Historique des Rapprochements Physiques / Théoriques
-          </h3>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 mb-3 border-b gap-2" style={{ borderColor: T.line }}>
+            <div>
+              <h3 className="text-sm font-bold" style={{ color: T.petrol }}>
+                Historique des Rapprochements Physiques / Théoriques
+              </h3>
+              <p className="text-xs text-gray-500">
+                Suivi des jauges par cuve, détection de présence d'eau et contrôle de conformité des coulages
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500 font-medium">Filtrer par cuve :</span>
+              <select
+                value={filtreHistoriqueCuve}
+                onChange={(e) => setFiltreHistoriqueCuve(e.target.value)}
+                className="text-xs border rounded p-1.5 font-bold bg-gray-50"
+                style={{ borderColor: T.line }}
+              >
+                <option value="ALL">Toutes les cuves ({jauges.length})</option>
+                {cuvesWithLatestJauge.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nom} ({c.produit})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
           {jauges.length === 0 ? (
             <p className="text-xs text-gray-500 py-6 text-center">Aucune jauge enregistrée pour le moment.</p>
           ) : (
@@ -1441,8 +1850,9 @@ export default function CuvesCarburant() {
                 <thead>
                   <tr className="border-b text-gray-500 text-left" style={{ borderColor: T.line }}>
                     <th className="pb-2">Date / Opérateur</th>
-                    <th className="pb-2">Produit</th>
-                    <th className="pb-2 text-right">Hauteur (cm)</th>
+                    <th className="pb-2">Cuve &amp; Produit</th>
+                    <th className="pb-2 text-right">Latte (cm)</th>
+                    <th className="pb-2 text-right">Eau fond</th>
                     <th className="pb-2 text-right">Volume Mesuré</th>
                     <th className="pb-2 text-right">Stock Théorique</th>
                     <th className="pb-2 text-right">Écart (Coulage)</th>
@@ -1450,35 +1860,62 @@ export default function CuvesCarburant() {
                   </tr>
                 </thead>
                 <tbody className="divide-y" style={{ borderColor: T.line }}>
-                  {jauges.map((j) => {
-                    const taux = j.stock_theorique > 0 ? (j.ecart_litres / j.stock_theorique) * 100 : 0;
-                    const okTol = Math.abs(taux) <= 0.3;
-                    return (
-                      <tr key={j.id} className="hover:bg-gray-50">
-                        <td className="py-2.5">
-                          <div className="font-semibold">{fmtDate(j.date)}</div>
-                          <div className="text-[10px] text-gray-400">{j.operateur}</div>
-                        </td>
-                        <td className="py-2.5 font-bold text-gray-800">{j.produit}</td>
-                        <td className="py-2.5 text-right tabular text-gray-500">{j.hauteur_cm ? `${j.hauteur_cm} cm` : "--"}</td>
-                        <td className="py-2.5 text-right tabular font-bold text-blue-900">{F(j.volume_physique)} L</td>
-                        <td className="py-2.5 text-right tabular text-gray-600">{F(j.stock_theorique)} L</td>
-                        <td className={`py-2.5 text-right tabular font-bold ${j.ecart_litres >= 0 ? "text-green-700" : "text-red-600"}`}>
-                          {j.ecart_litres > 0 ? "+" : ""}{F(j.ecart_litres)} L
-                          <div className="text-[10px] text-gray-400">{taux > 0 ? "+" : ""}{taux.toFixed(2)}%</div>
-                        </td>
-                        <td className="py-2.5 text-center">
-                          <span
-                            className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${
-                              okTol ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800 font-bold"
-                            }`}
-                          >
-                            {okTol ? "✓ Conforme" : "⚠️ Hors norme"}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {jauges
+                    .filter((j) => {
+                      if (filtreHistoriqueCuve === "ALL") return true;
+                      return j.cuve_id === filtreHistoriqueCuve;
+                    })
+                    .map((j) => {
+                      const taux = j.stock_theorique > 0 ? (j.ecart_litres / j.stock_theorique) * 100 : 0;
+                      const okTol = Math.abs(taux) <= 0.3;
+                      const cuveTrouvee = cuvesWithLatestJauge.find((c) => c.id === j.cuve_id);
+                      const cuveNom = j.cuve_nom || cuveTrouvee?.nom || `Cuve ${j.produit}`;
+                      const eau = n(j.eau_fond_cm || j.payload?.eau_fond_cm) || 0;
+
+                      return (
+                        <tr key={j.id} className="hover:bg-gray-50">
+                          <td className="py-2.5">
+                            <div className="font-semibold">{fmtDate(j.date)}</div>
+                            <div className="text-[10px] text-gray-400">{j.operateur}</div>
+                          </td>
+                          <td className="py-2.5">
+                            <div className="font-bold text-gray-900">{cuveNom}</div>
+                            <span
+                              className={`text-[9px] px-1.5 py-0.2 rounded font-black ${
+                                j.produit === "GASOIL" ? "bg-blue-100 text-blue-900" : "bg-emerald-100 text-emerald-900"
+                              }`}
+                            >
+                              {j.produit}
+                            </span>
+                          </td>
+                          <td className="py-2.5 text-right tabular text-gray-700 font-semibold">{j.hauteur_cm ? `${j.hauteur_cm} cm` : "--"}</td>
+                          <td className="py-2.5 text-right tabular">
+                            {eau > 0 ? (
+                              <span className="text-red-600 font-bold bg-red-50 px-1.5 py-0.5 rounded border border-red-200">
+                                {eau} cm
+                              </span>
+                            ) : (
+                              <span className="text-gray-400">0 cm</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 text-right tabular font-bold text-blue-900">{F(j.volume_physique)} L</td>
+                          <td className="py-2.5 text-right tabular text-gray-600">{F(j.stock_theorique)} L</td>
+                          <td className={`py-2.5 text-right tabular font-bold ${j.ecart_litres >= 0 ? "text-green-700" : "text-red-600"}`}>
+                            {j.ecart_litres > 0 ? "+" : ""}{F(j.ecart_litres)} L
+                            <div className="text-[10px] text-gray-400">{taux > 0 ? "+" : ""}{taux.toFixed(2)}%</div>
+                          </td>
+                          <td className="py-2.5 text-center">
+                            <span
+                              className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${
+                                okTol ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800 font-bold"
+                              }`}
+                            >
+                              {okTol ? "✓ Conforme" : "⚠️ Hors norme"}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
                 </tbody>
               </table>
             </div>

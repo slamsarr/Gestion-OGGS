@@ -785,13 +785,37 @@ export async function listCuves(stationId) {
   return (ref.cuves || []).filter((c) => c.station_id === stationId);
 }
 export async function saveCuve(cuve) {
-  const row = { id: cuve.id || uuid(), station_id: cuve.station_id, produit: cuve.produit, capacite_l: n(cuve.capacite_l) || null };
+  const row = {
+    id: cuve.id || uuid(),
+    station_id: cuve.station_id,
+    nom: cuve.nom || cuve.code || `Cuve ${cuve.produit}`,
+    code: cuve.code || cuve.id || uuid().slice(0, 8),
+    produit: cuve.produit,
+    capacite_l: n(cuve.capacite_l) || null,
+    actif: cuve.actif !== false,
+  };
   const sb = getSupabase();
-  if (sb) { const { error } = await sb.from("cuves").upsert(row, { onConflict: "station_id,produit" }); if (error) return { error: error.message }; }
+  if (sb) {
+    const { error } = await sb.from("cuves").upsert(row);
+    if (error) return { error: error.message };
+  }
   const ref = await getLocalRef();
-  ref.cuves = [...(ref.cuves || []).filter((c) => !(c.station_id === row.station_id && c.produit === row.produit)), row];
+  ref.cuves = [...(ref.cuves || []).filter((c) => c.id !== row.id), row];
   await setLocalRef(ref);
   return { ok: true, cuve: row };
+}
+
+export async function deleteCuve(id) {
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      await sb.from("cuves").delete().eq("id", id);
+    } catch {}
+  }
+  const ref = await getLocalRef();
+  ref.cuves = (ref.cuves || []).filter((c) => c.id !== id);
+  await setLocalRef(ref);
+  return { ok: true };
 }
 
 // ── Opérations crédit ──

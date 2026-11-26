@@ -7,7 +7,7 @@ import {
   createProduit, updateProduit,
   createCategorie, updateCategorie, deleteCategorie,
   createClientCredit, updateClientCredit,
-  listCuves, saveCuve,
+  listCuves, saveCuve, deleteCuve,
   getParametres, saveParametres, diagSync,
   creerCollaborateur, listCollaborateurs, deleteCollaborateur,
   toggleCollaborateurActif, resetCollaborateurPassword,
@@ -62,7 +62,7 @@ export default function Parametres() {
   const [clForm, setClForm] = useState({ code: "", nom: "", plafond: 0 });
   const [cuves, setCuves] = useState([]);
   const [showCuve, setShowCuve] = useState(false);
-  const [cuveForm, setCuveForm] = useState({ station_id: "", produit: "GASOIL", capacite_l: 30000 });
+  const [cuveForm, setCuveForm] = useState({ station_id: "", nom: "", produit: "GASOIL", capacite_l: 30000 });
   const [parametres, setParametres] = useState(null);
   const [diag, setDiag] = useState(null);
 
@@ -290,7 +290,7 @@ export default function Parametres() {
     }
   };
 
-  const editCuve = (id, capacite_l) => setCuves((list) => list.map((c) => c.id === id ? { ...c, capacite_l } : c));
+  const editCuve = (id, field, val) => setCuves((list) => list.map((c) => c.id === id ? { ...c, [field]: val } : c));
   
   const addCuve = async () => {
     const stId = cuveForm.station_id || stations[0]?.id;
@@ -298,20 +298,39 @@ export default function Parametres() {
       flash("Veuillez sélectionner une station");
       return;
     }
-    const res = await saveCuve({ station_id: stId, produit: cuveForm.produit, capacite_l: n(cuveForm.capacite_l) || 30000 });
+    const res = await saveCuve({
+      station_id: stId,
+      nom: (cuveForm.nom || "").trim() || `Cuve ${cuveForm.produit}`,
+      produit: cuveForm.produit,
+      capacite_l: n(cuveForm.capacite_l) || 30000,
+    });
     if (res.ok) {
       flash("✓ Cuve ajoutée avec succès");
       setShowCuve(false);
-      setCuveForm({ station_id: stId, produit: "GASOIL", capacite_l: 30000 });
+      setCuveForm({ station_id: stId, nom: "", produit: "GASOIL", capacite_l: 30000 });
       const all = [];
       for (const st of (ref?.stations || [])) {
         const c = await listCuves(st.id);
         all.push(...c);
       }
       setCuves(all);
+      reload();
     } else {
       flash("Erreur : " + (res.error || "Échec"));
     }
+  };
+
+  const delCuve = async (c) => {
+    if (!window.confirm(`Supprimer la cuve « ${c.nom || c.produit} » ?`)) return;
+    await deleteCuve(c.id);
+    flash("Cuve supprimée");
+    const all = [];
+    for (const st of (ref?.stations || [])) {
+      const cvs = await listCuves(st.id);
+      all.push(...cvs);
+    }
+    setCuves(all);
+    reload();
   };
 
   const saveCuves = async () => {
@@ -595,26 +614,58 @@ export default function Parametres() {
       </Section>
 
       {/* Cuves */}
-      <Section titre="🛢️ Cuves" aside={`${cuves.length} cuve(s)`}>
+      <Section titre="🛢️ Cuves de stockage carburant" aside={`${cuves.length} cuve(s)`}>
+        <p className="text-xs text-gray-500 mb-2">
+          Configurez les cuves physiques de la station (plusieurs cuves de Gasoil et de Super possibles).
+        </p>
         <div className="overflow-x-auto">
           <table className="w-full text-sm"><thead><tr className="border-b" style={{ borderColor: T.line, color: T.muted }}>
-            <th className="py-2 text-left font-medium">Station</th><th className="py-2 text-left font-medium">Produit</th><th className="py-2 text-right font-medium">Capacité (L)</th>
+            <th className="py-2 text-left font-medium">Station</th>
+            <th className="py-2 text-left font-medium">Nom de la cuve</th>
+            <th className="py-2 text-left font-medium">Produit</th>
+            <th className="py-2 text-right font-medium">Capacité (L)</th>
+            <th className="py-2 text-right font-medium">Actions</th>
           </tr></thead><tbody>
             {cuves.map((c) => (
-              <tr key={c.id || `${c.station_id}-${c.produit}`} className="border-b" style={{ borderColor: T.line }}>
+              <tr key={c.id || `${c.station_id}-${c.nom || c.produit}`} className="border-b" style={{ borderColor: T.line }}>
                 <td className="py-1.5">{stations.find((s) => s.id === c.station_id)?.code || c.station_id}</td>
-                <td className="py-1.5 font-medium">{c.produit}</td>
+                <td className="py-1.5">
+                  <input
+                    type="text"
+                    value={c.nom || `Cuve ${c.produit}`}
+                    onChange={(e) => editCuve(c.id, "nom", e.target.value)}
+                    placeholder="Nom de la cuve"
+                    className="border rounded px-2 py-1 text-xs w-36 font-semibold"
+                    style={{ borderColor: T.line }}
+                  />
+                </td>
+                <td className="py-1.5">
+                  <span className={`px-2 py-0.5 rounded text-xs font-bold ${c.produit === "GASOIL" ? "bg-blue-100 text-blue-900" : "bg-emerald-100 text-emerald-900"}`}>
+                    {c.produit}
+                  </span>
+                </td>
                 <td className="py-1.5 text-right">
-                  <Num value={c.capacite_l ?? ""} onChange={(v) => editCuve(c.id, v)} w="w-28" right />
+                  <Num value={c.capacite_l ?? ""} onChange={(v) => editCuve(c.id, "capacite_l", v)} w="w-28" right />
+                </td>
+                <td className="py-1.5 text-right">
+                  <button
+                    type="button"
+                    onClick={() => delCuve(c)}
+                    className="text-xs px-2 py-1 rounded border hover:bg-rose-50"
+                    style={{ borderColor: T.line, color: T.alert }}
+                    title="Supprimer cette cuve"
+                  >
+                    ✕
+                  </button>
                 </td>
               </tr>
             ))}
           </tbody></table>
         </div>
-        {cuves.length > 0 && <button onClick={saveCuves} className="w-full py-2 my-2 rounded text-sm font-medium" style={{ border: `1px dashed ${T.petrol}`, color: T.petrol }}>Enregistrer les capacités</button>}
+        {cuves.length > 0 && <button onClick={saveCuves} className="w-full py-2 my-2 rounded text-sm font-medium" style={{ border: `1px dashed ${T.petrol}`, color: T.petrol }}>Enregistrer les modifications des cuves</button>}
         {cuves.length === 0 && <p className="text-sm py-3" style={{ color: T.muted }}>Aucune cuve enregistrée.</p>}
         <AddForm label="Ajouter une cuve" show={showCuve} setShow={setShowCuve} onSubmit={addCuve}>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
             <div>
               <div className="text-xs mb-1" style={{ color: T.muted }}>Station</div>
               <select
@@ -627,6 +678,17 @@ export default function Parametres() {
                   <option key={st.id} value={st.id}>{st.nom} ({st.code})</option>
                 ))}
               </select>
+            </div>
+            <div>
+              <div className="text-xs mb-1" style={{ color: T.muted }}>Nom / Identifiant cuve</div>
+              <input
+                type="text"
+                placeholder="ex: Cuve 2 Gasoil"
+                value={cuveForm.nom}
+                onChange={(e) => setCuveForm({ ...cuveForm, nom: e.target.value })}
+                className={inp}
+                style={{ borderColor: T.line }}
+              />
             </div>
             <div>
               <div className="text-xs mb-1" style={{ color: T.muted }}>Produit</div>

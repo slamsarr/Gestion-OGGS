@@ -202,17 +202,22 @@ export default function Pistolets() {
           <Section titre="🛢️ Capacités des cuves" aside={`${cuves.length} cuve(s)`}>
             <div className="overflow-x-auto">
               <table className="w-full text-sm"><thead><tr className="border-b" style={{ borderColor: T.line, color: T.muted }}>
-                <th className="py-2 text-left font-medium">Produit</th><th className="py-2 text-right font-medium">Capacité (L)</th>
+                <th className="py-2 text-left font-medium">Cuve / Produit</th><th className="py-2 text-right font-medium">Capacité (L)</th>
                 <th className="py-2 text-right font-medium">Dernier niveau</th><th className="py-2 text-center font-medium">Remplissage</th>
               </tr></thead><tbody>
                 {cuves.map((cv) => {
-                  const lastJ = jaugesSorted.find((j) => j.produit === cv.produit);
-                  const level = lastJ != null && (lastJ.jauge_j1 != null ? n(lastJ.jauge_j1) : n(lastJ.jauge_j));
+                  const lastJ = jaugesSorted.find((j) => (j.cuve_id && j.cuve_id === cv.id) || j.produit === cv.produit);
+                  const level = lastJ != null && (lastJ.jauge_j1 != null ? n(lastJ.jauge_j1) : n(lastJ.jauge_j || lastJ.volume_physique));
                   const cap = n(cv.capacite_l);
                   const pct = cap > 0 ? Math.min(100, Math.round((level / cap) * 100)) : 0;
                   return (
-                    <tr key={cv.id || cv.produit} className="border-b" style={{ borderColor: T.line }}>
-                      <td className="py-1.5 font-medium">{cv.produit}</td>
+                    <tr key={cv.id || `${cv.station_id}-${cv.nom || cv.produit}`} className="border-b" style={{ borderColor: T.line }}>
+                      <td className="py-1.5 font-medium">
+                        <div>{cv.nom || `Cuve ${cv.produit}`}</div>
+                        <span className={`text-[10px] px-1.5 py-0.2 rounded font-bold ${cv.produit === "GASOIL" ? "bg-blue-100 text-blue-800" : "bg-emerald-100 text-emerald-800"}`}>
+                          {cv.produit}
+                        </span>
+                      </td>
                       <td className="py-1.5 text-right tabular">{cap ? F(cap) : "—"}</td>
                       <td className="py-1.5 text-right tabular">{level != null ? F(level) + " L" : "—"}</td>
                       <td className="py-1.5">
