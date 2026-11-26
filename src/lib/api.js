@@ -2692,6 +2692,25 @@ export async function saveRapportDepotage(r) {
   const res = await saveMetierRow("rapports_depotage", row);
 
   // Synchronisation des livraisons et des jauges par compartiment ou global
+  if (row.cuve_id && jaugeApresL > 0) {
+    try {
+      await saveJaugeCuve({
+        station_id: row.station_id,
+        cuve_id: row.cuve_id,
+        cuve_nom: row.cuve_nom,
+        date: row.date,
+        produit: row.produit,
+        hauteur_cm: n(row.jauge_apres_cm || row.hauteur_apres_cm),
+        volume_physique: jaugeApresL,
+        stock_theorique: jaugeAvantL + volumeBl,
+        ecart_litres: ecartL,
+        operateur: row.responsable_reception || "Responsable Dépotage",
+      });
+    } catch (err) {
+      console.warn("Notice: Sync jauge cuve principale", err);
+    }
+  }
+
   if (compartiments) {
     for (const c of compartiments) {
       const compBl = n(c.volume_bl) || 0;

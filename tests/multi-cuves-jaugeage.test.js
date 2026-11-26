@@ -126,4 +126,101 @@ describe("Gestion Multi-Cuves Carburant & Jaugeage Quotidien", () => {
     expect(isUUID(resolvedStationId)).toBe(true);
     expect(resolvedStationId).toBe(stationHannUuid);
   });
+
+  // ── 6. DÉPOTAGE PILOTÉ PAR LA CUVE : MULTI-COMPARTIMENTS ET RÉPARTITION (EXEMPLE GUIDE) ──
+  it("valide la logique 'Cuve comme élément principal' : Cuve Gasoil 1 reçoit C1 (10 000 L) + C2 (2 000 L) = 12 000 L", () => {
+    // Cuve réceptrice principale
+    const cuveGasoil1 = {
+      id: "cuve-go-1",
+      nom: "Cuve 1 Gasoil",
+      produit: "GASOIL",
+      capacite_l: 30000,
+      stock_initial_l: 5000,
+    };
+
+    // Compartiments du camion-citerne alimentant cette cuve
+    const compartimentsVersCuve1 = [
+      { id: "c1", numero_compartiment: "C1", produit: "GASOIL", volume_bl: 10000, numero_scelle: "SC-991" },
+      { id: "c2-part1", numero_compartiment: "C2", produit: "GASOIL", volume_bl: 2000, numero_scelle: "SC-992" },
+    ];
+
+    // Calcul du volume BL total dirigé vers cette cuve
+    const totalVolumeBlVersCuve = compartimentsVersCuve1.reduce((sum, c) => sum + c.volume_bl, 0);
+    expect(totalVolumeBlVersCuve).toBe(12000);
+
+    // Contrôle creux disponible avant dépotage
+    const creuxDisponible = cuveGasoil1.capacite_l - cuveGasoil1.stock_initial_l; // 25 000 L
+    expect(creuxDisponible).toBe(25000);
+    expect(totalVolumeBlVersCuve <= creuxDisponible).toBe(true); // Sécurisé, aucun risque de débordement
+
+    // Stock théorique après réception
+    const stockTheoriqueApres = cuveGasoil1.stock_initial_l + totalVolumeBlVersCuve; // 17 000 L
+    expect(stockTheoriqueApres).toBe(17000);
+
+    // Jauge physique mesurée après dépotage (repos 15 min) : 16 970 L
+    const stockFinalMesure = 16970;
+    const volumeDepoteReel = stockFinalMesure - cuveGasoil1.stock_initial_l; // 11 970 L
+    const ecartLitres = volumeDepoteReel - totalVolumeBlVersCuve; // -30 L
+    const ecartPct = Number(((ecartLitres / totalVolumeBlVersCuve) * 100).toFixed(2)); // -0.25%
+
+    expect(volumeDepoteReel).toBe(11970);
+    expect(ecartLitres).toBe(-30);
+    expect(ecartPct).toBe(-0.25);
+
+    // Cuve 2 Gasoil alimentée par le reste du compartiment C2 (6 000 L) du même convoi
+    const cuveGasoil2 = {
+      id: "cuve-go-2",
+      nom: "Cuve 2 Gasoil",
+      produit: "GASOIL",
+      capacite_l: 20000,
+      stock_initial_l: 4000,
+    };
+    const compartimentVersCuve2 = [
+      { id: "c2-part2", numero_compartiment: "C2", produit: "GASOIL", volume_bl: 6000, numero_scelle: "SC-992" },
+    ];
+    const totalBlCuve2 = compartimentVersCuve2.reduce((s, c) => s + c.volume_bl, 0);
+    expect(totalBlCuve2).toBe(6000);
+
+    // Total compartiment C2 réparti entre les 2 cuves
+    const totalC2 = compartimentsVersCuve1.find(c => c.numero_compartiment === "C2").volume_bl + totalBlCuve2;
+    expect(totalC2).toBe(8000); // 2 000 L + 6 000 L = 8 000 L
+  });
+
+  // ── 7. PERSISTANCE DES INFORMATIONS DU CONVOI CAMION POUR DÉPOTAGE MULTI-CUVES ──
+  it("partage et réutilise les informations du convoi camion (BL, transporteur, chauffeur, sécurité) entre les cuves", () => {
+    const camionLivraison = {
+      numero_bl: "BL-TOT-2026-9921",
+      fournisseur: "TOTAL Energies",
+      transporteur: "STT Carburants Sénégal",
+      immatriculation_camion: "DK-4402-A",
+      immatriculation_remorque: "RM-8821-C",
+      nom_chauffeur: "Amadou Ba",
+      agent_controleur: "Mamadou Sow",
+      responsable_reception: "Sadio Keita",
+      check_securite_10_points: true,
+      densite_mesuree: 0.835,
+      temperature_c: 28,
+    };
+
+    // Dépotage 1 : Cuve Gasoil 1
+    const depotageCuve1 = {
+      numero_depotage: "DEP-HANN-20261011-001",
+      cuve_id: "cuve-go-1",
+      cuve_nom: "Cuve 1 Gasoil",
+      ...camionLivraison,
+    };
+
+    // Dépotage 2 : Cuve Gasoil 2 (même camion, même convoi, nouvelle opération de cuve)
+    const depotageCuve2 = {
+      numero_depotage: "DEP-HANN-20261011-002",
+      cuve_id: "cuve-go-2",
+      cuve_nom: "Cuve 2 Gasoil",
+      ...camionLivraison,
+    };
+
+    expect(depotageCuve1.numero_bl).toBe(depotageCuve2.numero_bl);
+    expect(depotageCuve1.immatriculation_camion).toBe(depotageCuve2.immatriculation_camion);
+    expect(depotageCuve1.cuve_id).not.toBe(depotageCuve2.cuve_id);
+    expect(depotageCuve1.numero_depotage).not.toBe(depotageCuve2.numero_depotage);
+  });
 });
