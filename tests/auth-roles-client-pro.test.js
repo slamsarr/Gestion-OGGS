@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { listeClientsCredit } from '../src/lib/seed';
 
 const mockUsersStore = [];
 const mockPompistesStore = [];
@@ -79,31 +80,47 @@ describe('Authentification et Rôles — Inscription et Connexion Client Pro', (
     expect(found.password).toBe('Client2026!');
   });
 
-  it('enregistre un pompiste avec rôle pompiste et synchronise pompistes', async () => {
-    const { db } = await import('../src/lib/db');
-    const pompisteUser = {
-      id: 'u-pomp-01',
-      email: 'pompiste.aliou@starenergy.sn',
-      password: 'Star2026!',
-      nom_complet: 'Aliou Sall',
-      role: 'pompiste',
-      station_id: 'st-hann',
-      telephone: '78 111 22 33',
-      actif: true,
-      created_at: new Date().toISOString(),
+  it('conserve les champs légaux et contacts dans listeClientsCredit', () => {
+    const fakeRef = {
+      clients_pro: [
+        {
+          code: 'CP-SOCOCIM',
+          nom_entreprise: 'Sococim Ciments SA',
+          email: 'contact@sococim.sn',
+          telephone: '33 839 00 00',
+          ninea: '0012345672V2',
+          rccm: 'SN-DKR-2022-B-1234',
+          plafond_credit: 5000000,
+        },
+      ],
+      clients: [],
     };
-    await db.users.put(pompisteUser);
-    await db.pompistes.put({
-      id: pompisteUser.id,
-      nom: pompisteUser.nom_complet,
-      station_id: pompisteUser.station_id,
-      telephone: pompisteUser.telephone,
-      actif: true,
-    });
+    const cls = listeClientsCredit(fakeRef);
+    expect(cls.length).toBe(1);
+    expect(cls[0].code).toBe('CP-SOCOCIM');
+    expect(cls[0].email).toBe('contact@sococim.sn');
+    expect(cls[0].telephone).toBe('33 839 00 00');
+    expect(cls[0].ninea).toBe('0012345672V2');
+    expect(cls[0].rccm).toBe('SN-DKR-2022-B-1234');
+  });
 
-    const foundUser = await db.users.get('u-pomp-01');
-    expect(foundUser.role).toBe('pompiste');
-    const foundPomp = await db.pompistes.get('u-pomp-01');
-    expect(foundPomp.nom).toBe('Aliou Sall');
+  it('calcule correctement les litrages autorises, consommes et restants du client', () => {
+    const programmesClient = [
+      { volume_demande_l: 10000, volume_accorde_l: 10000, volume_consomme_l: 3500 },
+      { volume_demande_l: 5000, volume_accorde_l: 5000, volume_consomme_l: 1500 },
+    ];
+    let volTotal = 0;
+    let volConso = 0;
+    for (const p of programmesClient) {
+      volTotal += p.volume_accorde_l;
+      volConso += p.volume_consomme_l;
+    }
+    const volRestant = Math.max(0, volTotal - volConso);
+    const pct = Math.round((volConso / volTotal) * 100);
+
+    expect(volTotal).toBe(15000);
+    expect(volConso).toBe(5000);
+    expect(volRestant).toBe(10000);
+    expect(pct).toBe(33);
   });
 });

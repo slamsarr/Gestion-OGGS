@@ -43,14 +43,15 @@ import {
 
 export default function ClientsPro() {
   const { profil, cloud } = useAuth();
-  const peutCreerClient = peutAgirProfil(profil, "client_pro", "creer");
-  const peutEncaisserCredit = peutAgirProfil(profil, "credit", "encaisser") && profil?.role !== "client_pro";
+  const isClient = profil?.role === "client_pro";
+  const peutCreerClient = peutAgirProfil(profil, "client_pro", "creer") && !isClient;
+  const peutEncaisserCredit = peutAgirProfil(profil, "credit", "encaisser") && !isClient;
   const [searchParams] = useSearchParams();
   const [stationId, setStationId] = useState(profil?.station_id || "");
   const [loading, setLoading] = useState(true);
   const [ref, setRef] = useState(null);
   const [selected, setSelected] = useState(null);
-  const [subTab, setSubTab] = useState("bons"); // bons | programmes | ops | vehicules | reglement | factures
+  const [subTab, setSubTab] = useState(isClient ? "programmes" : "bons"); // bons | programmes | ops | vehicules | reglement | factures
   const [clForm, setClForm] = useState({
     code: "",
     nom_entreprise: "",
@@ -119,19 +120,52 @@ export default function ClientsPro() {
 
   const clients = useMemo(() => {
     let list = listeClientsCredit(ref);
-    if (profil?.role === "client_pro") {
-      const mine = codeClientCanonique(profil.client_code);
-      const cleanEmail = (profil.email || "").toLowerCase().trim();
+    if (isClient) {
+      const mine = codeClientCanonique(profil?.client_code);
+      const cleanEmail = (profil?.email || "").toLowerCase().trim();
       list = list.filter((c) => {
         if (mine && c.code === mine) return true;
         if (cleanEmail && (c.email || "").toLowerCase().trim() === cleanEmail) return true;
         return false;
       });
+      // Fallback si le compte vient d'être créé et n'est pas encore rechargé dans le référentiel
+      if (list.length === 0) {
+        const fallbackCode = mine || `CP-${(profil?.nom_complet || "CLIENT").replace(/[^a-zA-Z0-9]/g, "").slice(0, 4).toUpperCase()}`;
+        list = [{
+          id: profil?.id,
+          code: fallbackCode,
+          nom: profil?.nom_complet || "Mon Entreprise",
+          nom_entreprise: profil?.nom_complet || "Mon Entreprise",
+          email: profil?.email || "",
+          telephone: profil?.telephone || "",
+          plafond_credit: 1000000,
+          plafond: 1000000,
+          actif: true,
+          aliases: [],
+        }];
+      }
     }
     return list.map((c) => ({ ...c, nom_entreprise: c.nom_entreprise || c.nom }));
-  }, [ref, profil]);
+  }, [ref, profil, isClient]);
+
   const vehicules = selected ? (ref?.vehicules || []).filter((v) => v.client_code === selected) : [];
-  const clientActif = clients.find((c) => c.code === selected);
+  const clientActif = clients.find((c) => c.code === selected) || (isClient ? clients[0] : null);
+
+  // Synthèse litrage globale des programmes du client
+  const syntheseLitresClient = useMemo(() => {
+    let volumeTotal = 0;
+    let volumeConso = 0;
+    for (const p of programmesClient) {
+      const volDemande = n(p.volume_demande_l || p.volume_demande);
+      const volAccorde = n(p.volume_accorde_l || p.volume_accorde || volDemande);
+      const volConsomme = n(p.volume_consomme_l || p.volume_consomme || 0);
+      volumeTotal += volAccorde;
+      volumeConso += volConsomme;
+    }
+    const volumeRestant = Math.max(0, volumeTotal - volumeConso);
+    const pct = volumeTotal > 0 ? Math.min(100, Math.round((volumeConso / volumeTotal) * 100)) : 0;
+    return { volumeTotal, volumeConso, volumeRestant, pct };
+  }, [programmesClient]);
 
   const flash = (t) => {
     setMsg(t);
@@ -210,11 +244,13 @@ export default function ClientsPro() {
 
   // Sélection automatique du compte lorsque l'utilisateur connecté est un Client Professionnel
   useEffect(() => {
-    if (profil?.role === "client_pro" && clients.length > 0 && !selected) {
-      setSelected(clients[0].code);
-      setSubTab("programmes");
+    if (isClient && clients.length > 0) {
+      if (!selected || !clients.some((c) => c.code === selected)) {
+        setSelected(clients[0].code);
+        setSubTab("programmes");
+      }
     }
-  }, [profil, clients, selected]);
+  }, [isClient, clients, selected]);
 
   const handleToggleAcces = async (client) => {
     try {
@@ -729,8 +765,419 @@ export default function ClientsPro() {
 
   return (
     <div className="space-y-4">
-      {/* ── SÉLECTEUR D'ONGLET RACINE : CLIENTS VS PROGRAMMES BONS VS FACTURATION OHADA ── */}
-      <div className="flex flex-wrap items-center gap-2 border-b pb-3" style={{ borderColor: T.line }}>
+      {msg && <div className="rounded-lg px-3 py-2 text-sm font-semibold shadow-xs" style={{ background: "#E3F4EA", color: T.ok }}>{msg}</div>}
+
+      {isClient ? (
+        /* === ESPACE CLIENT PROFESSIONNEL B2B DÉDIÉ === */
+        <div className="space-y-4">
+          {/* Header Espace Entreprise */}
+          <div className="bg-gradient-to-br from-slate-900 via-purple-950 to-slate-900 text-white rounded-2xl p-5 sm:p-6 shadow-xl border border-purple-500/20">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2.5 flex-wrap mb-1">
+                  <span className="text-2xl">🏢</span>
+                  <h1 className="text-xl sm:text-2xl font-black tracking-tight">{clientActif?.nom_entreprise || "Mon Entreprise"}</h1>
+                  <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950">
+                    {clientActif?.code}
+                  </span>
+                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                    Espace Entreprise Partenaire
+                  </span>
+                </div>
+                <div className="text-xs text-purple-200/80 flex flex-wrap gap-x-4 gap-y-1 mt-1">
+                  {clientActif?.telephone && <span>📞 {clientActif.telephone}</span>}
+                  {clientActif?.email && <span>✉️ {clientActif.email}</span>}
+                  {clientActif?.ninea && <span>📄 NINEA : <strong className="text-white">{clientActif.ninea}</strong></span>}
+                  {clientActif?.rccm && <span>🏢 RCCM : <strong className="text-white">{clientActif.rccm}</strong></span>}
+                </div>
+              </div>
+
+              {/* Bouton d'action principal pour demander un programme */}
+              <button
+                type="button"
+                onClick={() => {
+                  setProgrammeEnEdition(null);
+                  setShowDemandeModal(true);
+                }}
+                className="px-5 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-black text-sm shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 self-start md:self-auto cursor-pointer"
+              >
+                <span className="text-lg">➕</span>
+                <span>Demander un Programme de Bons</span>
+              </button>
+            </div>
+
+            {/* Cartes KPI Litrage & Encours */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-5 pt-4 border-t border-white/10">
+              <div className="bg-white/5 backdrop-blur-xs rounded-xl p-3 border border-white/10">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-purple-200">Volume Total Accordé</div>
+                <div className="text-lg sm:text-xl font-black text-white mt-0.5 tabular">{F(syntheseLitresClient.volumeTotal)} L</div>
+                <div className="text-[10px] text-purple-300/70">{programmesClient.length} programme(s)</div>
+              </div>
+
+              <div className="bg-white/5 backdrop-blur-xs rounded-xl p-3 border border-white/10">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-purple-200">Volume Consommé</div>
+                <div className="text-lg sm:text-xl font-black text-amber-300 mt-0.5 tabular">{F(syntheseLitresClient.volumeConso)} L</div>
+                <div className="text-[10px] text-amber-300/70">{syntheseLitresClient.pct}% distribué</div>
+              </div>
+
+              <div className="bg-white/5 backdrop-blur-xs rounded-xl p-3 border border-white/10">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-purple-200">Volume Restant Disponible</div>
+                <div className="text-lg sm:text-xl font-black text-emerald-400 mt-0.5 tabular">{F(syntheseLitresClient.volumeRestant)} L</div>
+                <div className="text-[10px] text-emerald-300/70">Solde à la pompe</div>
+              </div>
+
+              <div className="bg-white/5 backdrop-blur-xs rounded-xl p-3 border border-white/10">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-purple-200">Plafond Crédit</div>
+                <div className="text-lg sm:text-xl font-black text-white mt-0.5 tabular">{F(clientActif?.plafond_credit || 1000000)} F</div>
+                <div className="text-[10px] text-purple-300/70">
+                  {(soldes[selected] || 0) < 0 ? `${F(-soldes[selected])} F facturés` : `${F(soldes[selected] || 0)} F disponible`}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Onglets de navigation Client B2B */}
+          <div className="flex flex-wrap items-center gap-1.5 border-b pb-2" style={{ borderColor: T.line }}>
+            <button
+              type="button"
+              onClick={() => setSubTab("programmes")}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                subTab === "programmes"
+                  ? "bg-amber-600 text-white shadow-md ring-2 ring-amber-300"
+                  : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-200"
+              }`}
+            >
+              <span>⛽</span>
+              <span>Mes Programmes de Bons ({programmesClient.length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSubTab("bons")}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                subTab === "bons"
+                  ? "bg-purple-900 text-white shadow-md ring-2 ring-purple-300"
+                  : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-200"
+              }`}
+            >
+              <span>🎫</span>
+              <span>Suivi des Bons &amp; Consommations ({bonsClient.length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSubTab("vehicules")}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                subTab === "vehicules"
+                  ? "bg-blue-900 text-white shadow-md ring-2 ring-blue-300"
+                  : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-200"
+              }`}
+            >
+              <span>🚚</span>
+              <span>Ma Flotte &amp; Véhicules ({vehicules.length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSubTab("factures")}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                subTab === "factures"
+                  ? "bg-emerald-800 text-white shadow-md ring-2 ring-emerald-300"
+                  : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-200"
+              }`}
+            >
+              <span>📄</span>
+              <span>Mes Factures Officielles ({facturesClient.length})</span>
+            </button>
+          </div>
+
+          {/* Contenu de l'onglet actif pour le client */}
+          {subTab === "programmes" && (
+            <div className="space-y-4">
+              <ProgrammesBonsSection
+                clientCode={selected}
+                programmes={programmesClient}
+                client={clientActif}
+                consommations={consommationsClient}
+                onOpenDemande={() => {
+                  setProgrammeEnEdition(null);
+                  setShowDemandeModal(true);
+                }}
+                onOpenInstruction={() => {}}
+                onActiverDirect={() => {}}
+                isGerant={false}
+              />
+            </div>
+          )}
+
+          {subTab === "bons" && (
+            <div className="space-y-4">
+              {/* Synthèse des Bons client */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="p-3 bg-slate-50 border rounded-lg" style={{ borderColor: T.line }}>
+                  <div className="text-[10px] font-bold text-gray-500 uppercase">Total Bons Délivrés</div>
+                  <div className="text-base font-black text-gray-900 tabular mt-0.5">{bonsClient.length} bon(s)</div>
+                  <div className="text-[11px] text-gray-500">{F(totalMontantBons)} FCFA</div>
+                </div>
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="text-[10px] font-bold text-blue-700 uppercase">Volume Carburant Servis</div>
+                  <div className="text-base font-black text-blue-900 tabular mt-0.5">{F(totalLitresBons)} L</div>
+                  <div className="text-[11px] text-blue-600">Total litres livrés à la pompe</div>
+                </div>
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+                  <div className="text-[10px] font-bold text-emerald-700 uppercase">Montant Réglé</div>
+                  <div className="text-base font-black text-emerald-800 tabular mt-0.5">{F(totalRegleBons)} FCFA</div>
+                  <div className="text-[11px] text-emerald-600">Règlements enregistrés</div>
+                </div>
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg">
+                  <div className="text-[10px] font-bold text-rose-700 uppercase">En Attente de Facturation / Règlement</div>
+                  <div className="text-base font-black text-rose-800 tabular mt-0.5">{F(totalResteBons)} FCFA</div>
+                  <div className="text-[11px] text-rose-600">{bonsImpayes.length + bonsPartiels.length} bon(s) en cours</div>
+                </div>
+              </div>
+
+              {/* Tableau détaillé des bons de carburant */}
+              <div className="bg-white border rounded-xl overflow-hidden shadow-xs" style={{ borderColor: T.line }}>
+                <div className="p-3 bg-gray-50 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-2" style={{ borderColor: T.line }}>
+                  <div className="font-bold text-xs text-gray-800">
+                    Historique des prises de carburant par vos transporteurs ({filteredBons.length})
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <button
+                      onClick={() => setBonFilter("TOUS")}
+                      className={`px-2.5 py-1 rounded font-bold transition-colors ${
+                        bonFilter === "TOUS" ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                      }`}
+                    >
+                      Tous ({bonsClient.length})
+                    </button>
+                    <button
+                      onClick={() => setBonFilter("IMPAYES")}
+                      className={`px-2.5 py-1 rounded font-bold transition-colors ${
+                        bonFilter === "IMPAYES" ? "bg-rose-700 text-white" : "bg-rose-50 text-rose-800 hover:bg-rose-100"
+                      }`}
+                    >
+                      En cours ({bonsImpayes.length + bonsPartiels.length})
+                    </button>
+                    <button
+                      onClick={() => setBonFilter("REGLES")}
+                      className={`px-2.5 py-1 rounded font-bold transition-colors ${
+                        bonFilter === "REGLES" ? "bg-emerald-700 text-white" : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                      }`}
+                    >
+                      Facturés / Réglés ({bonsRegles.length})
+                    </button>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-gray-50/75 text-gray-600 border-b font-semibold" style={{ borderColor: T.line }}>
+                      <tr>
+                        <th className="py-2.5 px-3">N° Bon</th>
+                        <th className="py-2.5 px-3">Date</th>
+                        <th className="py-2.5 px-3">Immatriculation</th>
+                        <th className="py-2.5 px-3">Chauffeur</th>
+                        <th className="py-2.5 px-3">Produit</th>
+                        <th className="py-2.5 px-3 text-right">Litres</th>
+                        <th className="py-2.5 px-3 text-right">P.U.</th>
+                        <th className="py-2.5 px-3 text-right">Montant Total</th>
+                        <th className="py-2.5 px-3">Pompiste</th>
+                        <th className="py-2.5 px-3">Statut</th>
+                        <th className="py-2.5 px-3 text-center">Avis</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {filteredBons.map((b) => {
+                        const montantTotal = n(b.montant || b.valeur || b.montant_total);
+                        const estRegle = b.statut === "REGLE" || b.solde_restant <= 0;
+                        return (
+                          <tr key={b.id || b.numero_bon} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="py-2 px-3 font-mono font-bold text-gray-900">{b.numero_bon || b.numero || "—"}</td>
+                            <td className="py-2 px-3 text-gray-600">{fmtDate(b.date)}</td>
+                            <td className="py-2 px-3 font-mono font-bold text-blue-900">{b.immatriculation || "—"}</td>
+                            <td className="py-2 px-3 text-gray-800">{b.chauffeur || "—"}</td>
+                            <td className="py-2 px-3">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                (b.produit || b.carburant) === "SUPER" ? "bg-amber-100 text-amber-900" : "bg-blue-100 text-blue-900"
+                              }`}>
+                                {b.produit || b.carburant || "GASOIL"}
+                              </span>
+                            </td>
+                            <td className="py-2 px-3 text-right font-black text-gray-900 tabular">{F(b.volume_l || b.litres || 0)} L</td>
+                            <td className="py-2 px-3 text-right text-gray-500 tabular">{F(b.prix_unitaire || 0)} F</td>
+                            <td className="py-2 px-3 text-right font-black text-emerald-900 tabular">{F(montantTotal)} FCFA</td>
+                            <td className="py-2 px-3 text-gray-500">{b.pompiste || "—"}</td>
+                            <td className="py-2 px-3">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                estRegle ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
+                              }`}>
+                                {estRegle ? "✓ Facturé / Réglé" : "⏳ En cours"}
+                              </span>
+                            </td>
+                            <td className="py-2 px-3 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleNotifierBonWhatsApp(b)}
+                                className="px-2 py-1 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-[10px] font-bold border border-emerald-300"
+                                title="Reçu WhatsApp"
+                              >
+                                📲 Reçu
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {filteredBons.length === 0 && (
+                        <tr>
+                          <td colSpan={11} className="py-6 text-center text-gray-400">
+                            Aucun bon de carburant trouvé.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {subTab === "vehicules" && (
+            <div className="space-y-4">
+              {/* Formulaire ajout véhicule */}
+              <div className="p-4 bg-gray-50 rounded-xl border" style={{ borderColor: T.line }}>
+                <div className="text-xs font-bold text-gray-900 uppercase tracking-wider mb-2">
+                  ➕ Déclarer un Nouveau Véhicule dans votre Flotte
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
+                  <input
+                    value={veh.immatriculation}
+                    onChange={(e) => setVeh({ ...veh, immatriculation: e.target.value.toUpperCase() })}
+                    placeholder="Immatriculation (ex: AA-123-BB)"
+                    className="border rounded px-2.5 py-1.5 text-xs font-mono font-bold uppercase bg-white"
+                    style={{ borderColor: T.line }}
+                  />
+                  <input
+                    value={veh.marque}
+                    onChange={(e) => setVeh({ ...veh, marque: e.target.value })}
+                    placeholder="Marque (ex: Renault, Toyota)"
+                    className="border rounded px-2.5 py-1.5 text-xs bg-white"
+                    style={{ borderColor: T.line }}
+                  />
+                  <input
+                    value={veh.modele}
+                    onChange={(e) => setVeh({ ...veh, modele: e.target.value })}
+                    placeholder="Modèle (ex: Kerax, Hilux)"
+                    className="border rounded px-2.5 py-1.5 text-xs bg-white"
+                    style={{ borderColor: T.line }}
+                  />
+                  <select
+                    value={veh.carburant}
+                    onChange={(e) => setVeh({ ...veh, carburant: e.target.value })}
+                    className="border rounded px-2.5 py-1.5 text-xs bg-white"
+                    style={{ borderColor: T.line }}
+                  >
+                    <option value="GASOIL">Gasoil</option>
+                    <option value="SUPER">Super</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={saveVeh}
+                    className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs"
+                  >
+                    Enregistrer Véhicule
+                  </button>
+                </div>
+              </div>
+
+              {/* Liste des véhicules */}
+              <div className="bg-white border rounded-xl overflow-hidden" style={{ borderColor: T.line }}>
+                <div className="p-3 bg-gray-50 border-b font-bold text-xs text-gray-800" style={{ borderColor: T.line }}>
+                  Véhicules et Transporteurs Autorisés ({vehicules.length})
+                </div>
+                <div className="divide-y divide-gray-100">
+                  {vehicules.map((v, idx) => (
+                    <div key={v.id || idx} className="p-3 flex items-center justify-between text-xs hover:bg-slate-50">
+                      <div className="flex items-center gap-3">
+                        <span className="text-xl">🚛</span>
+                        <div>
+                          <span className="font-mono font-black text-sm text-gray-900">{v.immatriculation}</span>
+                          <span className="text-gray-500 ml-2">{v.marque} {v.modele}</span>
+                          <span className="text-gray-400 ml-2 text-[11px]">({v.type_vehicule || "CAMION"})</span>
+                        </div>
+                      </div>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-900">
+                        {v.carburant || "GASOIL"}
+                      </span>
+                    </div>
+                  ))}
+                  {vehicules.length === 0 && (
+                    <div className="p-6 text-center text-gray-400 text-xs">
+                      Aucun véhicule déclaré pour le moment.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {subTab === "factures" && (
+            <div className="space-y-4">
+              <div className="bg-white border rounded-xl overflow-hidden shadow-xs" style={{ borderColor: T.line }}>
+                <div className="p-3 bg-gray-50 border-b flex items-center justify-between" style={{ borderColor: T.line }}>
+                  <div className="font-bold text-xs text-gray-800">
+                    Vos Factures Officielles OHADA émises par la station ({facturesClient.length})
+                  </div>
+                </div>
+
+                <div className="divide-y divide-gray-100">
+                  {facturesClient.map((f) => (
+                    <div key={f.id || f.numero_facture} className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50 transition-colors">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-black text-sm text-blue-950">{f.numero_facture}</span>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            f.statut === "PAYEE" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
+                          }`}>
+                            {f.statut === "PAYEE" ? "✓ Payée" : "⏳ Émise / En attente"}
+                          </span>
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          Date : <strong>{fmtDate(f.date_emission)}</strong> · {f.lignes_bons?.length || 0} bon(s) rattaché(s)
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <div className="text-xs text-gray-400">Total TTC</div>
+                          <div className="font-black text-sm text-gray-900 tabular">{F(f.total_ttc || f.totalTTC || 0)} FCFA</div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setFactureAffichee(f)}
+                          className="px-3.5 py-2 rounded-xl bg-blue-900 hover:bg-blue-950 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors"
+                        >
+                          <span>👁️ Visualiser &amp; Imprimer A4</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {facturesClient.length === 0 && (
+                    <div className="p-8 text-center text-gray-400 text-xs">
+                      Aucune facture officielle enregistrée pour le moment.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        /* === PORTAIL MULTI-CLIENTS GÉRANCE / DIRECTION === */
+        <div className="space-y-4">
+          {/* ── SÉLECTEUR D'ONGLET RACINE : CLIENTS VS PROGRAMMES BONS VS FACTURATION OHADA ── */}
+          <div className="flex flex-wrap items-center gap-2 border-b pb-3" style={{ borderColor: T.line }}>
         <button
           type="button"
           onClick={() => setMainTab("clients")}
@@ -2210,10 +2657,13 @@ export default function ClientsPro() {
           />
         </div>
       )}
+        </div>
+      )}
 
       {/* Modals de Demande & d'Instruction de Programme */}
       {showDemandeModal && (
         <DemandeProgrammeModal
+          client={clientActif}
           clientCode={selected || (clients.length > 0 ? clients[0].code : "")}
           clientNom={clientActif?.nom_entreprise || (clients.length > 0 ? clients[0].nom_entreprise : "")}
           programmeEnEdition={programmeEnEdition}
@@ -2222,7 +2672,7 @@ export default function ClientsPro() {
             setProgrammeEnEdition(null);
           }}
           onSave={handleSaveDemandeProgramme}
-          isClient={profil?.role === "client_pro"}
+          isClient={isClient}
         />
       )}
 

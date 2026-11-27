@@ -168,9 +168,15 @@ export function listeClientsCredit(ref) {
     const code = codeClientCanonique(raw.code || raw.id);
     if (!code || byCode.has(code)) return;
     byCode.set(code, {
+      ...raw,
       id: raw.id || code,
       code,
       nom: raw.nom_entreprise || raw.nom || code,
+      nom_entreprise: raw.nom_entreprise || raw.nom || code,
+      telephone: raw.telephone || "",
+      email: raw.email || "",
+      ninea: raw.ninea || "",
+      rccm: raw.rccm || "",
       plafond: Number(raw.plafond_credit ?? raw.plafond) || 0,
       actif: raw.actif !== false,
       aliases: codesClientEquivalents(code).filter((c) => c !== code),

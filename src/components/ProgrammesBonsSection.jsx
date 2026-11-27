@@ -12,10 +12,12 @@ export default function ProgrammesBonsSection({
   client = null,
   consommations = [],
   isManager = false,
+  isGerant = false,
   onOpenDemande,
   onOpenInstruction,
   onActiverDirect,
 }) {
+  const estManager = isManager || isGerant;
   const [filterStatut, setFilterStatut] = useState("TOUS");
   const [expandedProgId, setExpandedProgId] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -241,7 +243,7 @@ export default function ProgrammesBonsSection({
 
                   {/* Actions rapides */}
                   <div className="flex items-center gap-1.5 shrink-0">
-                    {isManager && (
+                    {estManager && (
                       <button
                         type="button"
                         onClick={() => onOpenInstruction(p)}
@@ -252,7 +254,7 @@ export default function ProgrammesBonsSection({
                       </button>
                     )}
 
-                    {isManager && p.statut === "VALIDE" && (
+                    {estManager && p.statut === "VALIDE" && (
                       <button
                         type="button"
                         onClick={() => onActiverDirect(p.id)}

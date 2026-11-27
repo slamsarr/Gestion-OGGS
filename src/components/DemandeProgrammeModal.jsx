@@ -3,46 +3,56 @@ import { F, n, todayISO, prixDuJour } from "../lib/calcul";
 import { genererNumeroProgramme, MODES_GESTION_PROGRAMME } from "../lib/programmes-bons";
 
 export default function DemandeProgrammeModal({
-  client,
+  client = null,
+  clientCode = "",
+  clientNom = "",
   programmeInitial = null,
+  programmeEnEdition = null,
   stations = [],
   prixCarburant = [],
   onClose,
   onSave,
+  isClient = true,
 }) {
-  const isEdit = !!programmeInitial;
-  const isClientPro = true;
+  const progInit = programmeInitial || programmeEnEdition || null;
+  const clientObj = client || {
+    code: clientCode,
+    nom_entreprise: clientNom || clientCode,
+    nom: clientNom || clientCode,
+  };
+  const isEdit = !!progInit;
+  const isClientPro = isClient;
 
   const [numeroProgramme] = useState(
-    programmeInitial?.numero_programme || genererNumeroProgramme(programmeInitial?.date_debut || todayISO())
+    progInit?.numero_programme || genererNumeroProgramme(progInit?.date_debut || todayISO())
   );
-  const [objetDemande, setObjetDemande] = useState(programmeInitial?.objet_demande || "");
+  const [objetDemande, setObjetDemande] = useState(progInit?.objet_demande || progInit?.objet || "");
   const [demandeurNom, setDemandeurNom] = useState(
-    programmeInitial?.demandeur_nom || client?.responsable_compte?.nom || client?.nom_entreprise || ""
+    progInit?.demandeur_nom || clientObj?.responsable_compte?.nom || clientObj?.nom_entreprise || clientObj?.nom || ""
   );
   const [demandeurContact, setDemandeurContact] = useState(
-    programmeInitial?.demandeur_contact || client?.responsable_compte?.telephone || client?.telephone || ""
+    progInit?.demandeur_contact || clientObj?.responsable_compte?.telephone || clientObj?.telephone || ""
   );
-  const [dateDebut, setDateDebut] = useState(programmeInitial?.date_debut || todayISO());
+  const [dateDebut, setDateDebut] = useState(progInit?.date_debut || todayISO());
   const [dateFin, setDateFin] = useState(
-    programmeInitial?.date_fin ||
+    progInit?.date_fin ||
       new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
   );
-  const [produit, setProduit] = useState(programmeInitial?.produit || "GASOIL");
+  const [produit, setProduit] = useState(progInit?.produit || progInit?.type_carburant || "GASOIL");
   const [volumeDemande, setVolumeDemande] = useState(
-    programmeInitial?.volume_demande_l ? programmeInitial.volume_demande_l.toString() : "5000"
+    progInit?.volume_demande_l ? progInit.volume_demande_l.toString() : progInit?.volume_total_demande ? progInit.volume_total_demande.toString() : "5000"
   );
   const [modeGestion, setModeGestion] = useState(
-    programmeInitial?.mode_gestion || "VOLUME_GLOBAL"
+    progInit?.mode_gestion || "VOLUME_GLOBAL"
   );
   const [conditionsParticulieres, setConditionsParticulieres] = useState(
-    programmeInitial?.conditions_particulieres || ""
+    progInit?.conditions_particulieres || ""
   );
 
   // Flotte Transporteurs / Véhicules
   const [transporteurs, setTransporteurs] = useState(
-    Array.isArray(programmeInitial?.transporteurs) && programmeInitial.transporteurs.length > 0
-      ? programmeInitial.transporteurs
+    Array.isArray(progInit?.transporteurs) && progInit.transporteurs.length > 0
+      ? progInit.transporteurs
       : [
           {
             id: `tr-${Date.now()}-1`,
@@ -50,7 +60,7 @@ export default function DemandeProgrammeModal({
             telephone: "",
             immatriculation: "",
             type_vehicule: "CAMION",
-            carburant: programmeInitial?.produit || "GASOIL",
+            carburant: progInit?.produit || progInit?.type_carburant || "GASOIL",
             volume_alloue_l: "5000",
             observations: "",
             actif: true,
@@ -155,20 +165,20 @@ export default function DemandeProgrammeModal({
     if (!estBrouillon && !validerFormulaire()) return;
 
     const payload = {
-      ...programmeInitial,
-      client_id: client?.id || client?.code,
-      client_code: client?.code,
-      client_nom: client?.nom_entreprise || client?.nom,
+      ...progInit,
+      client_id: clientObj?.id || clientObj?.code,
+      client_code: clientObj?.code,
+      client_nom: clientObj?.nom_entreprise || clientObj?.nom,
       numero_programme: numeroProgramme,
       objet_demande: objetDemande.trim(),
       demandeur_nom: demandeurNom.trim(),
       demandeur_contact: demandeurContact.trim(),
       date_debut: dateDebut,
       date_fin: dateFin,
-      date_demande: programmeInitial?.date_demande || todayISO(),
+      date_demande: progInit?.date_demande || todayISO(),
       produit,
       volume_demande_l: volumeTotal,
-      volume_autorise_l: programmeInitial?.volume_autorise_l || volumeTotal,
+      volume_autorise_l: progInit?.volume_autorise_l || volumeTotal,
       mode_gestion: modeGestion,
       conditions_particulieres: conditionsParticulieres.trim(),
       montant_estime_fcfa: montantEstime,
@@ -181,7 +191,7 @@ export default function DemandeProgrammeModal({
       })),
       statut: estBrouillon
         ? "BROUILLON"
-        : programmeInitial?.statut === "A_CORRIGER" || programmeInitial?.statut === "INFO_DEMANDEE"
+        : progInit?.statut === "A_CORRIGER" || progInit?.statut === "INFO_DEMANDEE"
         ? "EN_ATTENTE"
         : "EN_ATTENTE",
     };
