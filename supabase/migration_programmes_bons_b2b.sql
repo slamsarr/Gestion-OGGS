@@ -166,55 +166,90 @@ alter table consommations_programmes enable row level security;
 alter table bons_carburant enable row level security;
 alter table factures enable row level security;
 
--- 8. Politiques de Sécurité RLS
+-- 8. Fonctions d'aide RLS (vérifie et garantit l'alignement avec profils)
+-- ---------------------------------------------------------------------
+create or replace function mon_role() returns role_utilisateur
+language sql stable security definer set search_path = public as
+  $$ select role from profils where id = auth.uid() $$;
+
+create or replace function ma_station() returns uuid
+language sql stable security definer set search_path = public as
+  $$ select station_id from profils where id = auth.uid() $$;
+
+create or replace function est_reseau() returns boolean
+language sql stable security definer set search_path = public as
+  $$ select mon_role() in ('admin','superviseur','directeur','comptable') $$;
+
+-- 9. Politiques de Sécurité RLS
 -- ---------------------------------------------------------------------
 
 -- Politiques pour l'équipe station (Directeur, Admin, Superviseur, Comptable, Gérant)
+drop policy if exists rls_programmes_bons_staff on programmes_bons;
 create policy rls_programmes_bons_staff on programmes_bons
   for all to authenticated
   using (
-    mon_role() in ('directeur', 'admin', 'superviseur', 'comptable', 'gerant')
-    or station_id in (select station_id from utilisateurs where id = auth.uid())
+    est_reseau()
+    or mon_role() = 'gerant'
+    or station_id = ma_station()
+    or station_id in (select station_id from profils where id = auth.uid())
   )
   with check (
-    mon_role() in ('directeur', 'admin', 'superviseur', 'comptable', 'gerant')
-    or station_id in (select station_id from utilisateurs where id = auth.uid())
+    est_reseau()
+    or mon_role() = 'gerant'
+    or station_id = ma_station()
+    or station_id in (select station_id from profils where id = auth.uid())
   );
 
+drop policy if exists rls_consommations_staff on consommations_programmes;
 create policy rls_consommations_staff on consommations_programmes
   for all to authenticated
   using (
-    mon_role() in ('directeur', 'admin', 'superviseur', 'comptable', 'gerant', 'pompiste')
-    or station_id in (select station_id from utilisateurs where id = auth.uid())
+    est_reseau()
+    or mon_role() in ('gerant', 'pompiste')
+    or station_id = ma_station()
+    or station_id in (select station_id from profils where id = auth.uid())
   )
   with check (
-    mon_role() in ('directeur', 'admin', 'superviseur', 'comptable', 'gerant', 'pompiste')
-    or station_id in (select station_id from utilisateurs where id = auth.uid())
+    est_reseau()
+    or mon_role() in ('gerant', 'pompiste')
+    or station_id = ma_station()
+    or station_id in (select station_id from profils where id = auth.uid())
   );
 
+drop policy if exists rls_bons_carburant_staff on bons_carburant;
 create policy rls_bons_carburant_staff on bons_carburant
   for all to authenticated
   using (
-    mon_role() in ('directeur', 'admin', 'superviseur', 'comptable', 'gerant', 'pompiste')
-    or station_id in (select station_id from utilisateurs where id = auth.uid())
+    est_reseau()
+    or mon_role() in ('gerant', 'pompiste')
+    or station_id = ma_station()
+    or station_id in (select station_id from profils where id = auth.uid())
   )
   with check (
-    mon_role() in ('directeur', 'admin', 'superviseur', 'comptable', 'gerant', 'pompiste')
-    or station_id in (select station_id from utilisateurs where id = auth.uid())
+    est_reseau()
+    or mon_role() in ('gerant', 'pompiste')
+    or station_id = ma_station()
+    or station_id in (select station_id from profils where id = auth.uid())
   );
 
+drop policy if exists rls_factures_staff on factures;
 create policy rls_factures_staff on factures
   for all to authenticated
   using (
-    mon_role() in ('directeur', 'admin', 'superviseur', 'comptable', 'gerant')
-    or station_id in (select station_id from utilisateurs where id = auth.uid())
+    est_reseau()
+    or mon_role() in ('gerant', 'comptable')
+    or station_id = ma_station()
+    or station_id in (select station_id from profils where id = auth.uid())
   )
   with check (
-    mon_role() in ('directeur', 'admin', 'superviseur', 'comptable', 'gerant')
-    or station_id in (select station_id from utilisateurs where id = auth.uid())
+    est_reseau()
+    or mon_role() in ('gerant', 'comptable')
+    or station_id = ma_station()
+    or station_id in (select station_id from profils where id = auth.uid())
   );
 
 -- Politiques pour les Clients Professionnels (Accès limité à leurs propres données)
+drop policy if exists rls_programmes_bons_client_pro on programmes_bons;
 create policy rls_programmes_bons_client_pro on programmes_bons
   for select to authenticated
   using (
@@ -224,6 +259,7 @@ create policy rls_programmes_bons_client_pro on programmes_bons
     )
   );
 
+drop policy if exists rls_programmes_bons_client_insert on programmes_bons;
 create policy rls_programmes_bons_client_insert on programmes_bons
   for insert to authenticated
   with check (
@@ -232,6 +268,7 @@ create policy rls_programmes_bons_client_insert on programmes_bons
     )
   );
 
+drop policy if exists rls_consommations_client_pro on consommations_programmes;
 create policy rls_consommations_client_pro on consommations_programmes
   for select to authenticated
   using (
@@ -240,6 +277,7 @@ create policy rls_consommations_client_pro on consommations_programmes
     )
   );
 
+drop policy if exists rls_bons_carburant_client_pro on bons_carburant;
 create policy rls_bons_carburant_client_pro on bons_carburant
   for select to authenticated
   using (
@@ -248,6 +286,7 @@ create policy rls_bons_carburant_client_pro on bons_carburant
     )
   );
 
+drop policy if exists rls_factures_client_pro on factures;
 create policy rls_factures_client_pro on factures
   for select to authenticated
   using (
