@@ -5,6 +5,7 @@ import {
   loadReferentiel,
   listClientsPro,
   createClientPro,
+  updateClientPro,
   listVehicules,
   createVehicule,
   listOperationsCredit,
@@ -16,6 +17,12 @@ import {
   saveFacture,
   marquerFactureReglee,
   nextSequenceFacture,
+  listProgrammesBons,
+  createProgrammeBons,
+  updateProgrammeBons,
+  listConsommationsProgramme,
+  creerAccesClientPro,
+  toggleAccesClientPro,
 } from "../lib/api";
 import { Section, Row, Num, Loading } from "../components/ui";
 import { F, fmtDate, n, T, todayISO, uuid } from "../lib/calcul";
@@ -23,6 +30,9 @@ import { codeClientCanonique, listeClientsCredit } from "../lib/seed";
 import { peutAgirProfil } from "../lib/permissions";
 import FactureOfficielleModal from "../components/FactureOfficielleModal";
 import { calculerFactureFiscale, genererNumeroFacture, FISCAL_CONFIG } from "../lib/facturation";
+import DemandeProgrammeModal from "../components/DemandeProgrammeModal";
+import InstructionProgrammeModal from "../components/InstructionProgrammeModal";
+import ProgrammesBonsSection from "../components/ProgrammesBonsSection";
 
 export default function ClientsPro() {
   const { profil, cloud } = useAuth();
@@ -33,14 +43,49 @@ export default function ClientsPro() {
   const [loading, setLoading] = useState(true);
   const [ref, setRef] = useState(null);
   const [selected, setSelected] = useState(null);
-  const [subTab, setSubTab] = useState("bons"); // bons | ops | vehicules | reglement
-  const [clForm, setClForm] = useState({ code: "", nom_entreprise: "", telephone: "", email: "", plafond_credit: 1000000, station_id: stationId });
+  const [subTab, setSubTab] = useState("bons"); // bons | programmes | ops | vehicules | reglement | factures
+  const [clForm, setClForm] = useState({
+    code: "",
+    nom_entreprise: "",
+    nom_commercial: "",
+    ninea: "",
+    rccm: "",
+    adresse: "",
+    ville: "Dakar",
+    telephone: "",
+    email: "",
+    representant_legal_nom: "",
+    representant_legal_contact: "",
+    responsable_compte_nom: "",
+    responsable_compte_contact: "",
+    responsable_financier_nom: "",
+    responsable_financier_contact: "",
+    infos_complementaires: "",
+    creer_acces: true,
+    password_acces: "Client2026!",
+    plafond_credit: 1000000,
+    station_id: stationId,
+  });
   const [veh, setVeh] = useState({ immatriculation: "", marque: "", modele: "", type_vehicule: "CAMION", carburant: "GASOIL" });
   const [reglementForm, setReglementForm] = useState({ montant: "", reference: "", mode: "ESPECES", date: todayISO() });
   const [msg, setMsg] = useState("");
   const [soldes, setSoldes] = useState({});
   const [ops, setOps] = useState([]);
   const [loadingOps, setLoadingOps] = useState(false);
+
+  // Programmes de Bons de Carburant & Consommations
+  const [programmesClient, setProgrammesClient] = useState([]);
+  const [loadingProgrammes, setLoadingProgrammes] = useState(false);
+  const [consommationsClient, setConsommationsClient] = useState([]);
+  const [loadingConsommations, setLoadingConsommations] = useState(false);
+  const [tousProgrammesStation, setTousProgrammesStation] = useState([]);
+  const [loadingTousProgrammes, setLoadingTousProgrammes] = useState(false);
+
+  // Modals de Programmes
+  const [showDemandeModal, setShowDemandeModal] = useState(false);
+  const [showInstructionModal, setShowInstructionModal] = useState(false);
+  const [selectedProgrammeInstruction, setSelectedProgrammeInstruction] = useState(null);
+  const [programmeEnEdition, setProgrammeEnEdition] = useState(null);
 
   // Gestion des Bons de Carburant (Règlements & Ventilations)
   const [bonsClient, setBonsClient] = useState([]);
@@ -56,7 +101,7 @@ export default function ClientsPro() {
   });
 
   // Factures Officielles OHADA / Sénégal
-  const [mainTab, setMainTab] = useState(searchParams.get("tab") === "factures" ? "factures" : "clients"); // clients | factures
+  const [mainTab, setMainTab] = useState(searchParams.get("tab") === "factures" ? "factures" : searchParams.get("tab") === "programmes" ? "programmes_tous" : "clients"); // clients | factures | programmes_tous
   const [toutesFactures, setToutesFactures] = useState([]);
   const [loadingToutesFactures, setLoadingToutesFactures] = useState(false);
   const [filtreStatutFacture, setFiltreStatutFacture] = useState("TOUS");
@@ -116,39 +161,130 @@ export default function ClientsPro() {
     }
   };
 
+  const loadTousProgrammes = async () => {
+    setLoadingTousProgrammes(true);
+    try {
+      const progs = await listProgrammesBons(stationId ? { station_id: stationId } : {});
+      setTousProgrammesStation(progs || []);
+    } catch (e) {
+      console.error("Erreur chargement tous programmes:", e);
+    } finally {
+      setLoadingTousProgrammes(false);
+    }
+  };
+
   useEffect(() => {
     loadData();
     loadToutesFactures();
-  }, [cloud]);
+    loadTousProgrammes();
+  }, [cloud, stationId]);
 
   useEffect(() => {
     const fromUrl = searchParams.get("client");
     if (fromUrl) {
       setSelected(fromUrl);
-      setSubTab("bons");
+      setSubTab("programmes");
       setMainTab("clients");
     }
     if (searchParams.get("tab") === "factures") {
       setMainTab("factures");
       loadToutesFactures();
     }
+    if (searchParams.get("tab") === "programmes") {
+      setMainTab("programmes_tous");
+      loadTousProgrammes();
+    }
   }, [searchParams]);
+
+  const handleToggleAcces = async (client) => {
+    try {
+      const nouvelEtat = !client.acces_actif;
+      const res = await toggleAccesClientPro(client.code, nouvelEtat);
+      if (res.ok) {
+        flash(nouvelEtat ? "✓ Accès portail client activé avec succès" : "✓ Accès portail client suspendu");
+        await loadData();
+      } else {
+        flash("Erreur bascule accès : " + (res.error || "Inconnu"));
+      }
+    } catch (e) {
+      flash("Erreur : " + e.message);
+    }
+  };
+
+  const handleSaveDemandeProgramme = async (demandeData) => {
+    try {
+      const res = await createProgrammeBons(demandeData);
+      if (res?.error) {
+        flash("Erreur création programme : " + res.error);
+        return;
+      }
+      flash(
+        demandeData.statut === "BROUILLON"
+          ? "✓ Demande enregistrée en brouillon"
+          : "✓ Demande de programme soumise avec succès au gérant !"
+      );
+      setShowDemandeModal(false);
+      setProgrammeEnEdition(null);
+      if (selected) await loadClientOps(selected);
+      await loadTousProgrammes();
+    } catch (e) {
+      flash("Erreur : " + e.message);
+    }
+  };
+
+  const handleDecisionGerant = async (decision) => {
+    try {
+      const res = await updateProgrammeBons(decision.programme_id, decision);
+      if (res?.error) {
+        flash("Erreur instruction programme : " + res.error);
+        return;
+      }
+      flash("✓ Décision enregistrée : Statut " + decision.nouveau_statut);
+      setShowInstructionModal(false);
+      setSelectedProgrammeInstruction(null);
+      if (selected) await loadClientOps(selected);
+      await loadTousProgrammes();
+    } catch (e) {
+      flash("Erreur : " + e.message);
+    }
+  };
+
+  const handleActiverDirect = async (programme) => {
+    try {
+      await updateProgrammeBons(programme.id, {
+        nouveau_statut: "ACTIF",
+        motif: "Activation directe par le gérant",
+        instruction_par_nom: profil?.nom_complet || profil?.nom || "Gérant",
+      });
+      flash(`✓ Programme ${programme.numero_programme} activé avec succès`);
+      if (selected) await loadClientOps(selected);
+      await loadTousProgrammes();
+    } catch (e) {
+      flash("Erreur : " + e.message);
+    }
+  };
 
   const loadClientOps = async (code) => {
     setLoadingOps(true);
     setLoadingBons(true);
     setLoadingFactures(true);
+    setLoadingProgrammes(true);
+    setLoadingConsommations(true);
     try {
-      const [o, b, s, facs] = await Promise.all([
+      const [o, b, s, facs, progs, consos] = await Promise.all([
         listOperationsCredit(code),
         listBonsClient(code, stationId),
         soldeClient(code),
         listFactures({ client_code: code }),
+        listProgrammesBons({ client_code: code }),
+        listConsommationsProgramme({ client_code: code }),
       ]);
       setOps(o || []);
       setBonsClient(b || []);
       setSoldes((prev) => ({ ...prev, [code]: s }));
       setFacturesClient(facs || []);
+      setProgrammesClient(progs || []);
+      setConsommationsClient(consos || []);
       setSelectedBonsIds(new Set());
     } catch (err) {
       console.error("Erreur chargement données client:", err);
@@ -156,6 +292,8 @@ export default function ClientsPro() {
       setLoadingOps(false);
       setLoadingBons(false);
       setLoadingFactures(false);
+      setLoadingProgrammes(false);
+      setLoadingConsommations(false);
     }
   };
 
@@ -422,10 +560,51 @@ export default function ClientsPro() {
     if (!peutCreerClient) return flash("Tu n'as pas le droit de créer un client professionnel.");
     if (!clForm.nom_entreprise.trim()) return flash("Le nom de l'entreprise est requis");
     const code = clForm.code.trim() || `CP-${clForm.nom_entreprise.trim().slice(0, 4).toUpperCase()}`;
-    const res = await createClientPro({ ...clForm, code, station_id: stationId, plafond_credit: n(clForm.plafond_credit) });
+    const payload = {
+      ...clForm,
+      code,
+      station_id: stationId,
+      plafond_credit: n(clForm.plafond_credit),
+    };
+    const res = await createClientPro(payload);
     if (res?.error) return flash("Erreur : " + res.error);
-    setClForm({ code: "", nom_entreprise: "", telephone: "", email: "", plafond_credit: 1000000, station_id: stationId });
-    flash("Client professionnel ajouté avec succès");
+
+    // Créer ou activer les identifiants d'accès si demandé
+    if (clForm.creer_acces && clForm.email) {
+      try {
+        await creerAccesClientPro({
+          client: payload,
+          password: clForm.password_acces || "Client2026!",
+          station_id: stationId,
+        });
+      } catch (accErr) {
+        console.warn("Création accès client:", accErr);
+      }
+    }
+
+    setClForm({
+      code: "",
+      nom_entreprise: "",
+      nom_commercial: "",
+      ninea: "",
+      rccm: "",
+      adresse: "",
+      ville: "Dakar",
+      telephone: "",
+      email: "",
+      representant_legal_nom: "",
+      representant_legal_contact: "",
+      responsable_compte_nom: "",
+      responsable_compte_contact: "",
+      responsable_financier_nom: "",
+      responsable_financier_contact: "",
+      infos_complementaires: "",
+      creer_acces: true,
+      password_acces: "Client2026!",
+      plafond_credit: 1000000,
+      station_id: stationId,
+    });
+    flash("✓ Client professionnel et compte d'accès créés avec succès");
     await loadData();
   };
 
@@ -468,7 +647,7 @@ export default function ClientsPro() {
 
   return (
     <div className="space-y-4">
-      {/* ── SÉLECTEUR D'ONGLET RACINE : CLIENTS VS FACTURATION OHADA ── */}
+      {/* ── SÉLECTEUR D'ONGLET RACINE : CLIENTS VS PROGRAMMES BONS VS FACTURATION OHADA ── */}
       <div className="flex flex-wrap items-center gap-2 border-b pb-3" style={{ borderColor: T.line }}>
         <button
           type="button"
@@ -481,6 +660,26 @@ export default function ClientsPro() {
         >
           <span>👥</span>
           <span>Portefeuille Clients &amp; Comptes B2B ({clients.length})</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setMainTab("programmes_tous");
+            loadTousProgrammes();
+          }}
+          className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-xs ${
+            mainTab === "programmes_tous"
+              ? "bg-amber-600 text-white shadow-md ring-2 ring-amber-300"
+              : "bg-white text-amber-900 hover:bg-amber-50 border border-amber-200"
+          }`}
+        >
+          <span>⛽</span>
+          <span>Programmes de Bons de Carburant ({tousProgrammesStation.length})</span>
+          {tousProgrammesStation.filter((p) => p.statut === "EN_ATTENTE").length > 0 && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-500 text-white animate-pulse">
+              {tousProgrammesStation.filter((p) => p.statut === "EN_ATTENTE").length} en attente
+            </span>
+          )}
         </button>
         <button
           type="button"
@@ -516,7 +715,7 @@ export default function ClientsPro() {
                 Portefeuille Clients Professionnels &amp; Flottes
               </h1>
               <p className="text-xs text-gray-500 font-medium">
-                Gestion des crédits carburant, suivi des encaissements de bons &amp; suivi des flottes (§33)
+                Gestion des crédits carburant, suivi des encaissements de bons, programmes &amp; flottes (§33)
               </p>
             </div>
             <div className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 self-start sm:self-auto">
@@ -524,34 +723,104 @@ export default function ClientsPro() {
             </div>
           </div>
 
-      {/* Formulaire nouveau client */}
+      {/* Formulaire nouveau client professionnel */}
       {peutCreerClient && (
       <Section titre="Nouveau Compte Client Entreprise" aside="RBAC : Commercial, Gérant, Direction">
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 py-2">
-          <div>
-            <div className="text-xs font-medium" style={{ color: T.muted }}>Code Client</div>
-            <input value={clForm.code} onChange={(e) => setClForm({ ...clForm, code: e.target.value })} placeholder="ex: CP-TRANSPORT" className="w-full border rounded px-2 py-1 text-sm uppercase" style={{ borderColor: T.line }} />
+        <div className="space-y-3 py-2">
+          {/* Ligne 1 : Identification & Dénomination */}
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+            <div>
+              <div className="text-xs font-medium" style={{ color: T.muted }}>Code Client *</div>
+              <input value={clForm.code} onChange={(e) => setClForm({ ...clForm, code: e.target.value })} placeholder="ex: CP-SOCOCIM" className="w-full border rounded px-2.5 py-1.5 text-xs uppercase font-mono font-bold" style={{ borderColor: T.line }} />
+            </div>
+            <div className="sm:col-span-2">
+              <div className="text-xs font-medium" style={{ color: T.muted }}>Raison Sociale *</div>
+              <input value={clForm.nom_entreprise} onChange={(e) => setClForm({ ...clForm, nom_entreprise: e.target.value })} placeholder="ex: Sococim Industries SA" className="w-full border rounded px-2.5 py-1.5 text-xs font-bold" style={{ borderColor: T.line }} />
+            </div>
+            <div>
+              <div className="text-xs font-medium" style={{ color: T.muted }}>Nom Commercial / Enseigne</div>
+              <input value={clForm.nom_commercial} onChange={(e) => setClForm({ ...clForm, nom_commercial: e.target.value })} placeholder="ex: Sococim Ciments" className="w-full border rounded px-2.5 py-1.5 text-xs" style={{ borderColor: T.line }} />
+            </div>
           </div>
-          <div className="col-span-2">
-            <div className="text-xs font-medium" style={{ color: T.muted }}>Raison Sociale / Nom Entreprise *</div>
-            <input value={clForm.nom_entreprise} onChange={(e) => setClForm({ ...clForm, nom_entreprise: e.target.value })} placeholder="ex: Sococim Industries SA" className="w-full border rounded px-2 py-1 text-sm font-semibold" style={{ borderColor: T.line }} />
+
+          {/* Ligne 2 : Données légales (NINEA, RCCM) & Localisation */}
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+            <div>
+              <div className="text-xs font-medium" style={{ color: T.muted }}>NINEA (Sénégal)</div>
+              <input value={clForm.ninea} onChange={(e) => setClForm({ ...clForm, ninea: e.target.value })} placeholder="ex: 0012345672V2" className="w-full border rounded px-2.5 py-1.5 text-xs font-mono" style={{ borderColor: T.line }} />
+            </div>
+            <div>
+              <div className="text-xs font-medium" style={{ color: T.muted }}>RCCM</div>
+              <input value={clForm.rccm} onChange={(e) => setClForm({ ...clForm, rccm: e.target.value })} placeholder="SN-DKR-2022-B-1234" className="w-full border rounded px-2.5 py-1.5 text-xs font-mono" style={{ borderColor: T.line }} />
+            </div>
+            <div>
+              <div className="text-xs font-medium" style={{ color: T.muted }}>Adresse du siège</div>
+              <input value={clForm.adresse} onChange={(e) => setClForm({ ...clForm, adresse: e.target.value })} placeholder="Km 4, Bd du Centenaire" className="w-full border rounded px-2.5 py-1.5 text-xs" style={{ borderColor: T.line }} />
+            </div>
+            <div>
+              <div className="text-xs font-medium" style={{ color: T.muted }}>Ville / Région</div>
+              <input value={clForm.ville} onChange={(e) => setClForm({ ...clForm, ville: e.target.value })} placeholder="Dakar / Rufisque" className="w-full border rounded px-2.5 py-1.5 text-xs" style={{ borderColor: T.line }} />
+            </div>
           </div>
-          <div>
-            <div className="text-xs font-medium" style={{ color: T.muted }}>Téléphone Contact</div>
-            <input value={clForm.telephone} onChange={(e) => setClForm({ ...clForm, telephone: e.target.value })} placeholder="77 000 00 00" className="w-full border rounded px-2 py-1 text-sm" style={{ borderColor: T.line }} />
+
+          {/* Ligne 3 : Contacts (Général, Représentant légal, Responsable compte, Responsable financier) */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-2.5 rounded-lg bg-gray-50 border" style={{ borderColor: T.line }}>
+            <div>
+              <div className="text-[11px] font-bold text-gray-700 uppercase mb-1">Représentant Légal</div>
+              <input value={clForm.representant_legal_nom} onChange={(e) => setClForm({ ...clForm, representant_legal_nom: e.target.value })} placeholder="Nom & Prénom" className="w-full border rounded px-2 py-1 text-xs mb-1 bg-white" style={{ borderColor: T.line }} />
+              <input value={clForm.representant_legal_contact} onChange={(e) => setClForm({ ...clForm, representant_legal_contact: e.target.value })} placeholder="Tél / Contact" className="w-full border rounded px-2 py-1 text-xs bg-white" style={{ borderColor: T.line }} />
+            </div>
+            <div>
+              <div className="text-[11px] font-bold text-gray-700 uppercase mb-1">Responsable Compte / Flotte</div>
+              <input value={clForm.responsable_compte_nom} onChange={(e) => setClForm({ ...clForm, responsable_compte_nom: e.target.value })} placeholder="Nom Gestionnaire Flotte" className="w-full border rounded px-2 py-1 text-xs mb-1 bg-white" style={{ borderColor: T.line }} />
+              <input value={clForm.responsable_compte_contact} onChange={(e) => setClForm({ ...clForm, responsable_compte_contact: e.target.value })} placeholder="Tél / Email" className="w-full border rounded px-2 py-1 text-xs bg-white" style={{ borderColor: T.line }} />
+            </div>
+            <div>
+              <div className="text-[11px] font-bold text-gray-700 uppercase mb-1">Responsable Financier</div>
+              <input value={clForm.responsable_financier_nom} onChange={(e) => setClForm({ ...clForm, responsable_financier_nom: e.target.value })} placeholder="Nom DAF / Comptable" className="w-full border rounded px-2 py-1 text-xs mb-1 bg-white" style={{ borderColor: T.line }} />
+              <input value={clForm.responsable_financier_contact} onChange={(e) => setClForm({ ...clForm, responsable_financier_contact: e.target.value })} placeholder="Tél / Email" className="w-full border rounded px-2 py-1 text-xs bg-white" style={{ borderColor: T.line }} />
+            </div>
           </div>
-          <div>
-            <div className="text-xs font-medium" style={{ color: T.muted }}>Email Gestionnaire</div>
-            <input value={clForm.email} onChange={(e) => setClForm({ ...clForm, email: e.target.value })} placeholder="flotte@entreprise.sn" className="w-full border rounded px-2 py-1 text-sm" style={{ borderColor: T.line }} />
+
+          {/* Ligne 4 : Plafond de crédit & Accès sécurisé espace client */}
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+            <div>
+              <div className="text-xs font-medium" style={{ color: T.muted }}>Téléphone principal</div>
+              <input value={clForm.telephone} onChange={(e) => setClForm({ ...clForm, telephone: e.target.value })} placeholder="77 000 00 00" className="w-full border rounded px-2.5 py-1.5 text-xs" style={{ borderColor: T.line }} />
+            </div>
+            <div>
+              <div className="text-xs font-medium" style={{ color: T.muted }}>Email principal (Login) *</div>
+              <input value={clForm.email} onChange={(e) => setClForm({ ...clForm, email: e.target.value })} placeholder="contact@entreprise.sn" className="w-full border rounded px-2.5 py-1.5 text-xs font-semibold" style={{ borderColor: T.line }} />
+            </div>
+            <div>
+              <div className="text-xs font-medium" style={{ color: T.muted }}>Plafond Crédit Autorisé (F CFA) *</div>
+              <Num value={clForm.plafond_credit} onChange={(v) => setClForm({ ...clForm, plafond_credit: v })} w="w-full" />
+            </div>
+            <div>
+              <div className="text-xs font-medium" style={{ color: T.muted }}>Mot de passe initial portail</div>
+              <input value={clForm.password_acces} onChange={(e) => setClForm({ ...clForm, password_acces: e.target.value })} placeholder="Client2026!" className="w-full border rounded px-2.5 py-1.5 text-xs font-mono" style={{ borderColor: T.line }} />
+            </div>
           </div>
-          <div>
-            <div className="text-xs font-medium" style={{ color: T.muted }}>Plafond Crédit Autorisé (F CFA) *</div>
-            <Num value={clForm.plafond_credit} onChange={(v) => setClForm({ ...clForm, plafond_credit: v })} w="w-full" />
+
+          {/* Option d'accès sécurisé */}
+          <div className="flex items-center gap-2 p-2 rounded bg-purple-50/70 border border-purple-200">
+            <input
+              type="checkbox"
+              id="creer_acces_check"
+              checked={clForm.creer_acces}
+              onChange={(e) => setClForm({ ...clForm, creer_acces: e.target.checked })}
+              className="rounded text-purple-700 cursor-pointer"
+            />
+            <label htmlFor="creer_acces_check" className="text-xs font-semibold text-purple-950 cursor-pointer">
+              Activer immédiatement un compte d'accès sécurisé pour ce client (Rôle : <code>client_pro</code>)
+            </label>
           </div>
         </div>
-        <div className="pt-1 pb-2">
-          <button onClick={save} className="px-4 py-2 rounded-lg text-sm font-bold text-white shadow-xs transition-opacity hover:opacity-90" style={{ background: T.petrol }}>
-            + Créer le compte client pro
+
+        <div className="pt-2 pb-2">
+          <button onClick={save} className="px-4 py-2 rounded-lg text-sm font-bold text-white shadow-xs transition-opacity hover:opacity-90 flex items-center gap-1.5" style={{ background: T.petrol }}>
+            <span>➕</span>
+            <span>Créer le compte client &amp; Activer l'accès</span>
           </button>
         </div>
       </Section>
@@ -576,14 +845,46 @@ export default function ClientsPro() {
               >
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-bold text-base text-gray-900">{c.nom_entreprise}</span>
                       <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-gray-100 text-gray-600 font-bold">{c.code}</span>
                       {isSelected && <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-200 text-amber-900">Sélectionné</span>}
+                      
+                      {/* Statut d'accès au portail */}
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1 ${
+                          c.acces_actif !== false
+                            ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                            : "bg-rose-100 text-rose-800 border border-rose-300"
+                        }`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${c.acces_actif !== false ? "bg-emerald-600" : "bg-rose-600"}`} />
+                        <span>{c.acces_actif !== false ? "Accès Portail Actif" : "Accès Suspendu"}</span>
+                      </span>
+
+                      {peutCreerClient && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleAcces(c);
+                          }}
+                          className={`text-[10px] px-2 py-0.5 rounded font-bold transition-colors ${
+                            c.acces_actif !== false
+                              ? "bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300"
+                              : "bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300"
+                          }`}
+                          title="Activer ou suspendre l'accès portail de ce client"
+                        >
+                          {c.acces_actif !== false ? "Suspendre accès" : "Activer accès"}
+                        </button>
+                      )}
                     </div>
-                    <div className="text-xs text-gray-500 mt-0.5">
+                    <div className="text-xs text-gray-500 mt-0.5 flex flex-wrap gap-2">
                       {c.telephone && <span>📞 {c.telephone}</span>}
-                      {c.email && <span className="ml-2">✉️ {c.email}</span>}
+                      {c.email && <span>✉️ {c.email}</span>}
+                      {c.ninea && <span className="font-mono text-gray-400">NINEA: {c.ninea}</span>}
+                      {c.adresse && <span>📍 {c.adresse}</span>}
                     </div>
                   </div>
 
@@ -648,11 +949,25 @@ export default function ClientsPro() {
                 <strong style={{ color: (soldes[selected] || 0) < 0 ? T.alert : T.ok }}>
                   {(soldes[selected] || 0) < 0 ? `${F(-soldes[selected])} FCFA dus` : `${F(soldes[selected] || 0)} FCFA d'avance`}
                 </strong>
+                {clientActif.ninea && <span> · NINEA: <strong>{clientActif.ninea}</strong></span>}
               </p>
             </div>
 
             {/* Onglets d'action */}
             <div className="flex flex-wrap rounded-lg border p-1 bg-gray-50 gap-1 text-xs font-semibold" style={{ borderColor: T.line }}>
+              <button
+                onClick={() => setSubTab("programmes")}
+                className={`px-3 py-1.5 rounded-md transition-colors flex items-center gap-1.5 ${
+                  subTab === "programmes" ? "bg-amber-600 text-white font-bold shadow-xs" : "text-amber-800 hover:bg-amber-100"
+                }`}
+              >
+                <span>⛽ Programmes de Bons ({programmesClient.length})</span>
+                {programmesClient.filter((p) => p.statut === "ACTIF").length > 0 && (
+                  <span className="px-1.5 py-0.5 bg-emerald-500 text-white text-[10px] font-black rounded-full leading-none">
+                    {programmesClient.filter((p) => p.statut === "ACTIF").length}
+                  </span>
+                )}
+              </button>
               <button
                 onClick={() => setSubTab("bons")}
                 className={`px-3 py-1.5 rounded-md transition-colors flex items-center gap-1.5 ${
@@ -695,7 +1010,32 @@ export default function ClientsPro() {
             </div>
           </div>
 
-          {/* Onglet 0 : Bons de Carburant & Ventilation de Règlements */}
+          {/* Onglet Programmes de Bons de Carburant & Flotte */}
+          {subTab === "programmes" && (
+            <div className="space-y-4">
+              <ProgrammesBonsSection
+                clientCode={selected}
+                programmes={programmesClient}
+                consommations={consommationsClient}
+                onNouvelleDemande={() => {
+                  setProgrammeEnEdition(null);
+                  setShowDemandeModal(true);
+                }}
+                onEditerDemande={(p) => {
+                  setProgrammeEnEdition(p);
+                  setShowDemandeModal(true);
+                }}
+                onInstruireDemande={(p) => {
+                  setSelectedProgrammeInstruction(p);
+                  setShowInstructionModal(true);
+                }}
+                onActiverDirect={handleActiverDirect}
+                isGerant={profil?.role !== "client_pro"}
+              />
+            </div>
+          )}
+
+          {/* Onglet Bons de Carburant & Ventilation de Règlements */}
           {subTab === "bons" && (
             <div className="space-y-4">
               {/* Synthèse des Bons */}
@@ -1662,6 +2002,93 @@ export default function ClientsPro() {
           facture={factureAffichee}
           onClose={() => setFactureAffichee(null)}
           onMarquerReglee={handleMarquerFactureReglee}
+        />
+      )}
+
+      {/* ── VUE 3 : TOUS LES PROGRAMMES DE BONS DE LA STATION ── */}
+      {mainTab === "programmes_tous" && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-amber-900 via-amber-800 to-amber-950 text-white p-5 rounded-2xl shadow-lg border border-amber-700/50">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">⛽</span>
+                <h2 className="text-lg font-black tracking-tight text-white">
+                  Gestion Réseau des Programmes de Bons de Carburant
+                </h2>
+              </div>
+              <p className="text-xs text-amber-200 mt-1 max-w-2xl">
+                Suivi centralisé des demandes, plafonds autorisés et consommations en temps réel pour l'ensemble des flottes et entreprises clientes de la station.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setProgrammeEnEdition(null);
+                  setShowDemandeModal(true);
+                }}
+                className="px-4 py-2.5 rounded-xl bg-white hover:bg-amber-50 text-amber-950 font-black text-xs shadow-md transition-all flex items-center gap-1.5"
+              >
+                <span>➕</span>
+                <span>Nouvelle Demande Programme</span>
+              </button>
+              <button
+                type="button"
+                onClick={loadTousProgrammes}
+                className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs transition-colors flex items-center gap-1"
+              >
+                <span>🔄</span>
+                <span>Actualiser</span>
+              </button>
+            </div>
+          </div>
+
+          <ProgrammesBonsSection
+            clientCode={null}
+            programmes={tousProgrammesStation}
+            consommations={[]}
+            onNouvelleDemande={() => {
+              setProgrammeEnEdition(null);
+              setShowDemandeModal(true);
+            }}
+            onEditerDemande={(p) => {
+              setProgrammeEnEdition(p);
+              setShowDemandeModal(true);
+            }}
+            onInstruireDemande={(p) => {
+              setSelectedProgrammeInstruction(p);
+              setShowInstructionModal(true);
+            }}
+            onActiverDirect={handleActiverDirect}
+            isGerant={profil?.role !== "client_pro"}
+          />
+        </div>
+      )}
+
+      {/* Modals de Demande & d'Instruction de Programme */}
+      {showDemandeModal && (
+        <DemandeProgrammeModal
+          clientCode={selected || (clients.length > 0 ? clients[0].code : "")}
+          clientNom={clientActif?.nom_entreprise || (clients.length > 0 ? clients[0].nom_entreprise : "")}
+          programmeEnEdition={programmeEnEdition}
+          onClose={() => {
+            setShowDemandeModal(false);
+            setProgrammeEnEdition(null);
+          }}
+          onSave={handleSaveDemandeProgramme}
+          isClient={profil?.role === "client_pro"}
+        />
+      )}
+
+      {showInstructionModal && selectedProgrammeInstruction && (
+        <InstructionProgrammeModal
+          programme={selectedProgrammeInstruction}
+          onClose={() => {
+            setShowInstructionModal(false);
+            setSelectedProgrammeInstruction(null);
+          }}
+          onDecision={handleDecisionGerant}
+          gerantNom={profil?.nom_complet || profil?.nom || "Gérant"}
         />
       )}
     </div>

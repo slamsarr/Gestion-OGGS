@@ -10,10 +10,12 @@ import {
   indexVeille,
   saveOperationCredit,
   savePistolet,
+  listProgrammesBons,
 } from "../lib/api";
 import { F, fmtDate, n, T, todayISO, prixDuJour, uuid } from "../lib/calcul";
 import { Section, Row, Num, Loading, InputComptable } from "../components/ui";
 import { peutCorrigerDescente, ROLES_CORRECTION_DESCENTE, peutVoirToutesLesEntrees } from "../lib/permissions";
+import { verifierEligibiliteDistribution } from "../lib/programmes-bons";
 
 /** Normalisation défensive pour rétrocompatibilité avec les anciennes descentes mono-pompe */
 export function normalizeDescente(d) {
@@ -156,6 +158,12 @@ export default function DescentePompiste() {
   const [bonLitres, setBonLitres] = useState("");
   const [bonMontant, setBonMontant] = useState("");
   const [bonObservation, setBonObservation] = useState("");
+
+  // ── Programme de Bons & Transporteurs Rattachés ──
+  const [clientProgrammes, setClientProgrammes] = useState([]);
+  const [bonProgrammeId, setBonProgrammeId] = useState("");
+  const [bonTransporteurId, setBonTransporteurId] = useState("");
+  const [loadingClientProgs, setLoadingClientProgs] = useState(false);
 
   // ── Ventes de Lubrifiants State ──
   // Chaque ligne = { id, produit_code, libelle, quantite, prix_unitaire, montant }
@@ -420,7 +428,46 @@ export default function DescentePompiste() {
     flash(reindexed.length === 0 ? "Aucune pompe en session. Choisissez vos pompes pour ce quart." : "Pompe retirée de la session");
   };
 
-  // ── GESTION DES BONS D'ENCAISSEMENT ──
+  // ── GESTION DES BONS D'ENCAISSEMENT & PROGRAMMES CLIENTS ──
+
+  useEffect(() => {
+    if (!bonClientCode) {
+      setClientProgrammes([]);
+      setBonProgrammeId("");
+      setBonTransporteurId("");
+      return;
+    }
+    let cancelled = false;
+    setLoadingClientProgs(true);
+    listProgrammesBons({ client_code: bonClientCode })
+      .then((progs) => {
+        if (cancelled) return;
+        const actifs = (progs || []).filter((p) => p.statut === "ACTIF" || p.statut === "VALIDE");
+        setClientProgrammes(actifs);
+        if (!editingBonId && actifs.length === 1) {
+          setBonProgrammeId(actifs[0].id);
+        }
+      })
+      .catch((e) => console.error("Erreur chargement programmes client:", e))
+      .finally(() => {
+        if (!cancelled) setLoadingClientProgs(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [bonClientCode, editingBonId]);
+
+  const selectedProgramme = useMemo(() => {
+    return clientProgrammes.find((p) => p.id === bonProgrammeId) || null;
+  }, [clientProgrammes, bonProgrammeId]);
+
+  const programmeTransporteurs = useMemo(() => {
+    return selectedProgramme?.transporteurs || [];
+  }, [selectedProgramme]);
+
+  const selectedTransporteur = useMemo(() => {
+    return programmeTransporteurs.find((t) => t.id === bonTransporteurId) || null;
+  }, [programmeTransporteurs, bonTransporteurId]);
 
   const openAddBonModal = () => {
     setEditingBonId(null);
@@ -431,6 +478,8 @@ export default function DescentePompiste() {
     setBonLitres("");
     setBonMontant("");
     setBonObservation("");
+    setBonProgrammeId("");
+    setBonTransporteurId("");
     setShowBonModal(true);
   };
 
@@ -443,6 +492,8 @@ export default function DescentePompiste() {
     setBonLitres(bon.volume_litres != null && bon.volume_litres > 0 ? bon.volume_litres.toString() : "");
     setBonMontant(bon.montant?.toString() || "");
     setBonObservation(bon.observation || "");
+    setBonProgrammeId(bon.programme_id || "");
+    setBonTransporteurId(bon.transporteur_id || "");
     setShowBonModal(true);
   };
 
@@ -476,36 +527,52 @@ export default function DescentePompiste() {
     const prix = prixDuJour(ref?.prix || [], bonProduit, bonDate || date) || 755;
     const finalMontant = m > 0 ? m : Math.round(lit * prix);
 
+    // Contrôle d'éligibilité et de plafond de programme
+    let progData = null;
+    let transpData = null;
+
+    if (bonProgrammeId) {
+      progData = clientProgrammes.find((p) => p.id === bonProgrammeId);
+      if (progData) {
+        if (bonTransporteurId) {
+          transpData = (progData.transporteurs || []).find((t) => t.id === bonTransporteurId);
+        }
+        const check = verifierEligibiliteDistribution(
+          progData,
+          bonTransporteurId || null,
+          lit,
+          bonProduit
+        );
+        if (!check.eligible) {
+          return flash(`⚠️ Programme non débitable : ${check.erreur}`, "error");
+        }
+      }
+    }
+
+    const bonData = {
+      client_code: bonClientCode,
+      client_nom: clientObj.nom,
+      numero_bon: bonNumero.trim().toUpperCase(),
+      date: bonDate || date,
+      produit: bonProduit,
+      volume_litres: lit,
+      montant: finalMontant,
+      observation: bonObservation.trim(),
+      programme_id: progData ? progData.id : null,
+      programme_numero: progData ? progData.numero_programme : null,
+      transporteur_id: transpData ? transpData.id : null,
+      transporteur_nom: transpData ? (transpData.nom_prenom || transpData.immatriculation) : null,
+    };
+
     if (editingBonId) {
       setBons((prev) =>
-        prev.map((b) =>
-          b.id === editingBonId
-            ? {
-                ...b,
-                client_code: bonClientCode,
-                client_nom: clientObj.nom,
-                numero_bon: bonNumero.trim().toUpperCase(),
-                date: bonDate || date,
-                produit: bonProduit,
-                volume_litres: lit,
-                montant: finalMontant,
-                observation: bonObservation.trim(),
-              }
-            : b
-        )
+        prev.map((b) => (b.id === editingBonId ? { ...b, ...bonData } : b))
       );
       flash("Bon d'encaissement modifié avec succès");
     } else {
       const nouveauBon = {
         id: uuid(),
-        client_code: bonClientCode,
-        client_nom: clientObj.nom,
-        numero_bon: bonNumero.trim().toUpperCase(),
-        date: bonDate || date,
-        produit: bonProduit,
-        volume_litres: lit,
-        montant: finalMontant,
-        observation: bonObservation.trim(),
+        ...bonData,
       };
       setBons([...bons, nouveauBon]);
       flash("Bon d'encaissement ajouté");
@@ -561,6 +628,10 @@ export default function DescentePompiste() {
         volume_litres: n(b.volume_litres || b.litres || 0),
         montant: n(b.montant),
         observation: b.observation || "",
+        programme_id: b.programme_id || null,
+        programme_numero: b.programme_numero || null,
+        transporteur_id: b.transporteur_id || null,
+        transporteur_nom: b.transporteur_nom || null,
       }))
     );
 
@@ -1488,6 +1559,16 @@ export default function DescentePompiste() {
                         <td className="py-2 px-3 font-semibold text-gray-900">
                           {b.client_nom || b.client_code}
                           <span className="text-[10px] text-gray-500 block">{b.client_code}</span>
+                          {b.programme_numero && (
+                            <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 font-mono text-[9.5px] font-bold">
+                              ⛽ {b.programme_numero}
+                            </span>
+                          )}
+                          {b.transporteur_nom && (
+                            <span className="text-[9.5px] text-gray-500 block">
+                              🚗 {b.transporteur_nom}
+                            </span>
+                          )}
                         </td>
                         <td className="py-2 px-3 font-mono font-bold text-amber-900">{b.numero_bon}</td>
                         <td className="py-2 px-3 text-gray-600">{fmtDate(b.date)}</td>
@@ -2096,6 +2177,111 @@ export default function DescentePompiste() {
                   ))}
                 </select>
               </div>
+
+              {/* Rattachement Programme de Bons de Carburant */}
+              {clientProgrammes.length > 0 && (
+                <div className="p-2.5 rounded-xl bg-amber-50/80 border border-amber-300 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold text-amber-950 flex items-center gap-1.5">
+                      <span>⛽</span> Programme de Bons Actif (Rattachement)
+                    </label>
+                    <span className="text-[10px] font-semibold text-amber-800">
+                      {clientProgrammes.length} programme(s) dispo
+                    </span>
+                  </div>
+
+                  <select
+                    value={bonProgrammeId}
+                    onChange={(e) => {
+                      const pid = e.target.value;
+                      setBonProgrammeId(pid);
+                      setBonTransporteurId("");
+                      const p = clientProgrammes.find((cp) => cp.id === pid);
+                      if (p?.type_carburant && p.type_carburant !== "MULTI") {
+                        handleProduitChange(p.type_carburant);
+                      }
+                    }}
+                    className="w-full text-xs border rounded-lg px-2.5 py-1.5 font-bold bg-white text-gray-900 border-amber-300"
+                  >
+                    <option value="">-- Aucun (Bon de crédit classique) --</option>
+                    {clientProgrammes.map((p) => {
+                      const dispo = Math.max(0, (p.volume_autorise || p.volume_demande || 0) - (p.volume_consomme || 0));
+                      return (
+                        <option key={p.id} value={p.id}>
+                          {p.numero_programme} — {p.type_carburant} ({F(dispo)} L restants)
+                        </option>
+                      );
+                    })}
+                  </select>
+
+                  {/* Détail du programme & Sélection du transporteur */}
+                  {selectedProgramme && (
+                    <div className="text-[11px] space-y-1.5 pt-1 border-t border-amber-200">
+                      <div className="flex items-center justify-between text-gray-700">
+                        <span>Plafond : <strong>{F(selectedProgramme.volume_autorise || selectedProgramme.volume_demande)} L</strong></span>
+                        <span className="text-amber-900 font-bold">
+                          Solde : <strong>{F(Math.max(0, (selectedProgramme.volume_autorise || selectedProgramme.volume_demande || 0) - (selectedProgramme.volume_consomme || 0)))} L</strong>
+                        </span>
+                      </div>
+
+                      {programmeTransporteurs.length > 0 && (
+                        <div>
+                          <label className="block text-gray-700 font-semibold mb-1">
+                            Transporteur / Véhicule autorisé :
+                          </label>
+                          <select
+                            value={bonTransporteurId}
+                            onChange={(e) => {
+                              const tid = e.target.value;
+                              setBonTransporteurId(tid);
+                              const t = programmeTransporteurs.find((ct) => ct.id === tid);
+                              if (t) {
+                                if (t.carburant) handleProduitChange(t.carburant);
+                                if (!bonObservation.trim()) {
+                                  setBonObservation(`${t.immatriculation || ""} - ${t.nom_prenom || ""}`.trim());
+                                }
+                              }
+                            }}
+                            className="w-full text-xs border rounded px-2 py-1.5 bg-white font-medium"
+                          >
+                            <option value="">-- Sélectionner le transporteur / véhicule --</option>
+                            {programmeTransporteurs.map((t) => {
+                              const tDispo = Math.max(0, (t.volume_autorise || t.volume_demande || 0) - (t.volume_consomme || 0));
+                              return (
+                                <option key={t.id} value={t.id}>
+                                  {t.nom_prenom} ({t.immatriculation}) — {t.type_vehicule} [Dispo: {F(tDispo)} L]
+                                </option>
+                              );
+                            })}
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Indicateur temps réel d'éligibilité du litrage */}
+                      {n(bonLitres) > 0 && (() => {
+                        const check = verifierEligibiliteDistribution(
+                          selectedProgramme,
+                          bonTransporteurId || null,
+                          n(bonLitres),
+                          bonProduit
+                        );
+                        if (!check.eligible) {
+                          return (
+                            <div className="p-1.5 rounded bg-rose-100 border border-rose-300 text-rose-800 font-bold text-[10px]">
+                              ⚠️ {check.erreur}
+                            </div>
+                          );
+                        }
+                        return (
+                          <div className="p-1.5 rounded bg-emerald-100 border border-emerald-300 text-emerald-800 font-semibold text-[10px]">
+                            ✓ Imputation autorisée · Nouveau solde : {F(check.nouveau_solde)} L
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-2">
                 <div>

@@ -13,6 +13,8 @@ export const TABLES_CLOUD_METIER = {
   membres_fidelite: "membres_fidelite",
   transactions_fidelite: "transactions_fidelite",
   recompenses_fidelite: "recompenses_fidelite",
+  programmes_bons: "programmes_bons",
+  consommations_programmes: "consommations_programmes",
 };
 
 /** Tables cloud Vague 2 (opérations terrain) */
@@ -47,6 +49,8 @@ export const TABLES_META_METIER = {
   transactions_fidelite: { champCle: "id", station: "station_id" },
   recompenses_fidelite: { champCle: "id", station: null },
   remboursements_ecarts: { champCle: "id", station: "station_id" },
+  programmes_bons: { champCle: "id", station: "station_id" },
+  consommations_programmes: { champCle: "id", station: "station_id" },
 };
 
 /** Nom Dexie local (peut différer de la clé API) */

@@ -4,6 +4,13 @@ import { createClient } from "@supabase/supabase-js";
 import { calculer, n, todayISO, uuid, F } from "./calcul";
 import { codeClientCanonique, codesClientEquivalents, listeClientsCredit, referentielFromSeed, SEED_WASH_PACKS, SEED_WASH_SERVICES, SEED_WASH_PRICING, SEED_WASH_BAYS, SEED_SERVICES_ENTRETIEN, SEED_BAIES_ENTRETIEN } from "./seed";
 import {
+  genererNumeroProgramme,
+  verifierEligibiliteDistribution,
+  calculerSyntheseProgramme,
+  STATUTS_PROGRAMME,
+  MODES_GESTION_PROGRAMME,
+} from "./programmes-bons";
+import {
   TABLES_CLOUD_METIER,
   TABLES_META_METIER,
   TABLES_OPS_CLOUD,
@@ -1330,7 +1337,10 @@ async function saveOpRow(table, row) {
 }
 
 // ── CRUD clients_pro (clients professionnels) ──
-export async function createClientPro(c) { return saveMetierRow("clients_pro", { ...c, code: c.code || uuid() }); }
+export async function createClientPro(c) {
+  const res = await saveMetierRow("clients_pro", { ...c, code: c.code || uuid() });
+  return { ...res, client: res.row };
+}
 export async function updateClientPro(id, patch) {
   const gun = await saveMetierRow("clients_pro", { ...patch, id });
   return gun;
@@ -1343,6 +1353,418 @@ export async function deleteVehicule(id) { return deleteMetierRow("vehicules", i
 export async function listVehicules(stationId, clientCode) {
   return (await listMetier("vehicules", stationId)).filter((v) => !clientCode || v.client_code === clientCode);
 }
+
+// ── Gestion de l'accès sécurisé Espace Client Pro ──
+export async function creerAccesClientPro(args = {}) {
+  await ensureLocalSeed();
+  const cl = args.client || {};
+  const cleanEmail = (args.email || cl.email || "").trim().toLowerCase();
+  const clientCode = args.clientCode || cl.code || "";
+  const clientId = args.clientId || cl.id || cl.code || clientCode || null;
+  const nomEntreprise = args.nomEntreprise || cl.nom_entreprise || cl.nom || clientCode;
+  const telephone = args.telephone || cl.telephone || "";
+  const stationId = args.stationId || args.station_id || cl.station_id || "";
+  const rawPassword = (args.password || "Client2026!").trim();
+
+  if (!cleanEmail) return { ok: false, error: "L'adresse email est requise pour créer l'accès client." };
+  
+  let userId = `u-client-${Date.now().toString(36)}`;
+
+  // Création dans Supabase Auth si en ligne
+  if (isCloudConfigured()) {
+    try {
+      const anonClient = createClient(
+        import.meta.env.VITE_SUPABASE_URL,
+        import.meta.env.VITE_SUPABASE_ANON_KEY,
+        { auth: { persistSession: false, autoRefreshToken: false } }
+      );
+      const { data: authData, error: authErr } = await anonClient.auth.signUp({
+        email: cleanEmail,
+        password: rawPassword,
+        options: {
+          data: {
+            nom_complet: nomEntreprise || clientCode,
+            role: "client_pro",
+            client_code: clientCode,
+            station_id: stationId || null,
+            telephone: telephone ? telephone.trim() : "",
+          },
+        },
+      });
+      if (authErr && !authErr.message?.toLowerCase().includes("already registered")) {
+        console.warn("Notice Supabase Auth client_pro:", authErr.message);
+      } else if (authData?.user?.id) {
+        userId = authData.user.id;
+      }
+    } catch (e) {
+      console.warn("Exception auth client_pro:", e);
+    }
+  }
+
+  // Enregistrement dans Dexie db.users
+  const newUser = {
+    id: userId,
+    email: cleanEmail,
+    password: rawPassword,
+    nom_complet: nomEntreprise || clientCode,
+    role: "client_pro",
+    client_code: clientCode,
+    station_id: stationId || null,
+    telephone: telephone ? telephone.trim() : "",
+    actif: true,
+    created_at: new Date().toISOString(),
+  };
+  await db.users.put(newUser);
+
+  // Mise à jour de la fiche client
+  if (clientId) {
+    await updateClientPro(clientId, {
+      user_id: userId,
+      email: cleanEmail,
+      acces_actif: true,
+      dernier_acces_cree_le: new Date().toISOString(),
+    });
+  }
+
+  return { ok: true, userId, email: cleanEmail, password: rawPassword };
+}
+
+export async function toggleAccesClientPro(clientId, actif) {
+  await ensureLocalSeed();
+  const cl = await db.clients_pro.get(clientId);
+  if (!cl) return { ok: false, error: "Client introuvable." };
+  const updated = await updateClientPro(clientId, { acces_actif: !!actif });
+  if (cl.user_id) {
+    const user = await db.users.get(cl.user_id);
+    if (user) {
+      await db.users.put({ ...user, actif: !!actif });
+    }
+  }
+  return { ok: true, client: updated };
+}
+
+// ── CRUD Programmes de Bons de Carburant & Flotte ──
+
+export async function listProgrammesBons(stationId, clientCode = null) {
+  await ensureLocalSeed();
+  let rows = [];
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      let query = sb.from("programmes_bons").select("*").order("created_at", { ascending: false });
+      if (stationId) query = query.eq("station_id", stationId);
+      if (clientCode) query = query.eq("client_code", clientCode);
+      const { data, error } = await query;
+      if (!error && Array.isArray(data)) {
+        for (const r of data) {
+          const payload = r.payload || {};
+          const merged = { ...payload, ...r, id: r.id };
+          await db.programmes_bons.put(merged);
+        }
+      }
+    } catch (e) {
+      console.warn("Notice: sync programmes_bons", e);
+    }
+  }
+
+  rows = await db.programmes_bons.toArray();
+  const stations = await stationsDuReferentiel();
+  if (stationId) rows = rows.filter((p) => rowMatchesStation(p, stationId, stations));
+  if (clientCode) rows = rows.filter((p) => p.client_code === clientCode);
+
+  return rows
+    .map((p) => ({
+      ...p,
+      synthese: calculerSyntheseProgramme(p),
+    }))
+    .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+}
+
+export async function getProgrammeBons(id) {
+  await ensureLocalSeed();
+  const p = await db.programmes_bons.get(id);
+  if (!p) return null;
+  return {
+    ...p,
+    synthese: calculerSyntheseProgramme(p),
+  };
+}
+
+export async function createProgrammeBons(prog, auteurInfo = null) {
+  await ensureLocalSeed();
+  const id = prog.id || uuid();
+  const numero_programme = prog.numero_programme || genererNumeroProgramme(prog.date_demande || prog.date_debut);
+  const volDemand = n(prog.volume_demande ?? prog.volume_demande_l ?? 0);
+  const volAuto = prog.volume_autorise != null ? n(prog.volume_autorise) : prog.volume_autorise_l != null ? n(prog.volume_autorise_l) : volDemand;
+  const volConso = n(prog.volume_consomme ?? prog.volume_consomme_l ?? 0);
+  const volRestant = Math.max(0, volAuto - volConso);
+
+  const hist = [
+    {
+      date: new Date().toISOString(),
+      action: prog.statut === "BROUILLON" ? "BROUILLON" : "SOUMISSION",
+      auteur: auteurInfo?.nom_complet || prog.demandeur_nom || "Client",
+      statut_nouveau: prog.statut || "EN_ATTENTE",
+      motif: prog.objet_demande || prog.objet || "Demande initiale de programme de bons",
+    },
+  ];
+
+  const row = {
+    ...prog,
+    id,
+    numero_programme,
+    statut: prog.statut || "EN_ATTENTE",
+    mode_gestion: prog.mode_gestion || "VOLUME_GLOBAL",
+    volume_demande: volDemand,
+    volume_demande_l: volDemand,
+    volume_autorise: volAuto,
+    volume_autorise_l: volAuto,
+    volume_consomme: volConso,
+    volume_consomme_l: volConso,
+    volume_restant: volRestant,
+    volume_restant_l: volRestant,
+    nb_passages: n(prog.nb_passages || 0),
+    transporteurs: Array.isArray(prog.transporteurs)
+      ? prog.transporteurs.map((t, idx) => {
+          const tAlloue = n(t.volume_autorise ?? t.volume_alloue_l ?? t.volume_demande ?? t.volume_demande_l ?? 0);
+          const tConso = n(t.volume_consomme ?? t.volume_consomme_l ?? 0);
+          return {
+            ...t,
+            id: t.id || `tr-${Date.now()}-${idx}`,
+            volume_autorise: tAlloue,
+            volume_alloue_l: tAlloue,
+            volume_consomme: tConso,
+            volume_consomme_l: tConso,
+            volume_restant: Math.max(0, tAlloue - tConso),
+            volume_restant_l: Math.max(0, tAlloue - tConso),
+            actif: t.actif !== false,
+          };
+        })
+      : [],
+    historique_validations: hist,
+    historique_decisions: hist,
+    created_at: prog.created_at || new Date().toISOString(),
+    maj_le: new Date().toISOString(),
+  };
+
+  await db.programmes_bons.put(row);
+  const sb = getSupabase();
+  if (sb) {
+    sb.from("programmes_bons").insert(row).catch(() => {});
+  }
+  return { ok: true, programme: row };
+}
+
+export async function updateProgrammeBons(id, patch, auteurInfo = null) {
+  await ensureLocalSeed();
+  const existing = await db.programmes_bons.get(id);
+  if (!existing) return { ok: false, error: "Programme introuvable" };
+
+  const ancienStatut = existing.statut;
+  const nouveauStatut = patch.nouveau_statut || patch.statut || ancienStatut;
+
+  const totalAuto = patch.volume_autorise != null
+    ? n(patch.volume_autorise)
+    : patch.volume_autorise_l != null
+    ? n(patch.volume_autorise_l)
+    : n(existing.volume_autorise ?? existing.volume_autorise_l ?? existing.volume_demande);
+
+  const totalConso = n(existing.volume_consomme ?? existing.volume_consomme_l ?? 0);
+  const totalRestant = Math.max(0, totalAuto - totalConso);
+
+  const hist = Array.isArray(existing.historique_decisions || existing.historique_validations)
+    ? [...(existing.historique_decisions || existing.historique_validations)]
+    : [];
+
+  if (patch.action_log || ancienStatut !== nouveauStatut || patch.motif_action || patch.motif) {
+    hist.push({
+      date: new Date().toISOString(),
+      action: patch.action_log || (ancienStatut !== nouveauStatut ? `STATUT_${nouveauStatut}` : "MISE_A_JOUR"),
+      auteur: auteurInfo?.nom_complet || patch.instruction_par_nom || "Gérant",
+      statut_precedent: ancienStatut,
+      statut_nouveau: nouveauStatut,
+      motif: patch.motif || patch.motif_action || patch.motif_refus || patch.conditions_particulieres || "",
+    });
+  }
+
+  const updatedTransporteurs = Array.isArray(patch.transporteurs || existing.transporteurs)
+    ? (patch.transporteurs || existing.transporteurs).map((t, idx) => {
+        const tAlloue = n(t.volume_autorise ?? t.volume_alloue_l ?? t.volume_demande ?? t.volume_demande_l ?? 0);
+        const tConso = n(t.volume_consomme ?? t.volume_consomme_l ?? 0);
+        return {
+          ...t,
+          id: t.id || `tr-${Date.now()}-${idx}`,
+          volume_autorise: tAlloue,
+          volume_alloue_l: tAlloue,
+          volume_consomme: tConso,
+          volume_consomme_l: tConso,
+          volume_restant: Math.max(0, tAlloue - tConso),
+          volume_restant_l: Math.max(0, tAlloue - tConso),
+          actif: t.actif !== false,
+        };
+      })
+    : [];
+
+  const updated = {
+    ...existing,
+    ...patch,
+    id,
+    statut: nouveauStatut,
+    volume_autorise: totalAuto,
+    volume_autorise_l: totalAuto,
+    volume_consomme: totalConso,
+    volume_consomme_l: totalConso,
+    volume_restant: totalRestant,
+    volume_restant_l: totalRestant,
+    transporteurs: updatedTransporteurs,
+    historique_validations: hist,
+    historique_decisions: hist,
+    maj_le: new Date().toISOString(),
+  };
+
+  await db.programmes_bons.put(updated);
+  const sb = getSupabase();
+  if (sb) {
+    sb.from("programmes_bons").upsert(updated).catch(() => {});
+  }
+  return { ok: true, programme: updated };
+}
+
+/**
+ * Impute une consommation réelle de carburant à la pompe sur un programme de bons
+ */
+export async function imputerConsommationProgramme({
+  programme_id,
+  transporteur_id = null,
+  immatriculation = "",
+  produit = "GASOIL",
+  volume_litres = 0,
+  bon_id = null,
+  numero_bon = "",
+  pompiste_id = "",
+  pompiste_nom = "Pompiste",
+  station_id = "st-hann",
+  date = todayISO(),
+  commentaire = "",
+}) {
+  await ensureLocalSeed();
+  const prog = await db.programmes_bons.get(programme_id);
+  if (!prog) return { ok: false, error: "Programme de bons introuvable" };
+
+  const vol = n(volume_litres);
+  if (vol <= 0) return { ok: false, error: "Volume de distribution invalide" };
+
+  const check = verifierEligibiliteDistribution(prog, {
+    transporteur_id,
+    immatriculation,
+    produit,
+    volume_souhaite: vol,
+    date_distribution: date,
+  });
+
+  if (!check.eligible) {
+    return { ok: false, error: check.motif || check.erreur || "Distribution non autorisée sur ce programme" };
+  }
+
+  const newConsoProg = n(prog.volume_consomme ?? prog.volume_consomme_l ?? 0) + vol;
+  const totalAutorise = n(prog.volume_autorise ?? prog.volume_autorise_l ?? prog.volume_demande ?? prog.volume_demande_l ?? 0);
+  const newRestantProg = Math.max(0, totalAutorise - newConsoProg);
+  const estEpuise = newRestantProg <= 0;
+
+  // Mise à jour des transporteurs
+  const transporteurs = Array.isArray(prog.transporteurs) ? [...prog.transporteurs] : [];
+  let transUpdated = null;
+  const updatedTransporteurs = transporteurs.map((t) => {
+    const matchId = transporteur_id && t.id === transporteur_id;
+    const matchImmat = immatriculation && (t.immatriculation || "").trim().toUpperCase() === immatriculation.trim().toUpperCase();
+    if (matchId || matchImmat) {
+      const consoT = n(t.volume_consomme ?? t.volume_consomme_l ?? 0) + vol;
+      const alloueT = n(t.volume_autorise ?? t.volume_alloue_l ?? t.volume_demande ?? t.volume_demande_l ?? 0);
+      transUpdated = {
+        ...t,
+        volume_autorise: alloueT,
+        volume_alloue_l: alloueT,
+        volume_consomme: consoT,
+        volume_consomme_l: consoT,
+        volume_restant: Math.max(0, alloueT - consoT),
+        volume_restant_l: Math.max(0, alloueT - consoT),
+        dernier_passage_date: date,
+      };
+      return transUpdated;
+    }
+    return t;
+  });
+
+  const updatedProgramme = {
+    ...prog,
+    volume_autorise: totalAutorise,
+    volume_autorise_l: totalAutorise,
+    volume_consomme: newConsoProg,
+    volume_consomme_l: newConsoProg,
+    volume_restant: newRestantProg,
+    volume_restant_l: newRestantProg,
+    nb_passages: n(prog.nb_passages || 0) + 1,
+    derniere_consommation_date: date,
+    statut: estEpuise ? "EPUISE" : prog.statut,
+    transporteurs: updatedTransporteurs,
+    maj_le: new Date().toISOString(),
+  };
+
+  await db.programmes_bons.put(updatedProgramme);
+
+  // Enregistrement de la ligne de consommation détaillée
+  const consoRow = {
+    id: uuid(),
+    programme_id,
+    numero_programme: prog.numero_programme,
+    station_id: station_id || prog.station_id,
+    client_code: prog.client_code,
+    client_nom: prog.client_nom,
+    transporteur_id: transUpdated?.id || transporteur_id || "",
+    transporteur_nom: transUpdated?.nom_prenom || "Chauffeur",
+    immatriculation: immatriculation || transUpdated?.immatriculation || "",
+    produit: produit || prog.produit,
+    volume_litres: vol,
+    solde_avant_l: check.solde_restant_l,
+    solde_apres_l: newRestantProg,
+    bon_id: bon_id || null,
+    numero_bon: numero_bon || "",
+    bon_numero: numero_bon || "",
+    pompiste_id,
+    pompiste_nom,
+    date: date || todayISO(),
+    commentaire: commentaire || "",
+    created_at: new Date().toISOString(),
+  };
+
+  await db.consommations_programmes.put(consoRow);
+
+  const sb = getSupabase();
+  if (sb) {
+    sb.from("programmes_bons").upsert(updatedProgramme).catch(() => {});
+    sb.from("consommations_programmes").insert(consoRow).catch(() => {});
+  }
+
+  return { ok: true, programme: updatedProgramme, consommation: consoRow };
+}
+
+/**
+ * Liste les consommations réelles rattachées à un programme ou à un client
+ */
+export async function listConsommationsProgramme(progIdOrFilter, clientCode = null) {
+  await ensureLocalSeed();
+  let pid = progIdOrFilter;
+  let clCode = clientCode;
+  if (typeof progIdOrFilter === "object" && progIdOrFilter !== null) {
+    pid = progIdOrFilter.programme_id || null;
+    clCode = progIdOrFilter.client_code || null;
+  }
+  let rows = await db.consommations_programmes.toArray();
+  if (pid) rows = rows.filter((c) => c.programme_id === pid);
+  if (clCode) rows = rows.filter((c) => c.client_code === clCode);
+  return rows.sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.created_at || "").localeCompare(a.created_at || ""));
+}
+
 export async function createFournisseur(f) { return saveMetierRow("fournisseurs", f); }
 export async function updateFournisseur(id, patch) { return saveMetierRow("fournisseurs", { ...patch, id }); }
 export async function deleteFournisseur(id) { return deleteMetierRow("fournisseurs", id); }
@@ -1432,9 +1854,38 @@ export async function syncBonsFromDescente(descenteRow) {
         pompiste_nom: descenteRow.pompiste_nom || "Pompiste",
         descente_id: descenteRow.id,
         descente_numero: descenteRow.numero || "",
+        programme_id: b.programme_id || null,
+        programme_numero: b.programme_numero || "",
+        transporteur_id: b.transporteur_id || "",
+        transporteur_nom: b.transporteur_nom || "",
         created_at: b.created_at || descenteRow.created_at || new Date().toISOString(),
       };
       await db.bons_carburant.put(row);
+
+      // Si rattaché à un programme de bons, imputer automatiquement la consommation
+      if (b.programme_id && n(b.volume_litres) > 0) {
+        try {
+          const dejaImpute = await db.consommations_programmes.where("bon_id").equals(bonId).first();
+          if (!dejaImpute) {
+            await imputerConsommationProgramme({
+              programme_id: b.programme_id,
+              transporteur_id: b.transporteur_id,
+              immatriculation: b.immatriculation || b.vehicule || "",
+              produit: b.produit || "GASOIL",
+              volume_litres: n(b.volume_litres),
+              bon_id: bonId,
+              numero_bon: numeroBon,
+              pompiste_id: descenteRow.pompiste_id || "",
+              pompiste_nom: descenteRow.pompiste_nom || "Pompiste",
+              station_id: descenteRow.station_id || "st-hann",
+              date: b.date || descenteRow.date || todayISO(),
+              commentaire: b.observation || "",
+            });
+          }
+        } catch (errConso) {
+          console.warn("Notice: imputation automatique programme", errConso);
+        }
+      }
     }
   } catch (err) {
     console.warn("Notice: syncBonsFromDescente", err);
