@@ -33,6 +33,13 @@ import { calculerFactureFiscale, genererNumeroFacture, FISCAL_CONFIG } from "../
 import DemandeProgrammeModal from "../components/DemandeProgrammeModal";
 import InstructionProgrammeModal from "../components/InstructionProgrammeModal";
 import ProgrammesBonsSection from "../components/ProgrammesBonsSection";
+import {
+  ouvrirWhatsApp,
+  ouvrirEmail,
+  messageFactureOfficielle,
+  emailFactureOfficielle,
+  messageDistributionTransporteur,
+} from "../lib/notifications-client";
 
 export default function ClientsPro() {
   const { profil, cloud } = useAuth();
@@ -324,7 +331,7 @@ export default function ClientsPro() {
   };
 
   // Génération d'une Facture Officielle conforme OHADA
-  const handleGenererFacture = async (bonsCibles = null) => {
+  const handleGenererFacture = async (bonsCibles = null, autoSendWhatsApp = false) => {
     if (!clientActif) {
       flash("⚠️ Veuillez sélectionner un client d'abord.");
       return;
@@ -402,10 +409,72 @@ export default function ClientsPro() {
       setFactureAffichee(nouvelleFacture);
       setSelectedBonsIds(new Set());
       flash(`✓ Facture officielle ${numeroFacture} générée avec succès (${F(calculFiscal.totalTTC)} FCFA)`);
+
+      if (autoSendWhatsApp) {
+        const msg = messageFactureOfficielle({
+          facture: nouvelleFacture,
+          clientNom: clientActif.nom_entreprise,
+        });
+        ouvrirWhatsApp(clientActif.telephone || "", msg);
+      }
     } catch (e) {
       console.error("Erreur génération facture:", e);
       flash("Erreur génération facture : " + (e.message || e));
     }
+  };
+
+  const handleEnvoyerFactureWhatsApp = (fac) => {
+    const msg = messageFactureOfficielle({
+      facture: fac,
+      clientNom: fac.client_nom || clientActif?.nom_entreprise,
+    });
+    const tel = fac.client_telephone || clientActif?.telephone || "";
+    ouvrirWhatsApp(tel, msg);
+  };
+
+  const handleEnvoyerFactureEmail = (fac) => {
+    const { sujet, corps } = emailFactureOfficielle({
+      facture: fac,
+      clientNom: fac.client_nom || clientActif?.nom_entreprise,
+    });
+    const mailDest = fac.client_email || clientActif?.email || "";
+    ouvrirEmail(mailDest, sujet, corps);
+  };
+
+  const handleNotifierBonWhatsApp = (b) => {
+    const msg = messageDistributionTransporteur({
+      clientNom: clientActif?.nom_entreprise || b.client_nom || "Client Partenaire",
+      stationNom: (ref?.stations || []).find((s) => s.id === stationId)?.nom || "STAR ENERGY HANN MARISTE",
+      bonNumero: b.numero_bon || b.id?.slice(0, 8),
+      date: b.date || todayISO(),
+      produit: b.produit || "GASOIL",
+      volumeLitres: b.volume_litres,
+      montant: b.montant,
+      transporteurNom: b.transporteur_nom || b.observations || "",
+      immatriculation: b.immatriculation || b.matricule || "",
+      programmeNumero: b.programme_numero || "",
+      pompisteNom: b.pompiste_nom || "Pompiste",
+    });
+    const tel = clientActif?.telephone || "";
+    ouvrirWhatsApp(tel, msg);
+  };
+
+  const handleNotifierBonEmail = (b) => {
+    const msg = messageDistributionTransporteur({
+      clientNom: clientActif?.nom_entreprise || b.client_nom || "Client Partenaire",
+      stationNom: (ref?.stations || []).find((s) => s.id === stationId)?.nom || "STAR ENERGY HANN MARISTE",
+      bonNumero: b.numero_bon || b.id?.slice(0, 8),
+      date: b.date || todayISO(),
+      produit: b.produit || "GASOIL",
+      volumeLitres: b.volume_litres,
+      montant: b.montant,
+      transporteurNom: b.transporteur_nom || b.observations || "",
+      immatriculation: b.immatriculation || b.matricule || "",
+      programmeNumero: b.programme_numero || "",
+      pompisteNom: b.pompiste_nom || "Pompiste",
+    });
+    const sujet = `Avis prise de carburant N° ${b.numero_bon || b.id?.slice(0, 8)} - ${clientActif?.nom_entreprise}`;
+    ouvrirEmail(clientActif?.email || "", sujet, msg);
   };
 
   const handleMarquerFactureReglee = async (factureId) => {
@@ -1094,15 +1163,28 @@ export default function ClientsPro() {
 
                 <div className="flex flex-wrap items-center gap-2">
                   <button
-                    onClick={() => handleGenererFacture()}
+                    onClick={() => handleGenererFacture(null, false)}
                     className="px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-colors"
                     title="Générer une facture officielle conforme OHADA avec QR code"
                   >
                     <span>📄</span>
                     <span>
                       {selectedBonsIds.size > 0
-                        ? `Facturer ${selectedBonsIds.size} bon(s) sélectionné(s)`
+                        ? `Facturer ${selectedBonsIds.size} bon(s)`
                         : `Établir Facture (${bonsImpayes.length + bonsPartiels.length} bon(s))`}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => handleGenererFacture(null, true)}
+                    className="px-3.5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-colors"
+                    title="Établir la facture des bons sélectionnés et l'envoyer directement au client par WhatsApp"
+                  >
+                    <span>📲</span>
+                    <span>
+                      {selectedBonsIds.size > 0
+                        ? `Facturer & Envoyer WhatsApp (${selectedBonsIds.size})`
+                        : `Facturer & Envoyer WhatsApp`}
                     </span>
                   </button>
 
@@ -1215,11 +1297,28 @@ export default function ClientsPro() {
                               <div className="flex items-center justify-center gap-1">
                                 <button
                                   type="button"
-                                  onClick={() => handleGenererFacture([b])}
+                                  onClick={() => handleGenererFacture([b], false)}
                                   className="px-2 py-1 rounded bg-blue-50 border border-blue-200 text-blue-800 hover:bg-blue-100 font-bold text-[10.5px] transition-colors"
                                   title="Générer une facture officielle pour ce bon"
                                 >
                                   📄 Facture
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleNotifierBonWhatsApp(b)}
+                                  className="px-1.5 py-1 rounded bg-emerald-50 border border-emerald-300 text-emerald-800 hover:bg-emerald-100 font-bold text-[10.5px] transition-colors flex items-center gap-0.5"
+                                  title="Notifier le client par WhatsApp de cette prise de carburant"
+                                >
+                                  <span>📲</span>
+                                  <span className="hidden xl:inline">WhatsApp</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleNotifierBonEmail(b)}
+                                  className="px-1.5 py-1 rounded bg-sky-50 border border-sky-300 text-sky-800 hover:bg-sky-100 font-bold text-[10.5px] transition-colors"
+                                  title="Notifier le client par Email"
+                                >
+                                  <span>✉️</span>
                                 </button>
                                 {reste > 0 ? (
                                   <button
@@ -1480,6 +1579,23 @@ export default function ClientsPro() {
                               >
                                 <span>👁️</span>
                                 <span>Voir PDF</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleEnvoyerFactureWhatsApp(fac)}
+                                className="px-2 py-1 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold text-[11px] flex items-center gap-1 transition-colors"
+                                title="Envoyer le récapitulatif de cette facture par WhatsApp au client"
+                              >
+                                <span>📲</span>
+                                <span className="hidden sm:inline">WhatsApp</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleEnvoyerFactureEmail(fac)}
+                                className="px-2 py-1 rounded bg-sky-100 hover:bg-sky-200 text-sky-800 font-bold text-[11px] flex items-center gap-1 transition-colors"
+                                title="Envoyer cette facture par Email au client"
+                              >
+                                <span>✉️</span>
                               </button>
                               {fac.statut !== "REGLEE" && (
                                 <button
@@ -1972,6 +2088,23 @@ export default function ClientsPro() {
                               >
                                 <span>🖨️</span>
                                 <span>PDF A4 (QR Code)</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleEnvoyerFactureWhatsApp(fac)}
+                                className="px-2.5 py-1.5 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold text-xs flex items-center gap-1 transition-colors"
+                                title="Envoyer le détail par WhatsApp au client"
+                              >
+                                <span>📲</span>
+                                <span className="hidden sm:inline">WhatsApp</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleEnvoyerFactureEmail(fac)}
+                                className="px-2.5 py-1.5 rounded-lg bg-sky-100 hover:bg-sky-200 text-sky-800 font-bold text-xs flex items-center gap-1 transition-colors"
+                                title="Envoyer par Email au client"
+                              >
+                                <span>✉️</span>
                               </button>
                               {fac.statut !== "REGLEE" && (
                                 <button

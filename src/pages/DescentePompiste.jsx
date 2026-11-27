@@ -16,6 +16,7 @@ import { F, fmtDate, n, T, todayISO, prixDuJour, uuid } from "../lib/calcul";
 import { Section, Row, Num, Loading, InputComptable } from "../components/ui";
 import { peutCorrigerDescente, ROLES_CORRECTION_DESCENTE, peutVoirToutesLesEntrees } from "../lib/permissions";
 import { verifierEligibiliteDistribution } from "../lib/programmes-bons";
+import { ouvrirWhatsApp, messageDistributionTransporteur } from "../lib/notifications-client";
 
 /** Normalisation défensive pour rétrocompatibilité avec les anciennes descentes mono-pompe */
 export function normalizeDescente(d) {
@@ -584,6 +585,24 @@ export default function DescentePompiste() {
   const handleSupprimerBon = (bonId) => {
     setBons((prev) => prev.filter((b) => b.id !== bonId));
     flash("Bon d'encaissement supprimé");
+  };
+
+  const handleNotifierBonWhatsApp = (b) => {
+    const cl = clientsList.find((c) => c.code === b.client_code);
+    const msg = messageDistributionTransporteur({
+      clientNom: cl?.nom || b.client_nom || b.client_code,
+      stationNom: (ref?.stations || [])[0]?.nom || "STAR ENERGY HANN MARISTE",
+      bonNumero: b.numero_bon,
+      date: b.date || date,
+      produit: b.produit || "GASOIL",
+      volumeLitres: b.volume_litres,
+      montant: b.montant,
+      transporteurNom: b.transporteur_nom,
+      immatriculation: b.observation,
+      programmeNumero: b.programme_numero,
+      pompisteNom: pompisteNom || profil?.nom_complet || "Pompiste",
+    });
+    ouvrirWhatsApp(cl?.telephone || "", msg);
   };
 
   // ── CHARGEMENT D'UNE DESCENTE POUR MODIFICATION / CORRECTION ──
@@ -1581,6 +1600,16 @@ export default function DescentePompiste() {
                         <td className="py-2 px-3 text-gray-500">{b.observation || "-"}</td>
                         <td className="py-2 px-3 text-center">
                           <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleNotifierBonWhatsApp(b)}
+                              className="px-2 py-0.5 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold text-[10.5px] transition-colors flex items-center gap-1"
+                              title="Envoyer un avis par WhatsApp au client pour cette distribution"
+                            >
+                              <span>📲</span>
+                              <span className="hidden sm:inline">WhatsApp</span>
+                            </button>
+                            <span className="text-gray-300">|</span>
                             <button
                               type="button"
                               onClick={() => openEditBonModal(b)}

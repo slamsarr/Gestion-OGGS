@@ -1,6 +1,11 @@
 import { useState, useMemo } from "react";
 import { F, fmtDate, n, T } from "../lib/calcul";
 import { badgeStatutProgramme, calculerSyntheseProgramme } from "../lib/programmes-bons";
+import {
+  ouvrirWhatsApp,
+  ouvrirEmail,
+  messageDistributionTransporteur,
+} from "../lib/notifications-client";
 
 export default function ProgrammesBonsSection({
   programmes = [],
@@ -14,6 +19,45 @@ export default function ProgrammesBonsSection({
   const [filterStatut, setFilterStatut] = useState("TOUS");
   const [expandedProgId, setExpandedProgId] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
+
+  const handleNotifierConsoWhatsApp = (c, p) => {
+    const msg = messageDistributionTransporteur({
+      clientNom: c.client_nom || p.client_nom || client?.nom_entreprise || "Client Partenaire",
+      stationNom: "STAR ENERGY HANN MARISTE",
+      bonNumero: c.numero_bon || c.bon_numero || "—",
+      date: c.date,
+      produit: c.produit || p.type_carburant || "GASOIL",
+      volumeLitres: c.volume_litres,
+      montant: c.montant || Math.round(n(c.volume_litres) * (c.produit === "SUPER" ? 990 : 755)),
+      transporteurNom: c.transporteur_nom,
+      immatriculation: c.immatriculation,
+      programmeNumero: p.numero_programme,
+      volumeRestant: c.solde_apres_l,
+      pompisteNom: c.pompiste_nom,
+    });
+    const tel = c.transporteur_telephone || p.client_telephone || client?.telephone || "";
+    ouvrirWhatsApp(tel, msg);
+  };
+
+  const handleNotifierConsoEmail = (c, p) => {
+    const msg = messageDistributionTransporteur({
+      clientNom: c.client_nom || p.client_nom || client?.nom_entreprise || "Client Partenaire",
+      stationNom: "STAR ENERGY HANN MARISTE",
+      bonNumero: c.numero_bon || c.bon_numero || "—",
+      date: c.date,
+      produit: c.produit || p.type_carburant || "GASOIL",
+      volumeLitres: c.volume_litres,
+      montant: c.montant || Math.round(n(c.volume_litres) * (c.produit === "SUPER" ? 990 : 755)),
+      transporteurNom: c.transporteur_nom,
+      immatriculation: c.immatriculation,
+      programmeNumero: p.numero_programme,
+      volumeRestant: c.solde_apres_l,
+      pompisteNom: c.pompiste_nom,
+    });
+    const sujet = `Avis de prise de carburant - ${c.immatriculation || c.transporteur_nom || "Véhicule"} (${p.numero_programme})`;
+    const emailDest = p.client_email || client?.email || "";
+    ouvrirEmail(emailDest, sujet, msg);
+  };
 
   // Filtrage
   const programmesFiltres = useMemo(() => {
@@ -361,6 +405,7 @@ export default function ProgrammesBonsSection({
                                 <th className="p-2 text-left">N° Bon</th>
                                 <th className="p-2 text-right">Litres Servis</th>
                                 <th className="p-2 text-right">Solde Restant Après</th>
+                                <th className="p-2 text-center">Notifier Client</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200">
@@ -376,6 +421,27 @@ export default function ProgrammesBonsSection({
                                   </td>
                                   <td className="p-2 text-right font-black tabular text-emerald-800">
                                     {F(c.solde_apres_l)} L
+                                  </td>
+                                  <td className="p-2 text-center whitespace-nowrap">
+                                    <div className="flex items-center justify-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleNotifierConsoWhatsApp(c, p)}
+                                        className="px-2 py-0.5 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold text-[10px] flex items-center gap-1 transition-colors"
+                                        title="Envoyer l'avis d'opération par WhatsApp au client"
+                                      >
+                                        <span>📲</span>
+                                        <span>WhatsApp</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleNotifierConsoEmail(c, p)}
+                                        className="px-2 py-0.5 rounded bg-sky-100 hover:bg-sky-200 text-sky-800 font-bold text-[10px] flex items-center gap-1 transition-colors"
+                                        title="Envoyer l'avis d'opération par Email au client"
+                                      >
+                                        <span>✉️</span>
+                                      </button>
+                                    </div>
                                   </td>
                                 </tr>
                               ))}

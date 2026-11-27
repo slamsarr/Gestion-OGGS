@@ -3,6 +3,12 @@ import { QRCodeSVG } from "qrcode.react";
 import { FISCAL_CONFIG, genererPayloadCertification } from "../lib/facturation";
 import { BRAND_CONFIG } from "../lib/branding";
 import { F, fmtDate, T } from "../lib/calcul";
+import {
+  ouvrirWhatsApp,
+  ouvrirEmail,
+  messageFactureOfficielle,
+  emailFactureOfficielle,
+} from "../lib/notifications-client";
 
 /**
  * Modal d'affichage et d'impression de Facture Officielle conforme OHADA / Sénégal
@@ -16,6 +22,16 @@ export default function FactureOfficielleModal({ facture, onClose, onMarquerRegl
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handlePartagerWhatsApp = () => {
+    const msg = messageFactureOfficielle({ facture });
+    ouvrirWhatsApp(facture.client_telephone || "", msg);
+  };
+
+  const handlePartagerEmail = () => {
+    const { sujet, corps } = emailFactureOfficielle({ facture });
+    ouvrirEmail(facture.client_email || "", sujet, corps);
   };
 
   return (
@@ -40,7 +56,27 @@ export default function FactureOfficielleModal({ facture, onClose, onMarquerRegl
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <button
+              type="button"
+              onClick={handlePartagerWhatsApp}
+              className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm"
+              title="Envoyer le détail de la facture par WhatsApp au client"
+            >
+              <span>📲</span>
+              <span className="hidden sm:inline">WhatsApp</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handlePartagerEmail}
+              className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm"
+              title="Envoyer la facture par email au client"
+            >
+              <span>✉️</span>
+              <span className="hidden sm:inline">Email</span>
+            </button>
+
             {onMarquerReglee && facture.statut !== "REGLEE" && (
               <button
                 type="button"
