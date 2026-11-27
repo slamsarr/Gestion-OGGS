@@ -99,7 +99,7 @@ export default function CuvesCarburant() {
   const [cuveJaugeApres, setCuveJaugeApres] = useState({ hauteur_cm: "", volume_l: "" });
   const [eauFondCuveValidee, setEauFondCuveValidee] = useState(true);
 
-  // Compartiments du camion alimentant la cuve sélectionnée
+  // Compartiments du camion alimentant la cuve sélectionnée (choix libre : C1, C3, C5...)
   const [cuveCompartiments, setCuveCompartiments] = useState([
     {
       id: "comp-1",
@@ -108,6 +108,15 @@ export default function CuvesCarburant() {
       volume_commande: "10000",
       volume_bl: "10000",
       reste_camion_litres: "0",
+      constat_manquant: false,
+      manquant_citerne_l: "",
+      motif_manquant: "Niveau inférieur au repère flèche",
+      prelevement_pompe: false,
+      pistolet_code: "",
+      pompe_index_depart: "",
+      pompe_index_fin: "",
+      volume_preleve_pompe: "",
+      accord_chauffeur: true,
     },
   ]);
 
@@ -279,6 +288,27 @@ export default function CuvesCarburant() {
     flash(`Jauge avant pré-remplie pour ${targetDepotageCuve.nom} (${targetDepotageCuve.volume_physique || 0} L)`);
   };
 
+  // Pistolets de la station filtrés par produit pour prélèvements compensatoires
+  const pistoletsStation = useMemo(() => {
+    return (ref?.pistolets || []).filter((p) => rowMatchesStation(p, stationId, ref?.stations));
+  }, [ref, stationId]);
+
+  const pistoletsProduit = useMemo(() => {
+    const prod = targetDepotageCuve?.produit || "GASOIL";
+    const filtered = pistoletsStation.filter((p) => (p.produit || "").toUpperCase() === prod);
+    if (filtered.length > 0) return filtered;
+    return prod === "GASOIL"
+      ? [
+          { code: "P1-GO", nom: "Pompe 1 Gasoil", produit: "GASOIL" },
+          { code: "P2-GO", nom: "Pompe 2 Gasoil", produit: "GASOIL" },
+          { code: "P3-GO", nom: "Pompe 3 Gasoil", produit: "GASOIL" },
+        ]
+      : [
+          { code: "P1-SP", nom: "Pompe 1 Super", produit: "SUPER" },
+          { code: "P2-SP", nom: "Pompe 2 Super", produit: "SUPER" },
+        ];
+  }, [pistoletsStation, targetDepotageCuve]);
+
   // ── CALCULS EN TEMPS RÉEL DU DÉPOTAGE DE LA CUVE ──
   const totalVolumeBlVersCuve = cuveCompartiments.reduce((s, c) => s + (n(c.volume_bl) || 0), 0);
   const totalVolumeCommandeCuve = cuveCompartiments.reduce((s, c) => s + (n(c.volume_commande) || n(c.volume_bl) || 0), 0);
@@ -299,20 +329,38 @@ export default function CuvesCarburant() {
   const valeurManquantCuveFcfa = manquantCuveL * prixUnitaireCuve;
   const cuveDepotageConforme = toleranceRespecteeCuve || stockFinalCuve === 0;
 
-  const handleAddCuveCompartiment = () => {
+  // Prélèvement compensatoire aux pompes en cas de manquant constaté en citerne
+  const totalVolumePrelevePompes = cuveCompartiments.reduce((s, c) => {
+    return s + (c.constat_manquant && c.prelevement_pompe ? (n(c.volume_preleve_pompe) || 0) : 0);
+  }, 0);
+  const aDesPrelevementsPompes = cuveCompartiments.some(
+    (c) => c.constat_manquant && c.prelevement_pompe && n(c.volume_preleve_pompe) > 0
+  );
+
+  const handleAddCuveCompartiment = (suggestedComp = null) => {
     const nextIdx = cuveCompartiments.length + 1;
+    const defaultCode = suggestedComp || `C${nextIdx <= 8 ? nextIdx : nextIdx}`;
     setCuveCompartiments((prev) => [
       ...prev,
       {
         id: `comp-${Date.now()}-${nextIdx}`,
-        numero_compartiment: `C${nextIdx}`,
+        numero_compartiment: defaultCode,
         numero_scelle: "",
         volume_commande: "5000",
         volume_bl: "5000",
         reste_camion_litres: "0",
+        constat_manquant: false,
+        manquant_citerne_l: "",
+        motif_manquant: "Niveau inférieur au repère flèche",
+        prelevement_pompe: false,
+        pistolet_code: pistoletsProduit[0]?.code || "P1-GO",
+        pompe_index_depart: "",
+        pompe_index_fin: "",
+        volume_preleve_pompe: "",
+        accord_chauffeur: true,
       },
     ]);
-    flash(`Compartiment C${nextIdx} ajouté pour alimenter ${targetDepotageCuve?.nom || "la cuve"}.`);
+    flash(`Compartiment ${defaultCode} ajouté pour alimenter ${targetDepotageCuve?.nom || "la cuve"}.`);
   };
 
   const handleRemoveCuveCompartiment = (id) => {
@@ -325,8 +373,34 @@ export default function CuvesCarburant() {
 
   const handleUpdateCuveCompartiment = (id, field, val) => {
     setCuveCompartiments((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, [field]: val } : c))
+      prev.map((c) => {
+        if (c.id !== id) return c;
+        const updated = { ...c, [field]: val };
+        // Calcul automatique du volume prélevé à la pompe si index saisis
+        if (field === "pompe_index_depart" || field === "pompe_index_fin") {
+          const dep = field === "pompe_index_depart" ? n(val) : n(c.pompe_index_depart);
+          const fin = field === "pompe_index_fin" ? n(val) : n(c.pompe_index_fin);
+          if (fin > dep && dep > 0) {
+            updated.volume_preleve_pompe = (fin - dep).toFixed(1);
+          }
+        }
+        return updated;
+      })
     );
+  };
+
+  const handleAlignerPrelevementSurManquant = (id) => {
+    setCuveCompartiments((prev) =>
+      prev.map((c) => {
+        if (c.id !== id) return c;
+        const manq = n(c.manquant_citerne_l) || 0;
+        return {
+          ...c,
+          volume_preleve_pompe: manq > 0 ? manq.toString() : c.volume_preleve_pompe,
+        };
+      })
+    );
+    flash("Volume prélevé à la pompe aligné sur le manquant constaté du compartiment.");
   };
 
   const handleChainerDepotageAutreCuve = (autreCuveId) => {
@@ -353,6 +427,15 @@ export default function CuvesCarburant() {
         volume_commande: "5000",
         volume_bl: "5000",
         reste_camion_litres: "0",
+        constat_manquant: false,
+        manquant_citerne_l: "",
+        motif_manquant: "Niveau inférieur au repère flèche",
+        prelevement_pompe: false,
+        pistolet_code: pistoletsProduit[0]?.code || "P1-GO",
+        pompe_index_depart: "",
+        pompe_index_fin: "",
+        volume_preleve_pompe: "",
+        accord_chauffeur: true,
       },
     ]);
     setPvModal(null);
@@ -447,7 +530,28 @@ export default function CuvesCarburant() {
       if (n(c.volume_bl) <= 0) {
         return flash(`Compartiment ${c.numero_compartiment} : Le volume BL doit être > 0`, "err");
       }
+      if (c.constat_manquant && c.prelevement_pompe) {
+        if (!c.pistolet_code) {
+          return flash(`Compartiment ${c.numero_compartiment} : Veuillez sélectionner la pompe/pistolet pour le prélèvement compensatoire`, "err");
+        }
+        if (n(c.volume_preleve_pompe) <= 0) {
+          return flash(`Compartiment ${c.numero_compartiment} : Veuillez saisir le volume prélevé à la pompe (Litres)`, "err");
+        }
+      }
     }
+
+    const prelevementsPompes = cuveCompartiments
+      .filter((c) => c.constat_manquant && c.prelevement_pompe && n(c.volume_preleve_pompe) > 0)
+      .map((c) => ({
+        numero_compartiment: c.numero_compartiment,
+        manquant_citerne_l: n(c.manquant_citerne_l),
+        motif_manquant: c.motif_manquant || "Manquant au repère flèche",
+        pistolet_code: c.pistolet_code,
+        pompe_index_depart: n(c.pompe_index_depart),
+        pompe_index_fin: n(c.pompe_index_fin),
+        volume_preleve_pompe: n(c.volume_preleve_pompe),
+        accord_chauffeur: c.accord_chauffeur ?? true,
+      }));
 
     const payload = {
       ...depotageForm,
@@ -472,6 +576,9 @@ export default function CuvesCarburant() {
       manquant_fcfa: valeurManquantCuveFcfa,
       conformite_ecart: toleranceRespecteeCuve,
       statut: toleranceRespecteeCuve ? "CONFORME" : "LITIGE MANQUANT",
+      prelevement_pompe_actif: aDesPrelevementsPompes,
+      prelevement_pompe_total_l: totalVolumePrelevePompes,
+      prelevements_pompes: prelevementsPompes,
       compartiments: cuveCompartiments.map((c) => ({
         ...c,
         produit: targetDepotageCuve.produit,
@@ -488,6 +595,15 @@ export default function CuvesCarburant() {
         valeur_manquant_fcfa: valeurManquantCuveFcfa,
         tolerance_ok: toleranceRespecteeCuve,
         statut: toleranceRespecteeCuve ? "CONFORME" : "LITIGE",
+        constat_manquant: !!c.constat_manquant,
+        manquant_citerne_l: n(c.manquant_citerne_l),
+        motif_manquant: c.motif_manquant || "",
+        prelevement_pompe: !!c.prelevement_pompe,
+        pistolet_code: c.pistolet_code || "",
+        pompe_index_depart: n(c.pompe_index_depart),
+        pompe_index_fin: n(c.pompe_index_fin),
+        volume_preleve_pompe: n(c.volume_preleve_pompe),
+        accord_chauffeur: c.accord_chauffeur ?? true,
       })),
     };
 
@@ -1086,6 +1202,35 @@ export default function CuvesCarburant() {
               </div>
             </div>
 
+            {/* Sélecteur direct déroulant pour le gérant */}
+            <div className="mb-3.5 bg-slate-50 p-2.5 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2.5" style={{ borderColor: T.line }}>
+              <div className="flex items-center gap-2">
+                <span className="text-base">🛢️</span>
+                <div>
+                  <label className="text-xs font-bold text-gray-900 block">
+                    Choix direct de la cuve réceptrice :
+                  </label>
+                  <span className="text-[10px] text-gray-500">
+                    Cliquez sur une cuve ci-dessous ou sélectionnez-la dans la liste
+                  </span>
+                </div>
+              </div>
+              <select
+                value={targetDepotageCuve?.id || ""}
+                onChange={(e) => {
+                  const sel = cuvesWithLatestJauge.find((c) => c.id === e.target.value);
+                  if (sel) handleSelectDepotageCuve(sel);
+                }}
+                className="text-xs font-bold border rounded-lg p-2 bg-white text-blue-950 border-blue-400 focus:ring-2 focus:ring-blue-500 max-w-md w-full sm:w-auto shadow-2xs"
+              >
+                {cuvesWithLatestJauge.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nom} ({c.produit}) — Stock initial: {F(c.volume_physique)} L | Creux dispo: {F(c.creux_disponible)} L
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Grille de sélection visuelle des cuves de la station */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
               {cuvesWithLatestJauge.map((cuve) => {
@@ -1631,18 +1776,32 @@ export default function CuvesCarburant() {
                     Origine du Carburant : Compartiments du Camion Alimentant {targetDepotageCuve.nom}
                   </h2>
                   <p className="text-[11px] text-gray-500">
-                    Indiquez le ou les compartiments du camion qui se déversent dans cette cuve (ex : C1 seul, ou C1 + C2).
+                    Sélectionnez le ou les compartiments du camion qui alimentent cette cuve (ex : C1 seul, ou C3, ou C5...).
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={handleAddCuveCompartiment}
-                className="self-start sm:self-auto text-xs px-3 py-1.5 rounded-lg font-bold text-gray-900 shadow-xs hover:opacity-90 flex items-center gap-1.5"
-                style={{ background: T.gold }}
-              >
-                <span>➕ Associer un Autre Compartiment</span>
-              </button>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[11px] text-gray-500 font-medium">Ajout rapide :</span>
+                {["C1", "C2", "C3", "C4", "C5", "C6"].map((cCode) => (
+                  <button
+                    key={cCode}
+                    type="button"
+                    onClick={() => handleAddCuveCompartiment(cCode)}
+                    className="text-[10px] font-black px-2 py-1 rounded bg-slate-100 text-slate-800 hover:bg-slate-200 border border-slate-300"
+                    title={`Ajouter le compartiment ${cCode}`}
+                  >
+                    +{cCode}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => handleAddCuveCompartiment()}
+                  className="text-xs px-2.5 py-1 rounded-lg font-bold text-gray-900 shadow-xs hover:opacity-90 flex items-center gap-1 ml-1"
+                  style={{ background: T.gold }}
+                >
+                  <span>➕ Autre</span>
+                </button>
+              </div>
             </div>
 
             {/* Liste des compartiments alimentant la cuve */}
@@ -1650,16 +1809,16 @@ export default function CuvesCarburant() {
               {cuveCompartiments.map((c, idx) => (
                 <div
                   key={c.id}
-                  className="p-3 rounded-xl border bg-slate-50/70 space-y-2"
+                  className="p-3 rounded-xl border bg-slate-50/70 space-y-2.5"
                   style={{ borderColor: T.line }}
                 >
                   <div className="flex items-center justify-between pb-1.5 border-b" style={{ borderColor: T.line }}>
                     <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 rounded text-xs font-black bg-gray-900 text-white font-mono">
+                      <span className="px-2.5 py-0.5 rounded text-xs font-black bg-gray-900 text-white font-mono shadow-2xs">
                         {c.numero_compartiment || `C${idx + 1}`}
                       </span>
                       <span className="text-xs font-bold text-gray-800">
-                        Compartiment #{idx + 1} du camion → {targetDepotageCuve.nom}
+                        Compartiment #{idx + 1} du convoi → {targetDepotageCuve.nom}
                       </span>
                       <span
                         className={`text-[10px] px-2 py-0.2 rounded font-black ${
@@ -1683,15 +1842,36 @@ export default function CuvesCarburant() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
                     <div>
-                      <label className="block text-[10px] font-bold text-gray-600 mb-0.5">N° Compartiment</label>
-                      <input
-                        type="text"
-                        value={c.numero_compartiment}
-                        onChange={(e) => handleUpdateCuveCompartiment(c.id, "numero_compartiment", e.target.value)}
-                        className="w-full text-xs border rounded p-1.5 font-bold uppercase font-mono bg-white"
-                        style={{ borderColor: T.line }}
-                        placeholder="ex: C1"
-                      />
+                      <label className="block text-[10px] font-bold text-gray-700 mb-0.5">
+                        Sélection Compartiment
+                      </label>
+                      <div className="space-y-1">
+                        <input
+                          type="text"
+                          value={c.numero_compartiment}
+                          onChange={(e) => handleUpdateCuveCompartiment(c.id, "numero_compartiment", e.target.value)}
+                          className="w-full text-xs border rounded p-1.5 font-black uppercase font-mono bg-white text-gray-900"
+                          style={{ borderColor: T.line }}
+                          placeholder="ex: C5"
+                        />
+                        {/* Badges de sélection directe 1-clic */}
+                        <div className="flex gap-1 flex-wrap">
+                          {["C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8"].map((code) => (
+                            <button
+                              key={code}
+                              type="button"
+                              onClick={() => handleUpdateCuveCompartiment(c.id, "numero_compartiment", code)}
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold transition ${
+                                c.numero_compartiment === code
+                                  ? "bg-blue-950 text-white shadow-2xs"
+                                  : "bg-white text-gray-600 hover:bg-gray-100 border border-gray-200"
+                              }`}
+                            >
+                              {code}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
 
                     <div>
@@ -1732,11 +1912,170 @@ export default function CuvesCarburant() {
                       />
                     </div>
                   </div>
+
+                  {/* ── SOUS-SECTION : MANQUANT CONSTATÉ EN CITERNE & PRÉLÈVEMENT COMPENSATOIRE AUX POMPES ── */}
+                  <div className="mt-2 pt-2 border-t rounded-xl p-2.5 bg-amber-50/60 border border-amber-200/90 space-y-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={!!c.constat_manquant}
+                          onChange={(e) => handleUpdateCuveCompartiment(c.id, "constat_manquant", e.target.checked)}
+                          className="rounded text-amber-600 focus:ring-amber-500"
+                        />
+                        <span className="text-xs font-bold text-amber-950">
+                          ⚠️ Manquant constaté dans le compartiment {c.numero_compartiment} (Niveau sous le repère flèche)
+                        </span>
+                      </label>
+                      {c.constat_manquant && (
+                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-amber-200 text-amber-950 self-start sm:self-auto">
+                          Procédure de Compensation Pompe
+                        </span>
+                      )}
+                    </div>
+
+                    {c.constat_manquant && (
+                      <div className="space-y-2.5 pt-2 border-t border-amber-200/80 text-xs">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-[10px] font-bold text-amber-950 mb-0.5">
+                              Litrage manquant constaté dans le compartiment (L) *
+                            </label>
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="number"
+                                placeholder="ex: 50 ou 100"
+                                value={c.manquant_citerne_l || ""}
+                                onChange={(e) => handleUpdateCuveCompartiment(c.id, "manquant_citerne_l", e.target.value)}
+                                className="w-full text-xs border rounded p-1.5 font-black text-rose-700 bg-white border-rose-300"
+                              />
+                              <span className="font-black text-rose-700">L</span>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-semibold text-gray-700 mb-0.5">
+                              Motif / Constat contradictoire
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="ex: Niveau flèche non atteint, déversé avant arrivée..."
+                              value={c.motif_manquant || ""}
+                              onChange={(e) => handleUpdateCuveCompartiment(c.id, "motif_manquant", e.target.value)}
+                              className="w-full text-xs border rounded p-1.5 bg-white border-gray-300"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Bloc Prélèvement compensatoire aux pompes */}
+                        <div className="p-2.5 rounded-lg bg-white border border-amber-300 space-y-2">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                            <label className="flex items-center gap-2 cursor-pointer font-bold text-blue-950">
+                              <input
+                                type="checkbox"
+                                checked={!!c.prelevement_pompe}
+                                onChange={(e) => handleUpdateCuveCompartiment(c.id, "prelevement_pompe", e.target.checked)}
+                                className="rounded text-blue-600 focus:ring-blue-500"
+                              />
+                              <span>⛽ Prélever ce volume manquant au niveau des pompes / pistolets de la station</span>
+                            </label>
+                            {c.prelevement_pompe && n(c.manquant_citerne_l) > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => handleAlignerPrelevementSurManquant(c.id)}
+                                className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-900 border border-blue-300 hover:bg-blue-100 self-start sm:self-auto"
+                              >
+                                🔄 Aligner sur les {c.manquant_citerne_l} L manquants
+                              </button>
+                            )}
+                          </div>
+
+                          {c.prelevement_pompe && (
+                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 pt-2 border-t border-gray-200">
+                              <div>
+                                <label className="block text-[10px] font-bold text-gray-700 mb-0.5">
+                                  Pistolet / Pompe distributeur *
+                                </label>
+                                <select
+                                  value={c.pistolet_code || ""}
+                                  onChange={(e) => handleUpdateCuveCompartiment(c.id, "pistolet_code", e.target.value)}
+                                  className="w-full text-xs border rounded p-1.5 font-bold bg-slate-50 border-gray-300"
+                                >
+                                  {pistoletsProduit.map((p) => (
+                                    <option key={p.code || p.id} value={p.code || p.nom}>
+                                      {p.nom || p.code} ({p.produit})
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              <div>
+                                <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">
+                                  Index Départ Pompe
+                                </label>
+                                <input
+                                  type="number"
+                                  step="any"
+                                  placeholder="ex: 12450.0"
+                                  value={c.pompe_index_depart || ""}
+                                  onChange={(e) => handleUpdateCuveCompartiment(c.id, "pompe_index_depart", e.target.value)}
+                                  className="w-full text-xs border rounded p-1.5 font-mono bg-white border-gray-300"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">
+                                  Index Fin Pompe
+                                </label>
+                                <input
+                                  type="number"
+                                  step="any"
+                                  placeholder="ex: 12500.0"
+                                  value={c.pompe_index_fin || ""}
+                                  onChange={(e) => handleUpdateCuveCompartiment(c.id, "pompe_index_fin", e.target.value)}
+                                  className="w-full text-xs border rounded p-1.5 font-mono bg-white border-gray-300"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-[10px] font-black text-blue-950 mb-0.5">
+                                  Volume Pompé Compensé (L) *
+                                </label>
+                                <input
+                                  type="number"
+                                  step="any"
+                                  placeholder="Litres"
+                                  value={c.volume_preleve_pompe || ""}
+                                  onChange={(e) => handleUpdateCuveCompartiment(c.id, "volume_preleve_pompe", e.target.value)}
+                                  className="w-full text-xs border rounded p-1.5 font-black text-blue-900 bg-blue-50 border-blue-400"
+                                  required={c.prelevement_pompe}
+                                />
+                              </div>
+
+                              <div className="sm:col-span-4 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 pt-1 text-[11px] text-gray-600">
+                                <label className="flex items-center gap-2 cursor-pointer font-bold text-gray-900">
+                                  <input
+                                    type="checkbox"
+                                    checked={c.accord_chauffeur ?? true}
+                                    onChange={(e) => handleUpdateCuveCompartiment(c.id, "accord_chauffeur", e.target.checked)}
+                                    className="rounded text-emerald-600 focus:ring-emerald-500"
+                                  />
+                                  <span>✓ Accord contradictoire et visa du chauffeur livreur pour ce prélèvement</span>
+                                </label>
+                                <span className="text-[10px] text-blue-900 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 font-semibold">
+                                  ℹ️ Traçabilité : Consigné sur le PV officiel pour ne pas pénaliser le pompiste en descente
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
 
-            {/* Synthèse Anti-Débordement & Capacité de Réception */}
+            {/* Synthèse Anti-Débordement & Prélèvements Compensatoires */}
             <div className="mt-3 p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                  style={{
                    borderColor: risqueDebordementCuve ? "#f87171" : "#86efac",
@@ -1751,6 +2090,12 @@ export default function CuvesCarburant() {
                 <div className="text-[11px] text-gray-600 mt-0.5">
                   Capacité restante dans la cuve (Creux) : <strong>{F(creuxDisponibleCuve)} L</strong>
                 </div>
+                {aDesPrelevementsPompes && (
+                  <div className="text-[11px] font-bold text-blue-950 mt-1 flex items-center gap-1.5">
+                    <span>⛽</span>
+                    <span>Total prélevé aux pompes (compensation manquant citerne) : <strong>{F(totalVolumePrelevePompes)} L</strong></span>
+                  </div>
+                )}
               </div>
 
               {risqueDebordementCuve ? (
@@ -2424,6 +2769,64 @@ export default function CuvesCarburant() {
                 </div>
               )}
 
+              {/* Section Prélèvement Compensatoire aux Pompes pour Manquant Citerne */}
+              {(pvModal.prelevement_pompe_actif ||
+                (Array.isArray(pvModal.compartiments) && pvModal.compartiments.some((c) => c.prelevement_pompe)) ||
+                (Array.isArray(pvModal.prelevements_pompes) && pvModal.prelevements_pompes.length > 0)) && (
+                <div className="p-3 bg-blue-50/80 rounded-xl border border-blue-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">⛽</span>
+                      <span className="text-xs font-black uppercase text-blue-950 tracking-wider">
+                        Régularisation : Compensation Manquant Citerne par Prélèvement aux Pompes
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-blue-200 text-blue-950">
+                      Traçabilité Pompiste Validée
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-blue-900 font-medium">
+                    Un manquant de litrage a été constaté contradictoirement au dépotage citerne. Le volume équivalent a été soutiré aux pistolets de distribution de la station avec l'accord formel du chauffeur pour compenser la réception.
+                  </p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs border bg-white" style={{ borderColor: T.line }}>
+                      <thead className="bg-blue-100/70 text-blue-950">
+                        <tr>
+                          <th className="p-1.5 text-left">Compartiment</th>
+                          <th className="p-1.5 text-right">Manquant Citerne (L)</th>
+                          <th className="p-1.5 text-left">Pompe / Pistolet</th>
+                          <th className="p-1.5 text-right">Index Départ</th>
+                          <th className="p-1.5 text-right">Index Fin</th>
+                          <th className="p-1.5 text-right">Volume Pompé (L)</th>
+                          <th className="p-1.5 text-center">Accord Chauffeur</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y" style={{ borderColor: T.line }}>
+                        {(pvModal.prelevements_pompes && pvModal.prelevements_pompes.length > 0
+                          ? pvModal.prelevements_pompes
+                          : (pvModal.compartiments || []).filter((c) => c.prelevement_pompe)
+                        ).map((p, pIdx) => (
+                          <tr key={pIdx} className="hover:bg-blue-50/30">
+                            <td className="p-1.5 font-black text-gray-900">{p.numero_compartiment || "--"}</td>
+                            <td className="p-1.5 text-right font-black text-rose-700">{F(p.manquant_citerne_l || 0)} L</td>
+                            <td className="p-1.5 font-bold text-blue-950">{p.pistolet_code || "--"}</td>
+                            <td className="p-1.5 text-right font-mono">{p.pompe_index_depart ? F(p.pompe_index_depart) : "--"}</td>
+                            <td className="p-1.5 text-right font-mono">{p.pompe_index_fin ? F(p.pompe_index_fin) : "--"}</td>
+                            <td className="p-1.5 text-right font-black text-blue-900 tabular">{F(p.volume_preleve_pompe || 0)} L</td>
+                            <td className="p-1.5 text-center font-bold text-emerald-800">
+                              {p.accord_chauffeur ? "✓ Accord Obtenu" : "⚠️ Sans Accord"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="text-[10px] text-slate-600 italic">
+                    * Mention de régularisation : Ce volume pompé est consigné pour être pris en compte lors de la clôture du poste du pompiste.
+                  </div>
+                </div>
+              )}
+
               {/* Réserves & Triple Signature Officielle */}
               <div className="pt-2 text-xs">
                 <div className="text-[11px] text-gray-600 mb-3 bg-slate-50 p-2.5 rounded border" style={{ borderColor: T.line }}>
@@ -2498,11 +2901,15 @@ export default function CuvesCarburant() {
               </button>
               <a
                 href={`https://wa.me/?text=${encodeURIComponent(
-                  `*RAPPORT DE DÉPOTAGE CARBURANT*\nStation: ${profil?.station_nom || "Hann Maristes"}\nDate: ${pvModal.date}\nN° BL Camion: ${pvModal.numero_bl || "--"}\n${
+                  `*RAPPORT DE DÉPOTAGE CARBURANT*\nStation: ${profil?.station_nom || pvModal.station_nom || "Hann Maristes"}\nDate: ${pvModal.date}\nN° BL Camion: ${pvModal.numero_bl || "--"}\n${
                     Array.isArray(pvModal.compartiments) && pvModal.compartiments.length > 0
-                      ? `Compartiments: ${pvModal.compartiments.map((c) => `C${c.numero_compartiment} [${c.produit}] (Scellé: ${c.numero_scelle || "--"}): ${F(c.volume_decharge_cuve || 0)}L`).join(", ")}\n`
+                      ? `Compartiments: ${pvModal.compartiments.map((c) => `${c.numero_compartiment} [${c.produit}] (Scellé: ${c.numero_scelle || "--"}): ${F(c.volume_decharge_cuve || c.volume_bl || 0)}L`).join(", ")}\n`
                       : `Produit: ${pvModal.produit}\n`
-                  }Volume BL: ${F(pvModal.volume_bl)} L\nVolume Reçu: ${F(pvModal.volume_decharge_reel)} L\nÉcart: ${pvModal.ecart_litres > 0 ? "+" : ""}${F(pvModal.ecart_litres)} L (${pvModal.ecart_pourcentage}%)\nStatut: ${pvModal.statut}\nVisa: ${pvModal.responsable_reception || "Le Gérant"}`
+                  }Volume BL: ${F(pvModal.volume_bl)} L\nVolume Reçu: ${F(pvModal.volume_decharge_reel)} L\nÉcart: ${pvModal.ecart_litres > 0 ? "+" : ""}${F(pvModal.ecart_litres)} L (${pvModal.ecart_pourcentage}%)\n${
+                    pvModal.prelevement_pompe_actif || (Array.isArray(pvModal.compartiments) && pvModal.compartiments.some((c) => c.prelevement_pompe))
+                      ? `⛽ *Compensation Pompes :* ${F(pvModal.prelevement_pompe_total_l || (pvModal.compartiments || []).reduce((s, c) => s + (n(c.volume_preleve_pompe) || 0), 0))} L prélevés au pistolet pour manquant citerne (Visa chauffeur OK)\n`
+                      : ""
+                  }Statut: ${pvModal.statut}\nVisa: ${pvModal.responsable_reception || "Le Gérant"}`
                 )}`}
                 target="_blank"
                 rel="noreferrer"

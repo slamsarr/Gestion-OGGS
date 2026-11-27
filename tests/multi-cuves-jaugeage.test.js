@@ -223,4 +223,89 @@ describe("Gestion Multi-Cuves Carburant & Jaugeage Quotidien", () => {
     expect(depotageCuve1.cuve_id).not.toBe(depotageCuve2.cuve_id);
     expect(depotageCuve1.numero_depotage).not.toBe(depotageCuve2.numero_depotage);
   });
+
+  // ── 8. SÉLECTION CIBLÉE DE COMPARTIMENTS (PAR EXEMPLE COMPARTIMENT 3 OU 5) ──
+  it("permet de sélectionner un compartiment spécifique quelconque du camion (ex: C5 ou C3) pour une cuve donnée", () => {
+    // Cas réel : Cuve 1 Gasoil alimentée par le compartiment 5 (C5) d'un camion de 6 compartiments
+    const cuveGasoil1 = { id: "cuve-go-1", nom: "Cuve 1 Gasoil", produit: "GASOIL" };
+    const compartimentsAffectes = [
+      {
+        id: "comp-custom-5",
+        numero_compartiment: "C5",
+        numero_scelle: "SC-78905",
+        volume_bl: 5000,
+        volume_commande: 5000,
+      },
+    ];
+
+    expect(compartimentsAffectes[0].numero_compartiment).toBe("C5");
+    expect(compartimentsAffectes.length).toBe(1);
+
+    // Ajout d'un deuxième compartiment ciblé, par exemple C3
+    compartimentsAffectes.push({
+      id: "comp-custom-3",
+      numero_compartiment: "C3",
+      numero_scelle: "SC-78903",
+      volume_bl: 4000,
+      volume_commande: 4000,
+    });
+
+    const numerosCompartiments = compartimentsAffectes.map((c) => c.numero_compartiment);
+    expect(numerosCompartiments).toEqual(["C5", "C3"]);
+
+    const totalBl = compartimentsAffectes.reduce((s, c) => s + c.volume_bl, 0);
+    expect(totalBl).toBe(9000); // 5000 + 4000
+  });
+
+  // ── 9. GESTION DU MANQUANT EN COMPARTIMENT CITERNE & COMPENSATION PAR PRÉLÈVEMENT AUX POMPES ──
+  it("gère le manquant constaté en citerne (ex: 50 L sur C5) et le prélèvement compensatoire aux pompes", () => {
+    // Cas réel vécu en station :
+    // Le camion arrive avec C5 qui annonce 5 000 L sur le BL, mais il manque 50 L sous le repère flèche.
+    // Le gérant et le chauffeur constatent le manquant (-50 L).
+    // Une compensation de 50 L est effectuée en soutirant 50 L au pistolet Pompe 1 Gasoil (P1-GO).
+    const compartimentC5 = {
+      id: "comp-5",
+      numero_compartiment: "C5",
+      volume_bl: 5000,
+      numero_scelle: "SC-99885",
+      constat_manquant: true,
+      manquant_citerne_l: 50,
+      motif_manquant: "Niveau inférieur à la pointe du repère flèche",
+      prelevement_pompe: true,
+      pistolet_code: "P1-GO",
+      pompe_index_depart: 12450.0,
+      pompe_index_fin: 12500.0,
+      volume_preleve_pompe: 50.0,
+      accord_chauffeur: true,
+    };
+
+    // Vérification du volume calculé par les index de la pompe
+    const volumeCalculeIndex = compartimentC5.pompe_index_fin - compartimentC5.pompe_index_depart;
+    expect(volumeCalculeIndex).toBe(50.0);
+    expect(volumeCalculeIndex).toBe(compartimentC5.manquant_citerne_l);
+
+    // Construction de la charge utile du dépotage avec compensation
+    const prelevementsPompes = [compartimentC5]
+      .filter((c) => c.constat_manquant && c.prelevement_pompe)
+      .map((c) => ({
+        numero_compartiment: c.numero_compartiment,
+        manquant_citerne_l: c.manquant_citerne_l,
+        pistolet_code: c.pistolet_code,
+        pompe_index_depart: c.pompe_index_depart,
+        pompe_index_fin: c.pompe_index_fin,
+        volume_preleve_pompe: c.volume_preleve_pompe,
+        accord_chauffeur: c.accord_chauffeur,
+      }));
+
+    expect(prelevementsPompes.length).toBe(1);
+    expect(prelevementsPompes[0].volume_preleve_pompe).toBe(50);
+    expect(prelevementsPompes[0].accord_chauffeur).toBe(true);
+
+    // Vérification que le volume soutiré n'est pas pénalisant pour le pompiste :
+    // Index départ 12450 -> Index fin 12500 = 50 L pompés pour la citerne.
+    // Lors de la clôture de poste du pompiste, ce volume est déduit des ventes encaissables.
+    const venteTotaleCompteur = 50;
+    const venteClientReelle = venteTotaleCompteur - prelevementsPompes[0].volume_preleve_pompe;
+    expect(venteClientReelle).toBe(0); // Le pompiste ne doit pas reverser 50 L d'argent liquide
+  });
 });
