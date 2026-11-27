@@ -13,6 +13,10 @@ export default function Login() {
   const [password, setPassword] = useState("Hann2026!");
   const [newPassword, setNewPassword] = useState("");
   const [nom, setNom] = useState("");
+  const [role, setRole] = useState("pompiste");
+  const [telephone, setTelephone] = useState("");
+  const [clientCode, setClientCode] = useState("");
+  const [stationId, setStationId] = useState("st-hann");
   const [mode, setMode] = useState("login");
   const [err, setErr] = useState("");
   const [info, setInfo] = useState("");
@@ -31,8 +35,16 @@ export default function Login() {
     setErr(""); setInfo("");
     setBusy(true);
     try {
-      if (mode === "signup") await signup(email, password, nom);
-      else await login(email, password);
+      if (mode === "signup") {
+        await signup(email, password, nom, role, {
+          telephone,
+          client_code: clientCode,
+          station_id: stationId,
+        });
+        setInfo("✓ Compte créé avec succès !");
+      } else {
+        await login(email, password);
+      }
     } catch (ex) {
       setErr(ex.message || "Échec de connexion");
     } finally {
@@ -182,10 +194,56 @@ export default function Login() {
               <>
                 <form onSubmit={mode === "reset" ? submitReset : submit} className="grid gap-3.5">
                   {mode === "signup" && (
-                    <div>
-                      <label className="label block mb-1.5">Nom complet</label>
-                      <input className="input-base" placeholder="Ex : M. Mbaye DIOP" value={nom} onChange={(e) => setNom(e.target.value)} required />
-                    </div>
+                    <>
+                      <div>
+                        <label className="label block mb-1.5 font-bold text-slate-700">Nom complet *</label>
+                        <input className="input-base" placeholder="Ex : M. Mbaye DIOP" value={nom} onChange={(e) => setNom(e.target.value)} required />
+                      </div>
+
+                      <div>
+                        <label className="label block mb-1.5 font-bold text-slate-700">Rôle / Type d'utilisateur *</label>
+                        <select
+                          className="input-base bg-white font-medium"
+                          value={role}
+                          onChange={(e) => setRole(e.target.value)}
+                          required
+                        >
+                          <option value="pompiste">⛽ Pompiste (Distribution Carburant)</option>
+                          <option value="lavage">🧼 Agent Lavage Auto</option>
+                          <option value="mecanicien">🔧 Mécanicien (Baie Entretien)</option>
+                          <option value="boutique">🛒 Vendeur Boutique (POS)</option>
+                          <option value="stock">🛢️ Gestionnaire Cuves & Stocks</option>
+                          <option value="client_pro">🏢 Client Professionnel (Flottes & Bons)</option>
+                          <option value="commercial">💼 Commercial Réseau</option>
+                          <option value="gerant">👔 Gérant de Station</option>
+                          <option value="comptable">📊 Comptable</option>
+                        </select>
+                      </div>
+
+                      {role === "client_pro" && (
+                        <div>
+                          <label className="label block mb-1.5 font-bold text-slate-700">Raison Sociale / Entreprise *</label>
+                          <input
+                            className="input-base"
+                            placeholder="Ex : SENELEC ou CP-SENELEC"
+                            value={clientCode}
+                            onChange={(e) => setClientCode(e.target.value)}
+                            required={role === "client_pro"}
+                          />
+                        </div>
+                      )}
+
+                      <div>
+                        <label className="label block mb-1.5 font-bold text-slate-700">Numéro Téléphone / WhatsApp</label>
+                        <input
+                          className="input-base"
+                          type="tel"
+                          placeholder="Ex : 77 123 45 67"
+                          value={telephone}
+                          onChange={(e) => setTelephone(e.target.value)}
+                        />
+                      </div>
+                    </>
                   )}
                   <div>
                     <label className="label block mb-1.5">Adresse e-mail</label>
@@ -265,24 +323,30 @@ export default function Login() {
                   </div>
                 )}
 
-                {cloud && (
-                  <div className="mt-4 flex justify-between items-center text-[11.5px] pt-3 border-t border-surface-border">
-                    <button
-                      type="button"
-                      className="text-damel-blue hover:text-fuelos-700 font-bold transition-colors"
-                      onClick={() => setMode(mode === "signup" ? "login" : "signup")}
-                    >
-                      {mode === "signup" ? "← J'ai déjà un compte" : "Créer un compte"}
-                    </button>
-                    <button
-                      type="button"
-                      className="text-slate-500 hover:text-slate-700 font-medium transition-colors"
-                      onClick={() => setMode(mode === "reset" ? "login" : "reset")}
-                    >
-                      {mode === "reset" ? "← Retour connexion" : "Mot de passe oublié ?"}
-                    </button>
-                  </div>
-                )}
+                <div className="mt-4 flex justify-between items-center text-[11.5px] pt-3 border-t border-surface-border">
+                  <button
+                    type="button"
+                    className="text-damel-blue hover:text-fuelos-700 font-bold transition-colors"
+                    onClick={() => {
+                      setErr("");
+                      setInfo("");
+                      setMode(mode === "signup" ? "login" : "signup");
+                    }}
+                  >
+                    {mode === "signup" ? "← J'ai déjà un compte" : "Créer un compte"}
+                  </button>
+                  <button
+                    type="button"
+                    className="text-slate-500 hover:text-slate-700 font-medium transition-colors"
+                    onClick={() => {
+                      setErr("");
+                      setInfo("");
+                      setMode(mode === "reset" ? "login" : "reset");
+                    }}
+                  >
+                    {mode === "reset" ? "← Retour connexion" : "Mot de passe oublié ?"}
+                  </button>
+                </div>
               </>
             )}
           </div>

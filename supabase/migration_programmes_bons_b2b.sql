@@ -294,3 +294,60 @@ create policy rls_factures_client_pro on factures
       select code from clients_professionnels where auth_user_id = auth.uid()
     )
   );
+
+-- 10. Déclencheur Supabase Auth pour attribuer fidèlement le rôle choisi (pompiste, laveur, client_pro, etc.)
+-- ---------------------------------------------------------------------
+create or replace function public.handle_new_user()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  r role_utilisateur;
+  req_role text;
+  st_id uuid;
+begin
+  req_role := new.raw_user_meta_data->>'role';
+  if req_role is not null and req_role != '' then
+    begin
+      r := req_role::role_utilisateur;
+    exception when others then
+      r := 'pompiste';
+    end;
+  elsif exists (select 1 from profils where role in ('admin','directeur')) then
+    r := 'gerant';
+  else
+    r := 'admin';
+  end if;
+
+  if new.raw_user_meta_data->>'station_id' is not null then
+    begin
+      st_id := (new.raw_user_meta_data->>'station_id')::uuid;
+    exception when others then
+      st_id := (select id from stations where code = 'HANN' limit 1);
+    end;
+  elsif r in ('admin','directeur') then
+    st_id := null;
+  else
+    st_id := (select id from stations where code = 'HANN' limit 1);
+  end if;
+
+  insert into profils (id, nom_complet, telephone, role, station_id)
+  values (
+    new.id,
+    coalesce(new.raw_user_meta_data->>'nom_complet', split_part(coalesce(new.email, 'utilisateur'), '@', 1)),
+    coalesce(new.phone, new.raw_user_meta_data->>'telephone'),
+    r,
+    st_id
+  )
+  on conflict (id) do update set
+    nom_complet = excluded.nom_complet,
+    telephone = coalesce(excluded.telephone, profils.telephone),
+    role = excluded.role,
+    station_id = coalesce(excluded.station_id, profils.station_id);
+
+  return new;
+end $$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
+

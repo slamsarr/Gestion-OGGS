@@ -121,7 +121,12 @@ export default function ClientsPro() {
     let list = listeClientsCredit(ref);
     if (profil?.role === "client_pro") {
       const mine = codeClientCanonique(profil.client_code);
-      list = list.filter((c) => c.code === mine);
+      const cleanEmail = (profil.email || "").toLowerCase().trim();
+      list = list.filter((c) => {
+        if (mine && c.code === mine) return true;
+        if (cleanEmail && (c.email || "").toLowerCase().trim() === cleanEmail) return true;
+        return false;
+      });
     }
     return list.map((c) => ({ ...c, nom_entreprise: c.nom_entreprise || c.nom }));
   }, [ref, profil]);
@@ -202,6 +207,14 @@ export default function ClientsPro() {
       loadTousProgrammes();
     }
   }, [searchParams]);
+
+  // Sélection automatique du compte lorsque l'utilisateur connecté est un Client Professionnel
+  useEffect(() => {
+    if (profil?.role === "client_pro" && clients.length > 0 && !selected) {
+      setSelected(clients[0].code);
+      setSubTab("programmes");
+    }
+  }, [profil, clients, selected]);
 
   const handleToggleAcces = async (client) => {
     try {
